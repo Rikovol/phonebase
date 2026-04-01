@@ -1,0 +1,49 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Database
+*.db
+*.sqlite3
+
+# Media & uploads
+media/
+pd_docs/
+purchase_docs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SSL certs
+ssl/*.key
+ssl/*.pem
+ssl/*.crt
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Generated images
+assets/images/generated/
+
+# Logs
+*.log
