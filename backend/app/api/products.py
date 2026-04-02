@@ -36,7 +36,9 @@ class ProductOut(BaseModel):
     quantity: int = 0
     sold_at: Optional[str]
     sim_count: Optional[int] = None
+    sim_type: Optional[str] = None
     completeness: Optional[str] = None
+    site_published: bool = False
     avito_published: bool
     photos_count: int = 0
     docs_count: int = 0
@@ -50,7 +52,9 @@ class ProductUpdate(BaseModel):
     battery_pct: Optional[str] = None
     in_repair: Optional[bool] = None
     sim_count: Optional[int] = None
+    sim_type: Optional[str] = None
     completeness: Optional[str] = None
+    site_published: Optional[bool] = None
     avito_published: Optional[bool] = None
     avito_title: Optional[str] = None
     avito_description: Optional[str] = None
@@ -87,9 +91,12 @@ class ProductDetailOut(BaseModel):
     price_retail: Optional[float]
     price_cost: Optional[float]
     is_sold: bool
+    is_new: bool = False
     sold_at: Optional[str]
     sim_count: Optional[int] = None
+    sim_type: Optional[str] = None
     completeness: Optional[str] = None
+    site_published: bool = False
     avito_published: bool
     avito_title: Optional[str]
     avito_description: Optional[str]
@@ -287,7 +294,9 @@ async def list_products(
                 quantity=product.quantity or 0,
                 sold_at=product.sold_at.isoformat() if product.sold_at else None,
                 sim_count=product.sim_count,
+                sim_type=product.sim_type,
                 completeness=product.completeness,
+                site_published=product.site_published,
                 avito_published=product.avito_published,
                 photos_count=0 if hide_media else int(photos_count),
                 docs_count=0 if hide_media else int(docs_count),
@@ -364,9 +373,12 @@ async def get_product(
         price_retail=float(product.price_retail) if product.price_retail else None,
         price_cost=float(product.price_cost) if can_see_cost and product.price_cost else None,
         is_sold=product.is_sold,
+        is_new=product.is_new,
         sold_at=product.sold_at.isoformat() if product.sold_at else None,
         sim_count=product.sim_count,
+                sim_type=product.sim_type,
         completeness=product.completeness,
+        site_published=product.site_published,
         avito_published=product.avito_published,
         avito_title=product.avito_title,
         avito_description=product.avito_description,
@@ -431,6 +443,8 @@ async def update_product(
         product.sim_count = body.sim_count if body.sim_count in (1, 2, 3) else None
     if body.completeness is not None:
         product.completeness = body.completeness[:100] if body.completeness else None
+    if body.site_published is not None:
+        product.site_published = body.site_published
     if body.avito_published is not None:
         product.avito_published = body.avito_published
     if body.avito_title is not None:

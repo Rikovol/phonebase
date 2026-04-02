@@ -86,7 +86,28 @@
       "Bash(git add:*)",
       "Bash(git rm:*)",
       "Bash(git commit:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/imports/from-configured-url -H \"Authorization: Bearer $\\(curl -s -X POST http://localhost:8000/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin\"}')",
+      "Bash(psql -d phonebase -c \"SELECT username, role FROM users;\")",
+      "Bash(psql -d phonebase -c \"SELECT COUNT\\(*\\) as total, COUNT\\(*\\) FILTER \\(WHERE is_new\\) as new, COUNT\\(*\\) FILTER \\(WHERE NOT is_new\\) as used, COUNT\\(*\\) FILTER \\(WHERE is_sold\\) as sold FROM products;\")",
+      "Bash(curl:*)",
+      "Bash(psql -d phonebase -c \"SELECT username, hashed_password FROM users WHERE role='admin' LIMIT 1;\")",
+      "Bash(psql -d phonebase -c \"\\\\d users\")",
+      "Bash(psql -d phonebase -c \"UPDATE users SET password_hash='\\\\$2b\\\\$12\\\\$6pJznJ5QUISdcQGqNynqYuWbalH3BTt5HqvUpO9VpraAv2SHwYs0O', must_change_password=false WHERE username='pavel';\")",
+      "Bash(lsof -ti:5173)",
+      "Bash(psql -d phonebase -c \"SELECT id, filename, status, started_at, imported_by FROM import_logs ORDER BY started_at DESC;\")",
+      "Bash(psql -d phonebase -c \"DELETE FROM import_logs WHERE id IN \\('a24b8ccc-42d2-4ed0-b0dc-9fb4be0aa14b','bdccd289-4e5a-48ec-88cb-e6e249c882ca','eadb02dd-50df-4abb-b6f1-e548bd4baadc'\\);\")",
+      "Bash(psql -d phonebase -c \"DELETE FROM import_logs WHERE id='55680352-5a50-4878-8dc2-b4dda991856a';\")",
+      "Bash(psql -d phonebase -c \"UPDATE import_logs SET imported_by = NULL;\")",
+      "Bash(psql -d phonebase -c \"ALTER TABLE import_logs ALTER COLUMN imported_by DROP NOT NULL;\")",
+      "Bash(psql -d phonebase -c \"SELECT imei, sim_count FROM products WHERE is_new = true LIMIT 5;\")",
+      "Bash(psql -d phonebase -c \"\\\\d products\")",
+      "Bash(psql -d phonebase -c \"SELECT column_name FROM information_schema.columns WHERE table_name='products' ORDER BY ordinal_position;\")",
+      "Bash(psql -d phonebase -c \"SELECT sku_1c, sim_count FROM products WHERE is_new = true LIMIT 5;\")",
+      "Bash(psql -d phonebase -c \"ALTER TABLE products ADD COLUMN IF NOT EXISTS sim_type VARCHAR\\(50\\);\")",
+      "Bash(psql -d phonebase -c \"SELECT sku_1c, sim_type FROM products WHERE is_new = true AND sim_type IS NOT NULL LIMIT 5;\")",
+      "Bash(psql -d phonebase -c \"ALTER TABLE products ADD COLUMN IF NOT EXISTS site_published BOOLEAN NOT NULL DEFAULT false;\")"
     ]
   }
 }

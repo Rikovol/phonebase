@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analytics, auth, avito, imports, personal_data, photos, products, purchase_docs, stores, users
+from app.api import analytics, auth, avito, imports, logs, personal_data, photos, products, purchase_docs, stores, users
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.db_migrations import (
@@ -74,6 +74,7 @@ app.include_router(photos.router, prefix="/api/photos", tags=["photos"])
 app.include_router(personal_data.router, prefix="/api/pd", tags=["personal_data"])
 app.include_router(purchase_docs.router, prefix="/api/purchase-docs", tags=["purchase_docs"])
 app.include_router(avito.router, prefix="/api/avito", tags=["avito"])
+app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)

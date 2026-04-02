@@ -104,6 +104,7 @@ def _apply(product: Product, item: ParsedNewProduct, now: datetime) -> None:
     product.battery_pct = None
     product.in_repair = False
     product.category = item.category
+    product.sim_type = item.sim_type
     product.quantity = item.quantity
     product.is_new = True
     product.price_retail = Decimal(str(item.price_retail)) if item.price_retail else None

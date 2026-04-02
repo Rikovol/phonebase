@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 
 // ─── КОНФИГУРАЦИЯ ─────────────────────────────────────────────────────────────
 const API_BASE = "/api";
@@ -99,6 +99,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 @keyframes glow{0%,100%{box-shadow:0 0 12px rgba(16,185,129,.2)}50%{box-shadow:0 0 24px rgba(16,185,129,.4)}}
+@keyframes priceGlow{0%,100%{text-shadow:0 0 6px rgba(239,68,68,.2)}50%{text-shadow:0 0 14px rgba(239,68,68,.5)}}
+.price-danger{animation:priceGlow 2s ease-in-out infinite}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes toastOut{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-10px)}}
+.copy-toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:var(--bg3);color:var(--accent2);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:8px 18px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;animation:toastIn .25s ease,toastOut .3s ease 2.7s forwards;box-shadow:0 4px 20px rgba(0,0,0,.4)}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--accent2);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle}
 
 /* LOGIN */
@@ -106,8 +111,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .lb{width:400px;background:rgba(20,20,22,.85);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;padding:40px 36px;box-shadow:var(--shadow-lg);animation:fadeUp .4s ease}
 .logo{display:flex;align-items:center;gap:14px;margin-bottom:30px}
 .logo-icon{width:52px;height:52px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent2)}
-.logo-text{font-family:var(--sans);font-size:26px;font-weight:700;letter-spacing:-.3px}
-.logo-text span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logo-text{font-family:var(--sans);font-size:26px;font-weight:500;letter-spacing:-.5px;color:var(--text);text-shadow:0 0 20px rgba(236,236,240,.15)}
+.logo-text span{font-weight:700;letter-spacing:0;background:linear-gradient(135deg,#10b981,#34d399,#06b6d4);background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:logoShift 4s ease infinite;filter:drop-shadow(0 0 8px rgba(16,185,129,.3))}
+@keyframes logoShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 .ltitle{font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:-.3px}
 .lsub{color:var(--muted);font-size:13px;margin-bottom:26px}
 .field{margin-bottom:16px}
@@ -135,11 +141,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 /* SHELL */
 .shell{display:flex;height:100vh;overflow:hidden;position:relative}
-.shell::after{content:"";position:absolute;top:84px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(16,185,129,.4),transparent);z-index:10;pointer-events:none}
+.shell::after{content:"";position:absolute;top:56px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(16,185,129,.4),transparent);z-index:10;pointer-events:none}
 .sidebar{width:250px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width .25s cubic-bezier(.4,0,.2,1)}
 .sidebar.collapsed{width:64px}
 .sidebar.collapsed .logo-text,.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-store-sw{display:none}
-.sidebar.collapsed .sb-logo{justify-content:center;padding:22px 10px 18px}
+.sidebar.collapsed .sb-logo{justify-content:center;padding:14px 10px 12px}
 .sidebar.collapsed .nav-item{justify-content:center;padding:13px 0;margin:3px 8px;width:calc(100% - 16px)}
 .sidebar.collapsed .nav-item .nav-label{display:none}
 .sidebar.collapsed .nav-item .nav-icon{font-size:18px}
@@ -149,9 +155,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .sb-collapse-btn:hover{background:rgba(16,185,129,.1);color:var(--text)}
 @media(min-width:769px){.sb-collapse-btn{display:flex;align-items:center;justify-content:center}}
 .sidebar.collapsed .sb-sec{justify-content:center}
-.sb-logo{padding:22px 18px 18px;border-bottom:none;display:flex;align-items:center;gap:12px}
-.sb-nav{flex:1;overflow-y:auto;padding:10px 0}
-.sb-sec{padding:14px 14px 6px;font-size:10px;font-weight:700;color:rgba(16,185,129,.7);text-transform:uppercase;letter-spacing:1.4px;display:flex;align-items:center;justify-content:space-between}
+.sb-logo{padding:14px 18px 12px;border-bottom:none;display:flex;align-items:center;gap:12px}
+.sb-nav{flex:1;overflow-y:auto;padding:2px 0}
+.sb-sec{padding:4px 14px 4px;font-size:10px;font-weight:700;color:rgba(16,185,129,.7);text-transform:uppercase;letter-spacing:1.4px;display:flex;align-items:center;justify-content:space-between}
 .nav-divider{height:1px;margin:6px 18px;background:linear-gradient(90deg,transparent,rgba(16,185,129,.25),transparent)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:13px 18px;margin:3px 10px;border-radius:10px;color:rgba(236,236,240,.7);font-size:14px;font-weight:500;cursor:pointer;border:none;background:none;width:calc(100% - 20px);text-align:left;transition:all .2s;letter-spacing:.1px}
 .nav-icon{font-size:15px;flex-shrink:0;width:20px;text-align:center}
@@ -170,9 +176,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .sb-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-role{font-size:10px;color:var(--muted);margin-top:1px}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
-.topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;height:84px;flex-shrink:0;background:var(--bg2)}
-.topbar-title{font-size:18px;font-weight:700;letter-spacing:-.2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.topbar-spacer{flex:1}
+.topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:10px;height:56px;flex-shrink:0;background:var(--bg2);padding-bottom:10px}
+.topbar-title{font-size:18px;font-weight:500;letter-spacing:-.2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:center;color:var(--text);text-shadow:0 0 20px rgba(236,236,240,.15)}
 .topbar-store-sel{font-size:10px;padding:4px 8px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500;background:var(--bg3);color:var(--muted);border:1px solid var(--border);cursor:pointer;outline:none;max-width:150px}
 .badge{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500}
 .b-store{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
@@ -212,18 +217,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 /* TABLE */
 .tw{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
-.pt{width:100%;border-collapse:collapse}
-.pt th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;background:var(--bg3);border-bottom:1px solid var(--border);white-space:nowrap}
+.pt{width:100%;border-collapse:collapse;border-spacing:0}
+.pt th,.pt td{border-left:none;border-right:none}
+.pt th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;background:var(--bg3);border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
 .pt th.thl{color:var(--border2)}
-.pt td{padding:10px 12px;border-bottom:1px solid rgba(42,42,48,.5);font-size:12px;vertical-align:middle;transition:background .12s}
+.pt td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;vertical-align:middle;transition:background .12s}
 .pt-thumb-cell{width:52px;padding:6px 8px!important;vertical-align:middle}
 .pt-thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;background:var(--bg3);transition:transform .15s}
 .pt-thumb:hover{transform:scale(1.1)}
+.toggle-sw{position:relative;width:34px;height:18px;display:inline-block;cursor:pointer;flex-shrink:0}
+.toggle-sw input{opacity:0;width:0;height:0;position:absolute}
+.toggle-sw .sw-track{position:absolute;inset:0;background:var(--bg4);border-radius:9px;transition:background .25s ease}
+.toggle-sw input:checked+.sw-track{background:var(--accent)}
+.toggle-sw .sw-track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .25s ease;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.toggle-sw input:checked+.sw-track::after{transform:translateX(16px)}
+.toggle-sw input:disabled+.sw-track{opacity:.35;cursor:not-allowed}
 .avito-cb{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;accent-color:var(--accent)}
 .avito-cb input:disabled{cursor:not-allowed;opacity:.5}
 .pt tr:last-child td{border-bottom:none}
 .pt tr:hover td{background:rgba(16,185,129,.04)}
-.pt tr.own td{border-left:3px solid var(--success)}
+.pt tr.own td{border-left:1px solid rgba(52,211,153,.5)}
 .pt tr.rep td{background:var(--danger-dim)}
 .tm{font-weight:600;cursor:pointer;color:var(--accent2);transition:color .15s}
 .tm:hover{color:var(--cyan);text-decoration:none}
@@ -241,7 +254,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .cg{background:rgba(16,185,129,.12);color:#6ee7b7}
 .cf{background:var(--warn-dim);color:#fcd34d}
 .cb{background:var(--danger-dim);color:#fca5a5}
-.cr{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(239,68,68,.3);animation:glow 2s ease-in-out infinite}
+.cr{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
 .cs{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
 .act{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-size:11px;font-weight:500;transition:all .15s}
 .act:hover{border-color:var(--accent);color:var(--accent2);background:rgba(16,185,129,.08)}
@@ -418,11 +431,25 @@ const Icon={
   users:()=><svg {...I.p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   gear:()=><svg {...I.p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
   logo:()=><svg {...I.p} width={24} height={24}><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/><circle cx="12" cy="19" r=".5" fill="currentColor"/></svg>,
+  logs:()=><svg {...I.p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
+  camera:()=><svg {...I.p} width={14} height={14}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  file:()=><svg {...I.p} width={14} height={14}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>,
+  clip:()=><svg {...I.p} width={14} height={14}><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>,
+  trash:()=><svg {...I.p} width={14} height={14}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
+  card:()=><svg {...I.p} width={14} height={14}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>,
 };
 
 // ─── МЕЛКИЕ КОМПОНЕНТЫ ────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? n.toLocaleString("ru") + " ₽" : "—";
 const ini = (n) => n ? n[0].toUpperCase() : "?";
+function copyText(text) {
+  navigator.clipboard.writeText(text);
+  const el = document.createElement("div");
+  el.className = "copy-toast";
+  el.textContent = "Скопировано";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
 
 function Chip({ condition, repair, sold }) {
   if (sold)         return <span className="chip chip-sold">Продан</span>;
@@ -672,25 +699,52 @@ function PhotoModal({ product, productId, token, onClose, onDone }) {
 }
 
 /** Просмотр фото из каталога (кнопка «📷 Фото») — без перехода в полную карточку */
-function PhotoGalleryModal({ productId, token, onClose, onOpenCard }) {
+function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
   const [product, setProduct] = useState(null);
   const [loadErr, setLoadErr] = useState("");
   const [bigIdx, setBigIdx] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileRef = useRef(null);
+
+  const loadProduct = async () => {
+    setLoadErr("");
+    try {
+      const d = await apiFetch(`/products/${productId}`, { token });
+      setProduct(d);
+    } catch (e) {
+      setLoadErr(e.message || "Ошибка загрузки");
+    }
+  };
 
   useEffect(() => {
     let c = true;
-    (async () => {
-      setLoadErr("");
-      try {
-        const d = await apiFetch(`/products/${productId}`, { token });
-        if (!c) return;
-        setProduct(d);
-      } catch (e) {
-        if (c) setLoadErr(e.message || "Ошибка загрузки");
-      }
-    })();
+    loadProduct().then(() => { if (!c) setProduct(null); });
     return () => { c = false; };
   }, [productId, token]);
+
+  const doUpload = async (file) => {
+    setUploading(true); setUploadErr(""); setUploadProgress(10);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_BASE}/photos/product/${productId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка загрузки");
+      setUploadProgress(100);
+      setUploadFile(null);
+      await loadProduct();
+    } catch (x) {
+      setUploadErr(x.message || "Ошибка");
+    }
+    setUploading(false);
+  };
 
   useEffect(() => {
     const onKey = (e) => {
@@ -739,6 +793,15 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard }) {
               ))}
             </div>
           )}
+          {product && user && Access.canEdit(user, { store_name: product.store_name }) && !product.is_sold && (
+            <div style={{marginTop:12}}>
+              {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
+              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0])doUpload(e.target.files[0]);}}/>
+              <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                {uploading?<><span className="spinner"/> Загрузка...</>:<><Icon.camera/> Загрузить фото</>}
+              </button>
+            </div>
+          )}
           <div className="mf">
             <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
               Закрыть
@@ -747,12 +810,13 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard }) {
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
+                style={{display:"inline-flex",alignItems:"center",gap:4}}
                 onClick={() => {
                   onClose();
                   onOpenCard(productId);
                 }}
               >
-                📄 Карточка
+                <Icon.card/> Карточка
               </button>
             )}
           </div>
@@ -792,6 +856,10 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const [docType, setDocType] = useState("receipt");
+  const docFileRef = useRef(null);
 
   const refreshProduct = async () => {
     const d = await apiFetch(`/products/${productId}`, { token });
@@ -871,6 +939,26 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
     setBusy(false);
   };
 
+  const uploadDoc = async (file) => {
+    setUploading(true); setUploadErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("doc_type", docType);
+      const res = await fetch(`${API_BASE}/purchase-docs/product/${productId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка загрузки");
+      await refreshProduct();
+    } catch (e) {
+      setUploadErr(e.message || "Ошибка");
+    }
+    setUploading(false);
+  };
+
   const title = product
     ? [product.brand, product.model, product.storage].filter(Boolean).join(" ").trim() || product.imei
     : "…";
@@ -878,7 +966,7 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
   return (
     <div className="mo" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="md" style={{ maxWidth: 560, maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
-        <div className="mt">📄 Документы закупки</div>
+        <div className="mt" style={{display:"flex",alignItems:"center",gap:8}}><Icon.file/> Документы закупки</div>
         <div className="ms">{title}</div>
         {loadErr && <div className="err" style={{ marginBottom: 10 }}>{loadErr}</div>}
         {actionErr && <div className="err" style={{ marginBottom: 10 }}>{actionErr}</div>}
@@ -932,6 +1020,23 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
             ))}
           </div>
         )}
+        {canManageDocs && (
+          <div style={{marginTop:12,padding:"12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
+            {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <select value={docType} onChange={e=>setDocType(e.target.value)} style={{padding:"6px 8px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}>
+                <option value="receipt">Чек / Квитанция</option>
+                <option value="contract">Договор купли-продажи</option>
+                <option value="passport_copy">Копия паспорта</option>
+                <option value="other">Другой документ</option>
+              </select>
+              <input ref={docFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={e=>{if(e.target.files[0])uploadDoc(e.target.files[0]);}}/>
+              <button type="button" className="btn btn-sm btn-doc" disabled={uploading} onClick={()=>docFileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                {uploading?<><span className="spinner"/> Загрузка...</>:<><Icon.clip/> Загрузить документ</>}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mf">
           <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
             Закрыть
@@ -940,12 +1045,13 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
             <button
               type="button"
               className="btn btn-primary btn-sm"
+              style={{display:"inline-flex",alignItems:"center",gap:4}}
               onClick={() => {
                 onClose();
                 onOpenCard(productId);
               }}
             >
-              📄 Карточка
+              <Icon.card/> Карточка
             </button>
           )}
         </div>
@@ -1365,7 +1471,7 @@ function ProductCard({ productId, token, user, onBack }) {
               {product.storage && <div className="ir"><span className="ik">Память</span><span className="iv">{product.storage}</span></div>}
               {product.color && <div className="ir"><span className="ik">Цвет</span><span className="iv">{product.color}</span></div>}
               {product.battery_pct && <div className="ir"><span className="ik">АКБ</span><span className="iv" style={{color:"var(--warn)"}}>{product.battery_pct}</span></div>}
-              <div className="ir"><span className="ik">IMEI / S/N</span><span className="iv" style={{color:"var(--accent)",fontSize:11,cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>navigator.clipboard.writeText(product.imei)}>{product.imei}</span></div>
+              <div className="ir"><span className="ik">IMEI / S/N</span><span className="iv" style={{color:"var(--accent)",fontSize:11,cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>copyText(product.imei)}>{product.imei}</span></div>
               <div className="ir"><span className="ik">Магазин</span>
                 <span style={{display:"flex",alignItems:"center",fontSize:12,fontFamily:"var(--sans)",fontWeight:500}}>
                   <span className="sdot" style={{background:STORE_COLORS[product.store_name]||"#64748b"}}/>{product.store_name}
@@ -1443,13 +1549,13 @@ function ProductCard({ productId, token, user, onBack }) {
               )}
               {product.avito_published && (
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:8}}>
-                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>navigator.clipboard.writeText(location.origin+"/api/avito/feed/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed/{product.store_id}.xml</code>
+                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/feed/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed/{product.store_id}.xml</code>
                 </div>
               )}
             </div>
           </div>
 
-          {!Access.isInfo(user) && (
+          {!Access.isInfo(user) && !product.is_new && (
           <div className="panel">
             <div className="ph">
               <span className="pt2">📄 Документы закупки</span>
@@ -1636,6 +1742,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [photoGalleryId, setPhotoGalleryId] = useState(null);
   const [docsModalId, setDocsModalId] = useState(null);
   const [priceStats, setPriceStats] = useState({});
+  const [expandedNew, setExpandedNew] = useState({});
 
   const isAdm  = Access.isAdmin(user);
   const isInfo = Access.isInfo(user);
@@ -1774,6 +1881,16 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const myProfit  = filtered.filter(p=>Access.canSeeCost(user, mapProductRow(p))).reduce((s,p)=>s+(p.price_retail||0)-(p.price_cost||0),0);
   const inRepair  = filtered.filter(p=>p.in_repair).length;
 
+  const toggleSiteRow = async (p, next) => {
+    const prev = p.site_published;
+    setItems((xs) => xs.map((x) => (x.id === p.id ? { ...x, site_published: next } : x)));
+    try {
+      await apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { site_published: next } });
+    } catch (e) {
+      setItems((xs) => xs.map((x) => (x.id === p.id ? { ...x, site_published: prev } : x)));
+    }
+  };
+
   const toggleAvitoRow = async (p, next) => {
     setAvitoListErr("");
     const prev = p.avito_published;
@@ -1849,20 +1966,78 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         <span className="fc">{filtered.length} шт.</span>
       </div>
 
+      {isNew ? (() => {
+        const groupMap = {};
+        for (const p of slice) {
+          const key = `${p.model||""}|${p.storage||""}|${p.color||""}`;
+          if (!groupMap[key]) groupMap[key] = { model: p.model, storage: p.storage, color: p.color, brand: p.brand, items: [], totalQty: 0, minPrice: Infinity, maxPrice: -Infinity, sumPrice: 0, count: 0 };
+          const g = groupMap[key];
+          g.items.push(p);
+          g.totalQty += (p.quantity || 1);
+          if (p.price_retail) { g.sumPrice += p.price_retail; g.count++; if (p.price_retail < g.minPrice) g.minPrice = p.price_retail; if (p.price_retail > g.maxPrice) g.maxPrice = p.price_retail; }
+        }
+        const groups = Object.entries(groupMap).map(([key, g]) => ({ key, ...g, avgPrice: g.count ? g.sumPrice / g.count : 0 }));
+        groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || (a.storage || "").localeCompare(b.storage || "", "ru"));
+        return (
+          <div className="tw">
+            <table className="pt">
+              <thead><tr>
+                <th>Модель</th><th>Память</th><th>Цвет</th>
+                <th style={{textAlign:"center"}}>Кол-во</th>
+                <th style={{textAlign:"right"}}>Розница</th>
+                {!isInfo && <th style={{textAlign:"right"}}>Учётная</th>}
+                <th/>
+              </tr></thead>
+              <tbody>
+                {groups.map(g => {
+                  const isOpen = expandedNew[g.key];
+                  return (
+                    <React.Fragment key={g.key}>
+                      <tr style={{cursor:"pointer"}} onClick={() => setExpandedNew(prev => ({...prev, [g.key]: !prev[g.key]}))}>
+                        <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
+                        <td className="mono">{g.storage || "—"}</td>
+                        <td style={{fontSize:11,color:"var(--muted)"}}>{g.color || "—"}</td>
+                        <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
+                        <td/>{!isInfo && <td/>}<td/>
+                      </tr>
+                      {isOpen && g.items.map(p => {
+                        const row = mapProductRow(p);
+                        const canOpenCard = Access.canOpenProductCard(user, row);
+                        return (
+                          <tr key={p.id} style={{background:"rgba(255,255,255,.04)",fontSize:12}}>
+                            <td style={{paddingLeft:28,color:"var(--text)"}}>└ {p.store_name || "—"}</td>
+                            <td className="mono" style={{cursor:"pointer",color:"var(--text)"}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
+                            <td/>
+                            <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
+                            <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
+                            {!isInfo && <td className="tr" style={{color:"var(--text)"}}>{fmt(p.price_cost)}</td>}
+                            <td style={{textAlign:"right"}}>{canOpenCard && <button type="button" className="act" onClick={()=>onOpen(p.id)}>Карточка</button>}</td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+                {!loading && groups.length === 0 && <tr><td colSpan={!isInfo?7:6} style={{textAlign:"center",padding:"32px",color:"var(--muted)"}}>Товары не найдены</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        );
+      })() : (
+      <>
       <div className="tw">
         <table className="pt">
           <thead><tr>
-            {!isInfo && !isNew && <th className="pt-thumb-cell" title="Превью">Фото</th>}
             <th style={thStyle} onClick={()=>toggleSort("store")}>Магазин{sortArrow("store")}</th>
             <th style={thStyle} onClick={()=>toggleSort("model")}>Модель{sortArrow("model")}</th>
-            {!isNew && <th style={thStyle} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>}
+            <th style={thStyle} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>
             <th style={thStyle} onClick={()=>toggleSort("imei")}>IMEI{sortArrow("imei")}</th>
             <th style={{...thStyle,textAlign:"center"}} onClick={()=>toggleSort("quantity")}>Кол-во{sortArrow("quantity")}</th>
-            {!isInfo && !isNew && <th>Медиа</th>}{!isNew && <th style={{textAlign:"center"}}>Авито</th>}
+            {!isInfo && <th>Медиа</th>}<th style={{textAlign:"center"}}>Сайт</th><th style={{textAlign:"center"}}>Авито</th>
             <th style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("retail")}>Розница{sortArrow("retail")}</th>
             {!isInfo && <><th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("cost")}>Учётная{sortArrow("cost")}</th>
             <th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("profit")}>Прибыль{sortArrow("profit")}</th></>}
-            {!isNew && <th style={{textAlign:"center"}}>Действия</th>}
+            <th style={{textAlign:"center"}}>Действия</th>
           </tr></thead>
           <tbody>
             {slice.slice(0, visibleCount).map(p=>{
@@ -1874,15 +2049,6 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":""].filter(Boolean).join(" ");
               return (
                 <tr key={p.id} className={rowCls}>
-                  {!isInfo && !isNew && (
-                  <td className="pt-thumb-cell">
-                    {p.thumbnail_url ? (
-                      <img className="pt-thumb" src={p.thumbnail_url} alt="" loading="lazy" />
-                    ) : (
-                      <span style={{display:"block",width:40,height:40}} title="Нет фото"/>
-                    )}
-                  </td>
-                  )}
                   <td><span style={{display:"inline-flex",alignItems:"center",fontSize:11,color:"var(--muted)"}}>
                     <span className="sdot" style={{background:STORE_COLORS[p.store_name]||"#64748b"}}/>{p.store_name}
                   </span></td>
@@ -1892,51 +2058,47 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                       title={canOpenCard ? "" : "Карточка доступна только для товаров вашего магазина"}
                       onClick={() => canOpenCard && onOpen(p.id)}
                     >{p.model}{p.storage?" "+p.storage:""}</div>
-                    {p.color&&<div className="ts">{p.color}{!isNew&&p.battery_pct?" · АКБ "+p.battery_pct:""}</div>}
+                    {p.color&&<div className="ts">{p.color}{p.battery_pct?" · АКБ "+p.battery_pct:""}</div>}
                   </td>
-                  {!isNew && (
                   <td>
                     <Chip condition={p.condition} repair={p.in_repair} sold={p.is_sold}/>
                     {p.is_sold&&p.sold_at&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2,fontFamily:"var(--mono)"}}>{p.sold_at}</div>}
                   </td>
-                  )}
-                  <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>navigator.clipboard.writeText(p.imei)}>{p.imei}</span></td>
+                  <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei}</span></td>
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
-                  {!isInfo && !isNew && <td><span className="mc">📷{p.photos_count} 📄{p.docs_count}</span></td>}
-                  {!isNew && (
+                  {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
-                    <label className="avito-cb" title={own && !p.is_sold ? "Включить в фид Авито" : p.avito_published ? "В фиде Авито" : "Не в фиде"}>
-                      <input
-                        type="checkbox"
-                        checked={!!p.avito_published}
-                        disabled={!own || p.is_sold}
-                        onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}
-                      />
+                    <label className="toggle-sw" title={own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
+                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
+                      <span className="sw-track"/>
                     </label>
                   </td>
-                  )}
-                  <td className="tr" style={{color:priceColor(p)}} title={priceTitle(p)}>{fmt(p.price_retail)}</td>
+                  <td style={{textAlign:"center"}}>
+                    <label className="toggle-sw" title={own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
+                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
+                      <span className="sw-track"/>
+                    </label>
+                  </td>
+                  <td className={`tr${priceColor(p)==="var(--danger)"?" price-danger":""}`} style={{color:priceColor(p)}} title={priceTitle(p)}>{fmt(p.price_retail)}</td>
                   {!isInfo && (seeCost
                     ? <><td className="trm">{fmt(p.price_cost)}</td>
                     <td className="tr"><span className={profit>=0?"pp":"pn"}>{profit>=0?"+":""}{profit.toLocaleString("ru")} ₽</span></td></>
                     : <><td className="tlk" title="Скрыто">🔒</td><td className="tlk" title="Скрыто">🔒</td></>)}
-                  {!isNew && (
                   <td style={{textAlign:"center",whiteSpace:"nowrap"}}>
                     {p.is_sold
                       ? <span className="sold-badge">Продан</span>
                       : own
                         ? <>
-                            <button type="button" className="act" style={{marginRight:3}} onClick={()=>setPhotoGalleryId(p.id)}>📷 Фото</button>
+                            <button type="button" className="act" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setPhotoGalleryId(p.id)}><Icon.camera/> Фото</button>
                             {showPurchaseDocsBtn && (
-                              <button type="button" className="act" style={{marginRight:3}} onClick={()=>setDocsModalId(p.id)} title="Документы закупки">📎 Документы</button>
+                              <button type="button" className="act" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setDocsModalId(p.id)} title="Документы закупки"><Icon.clip/> Документы</button>
                             )}
-                            <button type="button" className="act" onClick={()=>onOpen(p.id)}>📄 Карточка</button>
+                            <button type="button" className="act" style={{display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>onOpen(p.id)}><Icon.card/> Карточка</button>
                           </>
                         : isInfo
                           ? <button type="button" className="act" onClick={()=>onOpen(p.id)}>Карточка</button>
                         : <span style={{fontSize:11,color:"var(--muted)"}} title="Действия только для товаров вашего магазина">—</span>}
                   </td>
-                  )}
                 </tr>
               );
             })}
@@ -1945,11 +2107,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         </table>
       </div>
       {visibleCount < slice.length && <div ref={sentinelRef} style={{height:1}}/>}
+      </>
+      )}
 
       {photoGalleryId && (
         <PhotoGalleryModal
           productId={photoGalleryId}
           token={token}
+          user={user}
           onClose={() => setPhotoGalleryId(null)}
           onOpenCard={(id) => {
             setPhotoGalleryId(null);
@@ -2193,7 +2358,7 @@ function StoreSettingsPage({ token, activeStore }) {
             {current?.id && f.websiteFeedEnabled && (
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)",marginBottom:14}}>
                 <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
-                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>navigator.clipboard.writeText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
+                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
                 <a href={"/api/avito/website-feed/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
               </div>
             )}
@@ -2327,7 +2492,7 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
             <span className="sdot" style={{background:STORE_COLORS[store]||"#64748b"}}/>
             <span style={{fontWeight:600,fontSize:14}}>{store}</span>
             <span style={{fontSize:11,color:"var(--muted)"}}>— {prods.length} шт.</span>
-            {feedUrl && <code style={{fontSize:10,color:"var(--accent)",marginLeft:"auto",cursor:"pointer"}} onClick={()=>{navigator.clipboard.writeText(location.origin+feedUrl)}} title="Нажмите, чтобы скопировать ссылку на фид">{location.origin}{feedUrl}</code>}
+            {feedUrl && <code style={{fontSize:10,color:"var(--accent)",marginLeft:"auto",cursor:"pointer"}} onClick={()=>{copyText(location.origin+feedUrl)}} title="Нажмите, чтобы скопировать ссылку на фид">{location.origin}{feedUrl}</code>}
           </div>
           {si && !si.avito_address && <div style={{fontSize:11,color:"var(--danger)",marginBottom:6}}>Не заполнен адрес магазина в настройках — объявления будут без адреса</div>}
           <div className="tw">
@@ -2356,7 +2521,7 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
                       </td>
                       <td style={{fontSize:12,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.avito_title || defaultAvitoTitle(p)}</td>
                       <td><Chip condition={p.condition} repair={p.in_repair} sold={p.is_sold}/></td>
-                      <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>navigator.clipboard.writeText(p.imei)}>{p.imei}</span></td>
+                      <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei}</span></td>
                       <td className="tr">{fmt(p.price_retail)}{!p.price_retail && <span style={{color:"var(--danger)"}} title="Нет цены — объявление будет без цены"> ⚠</span>}</td>
                       <td style={{textAlign:"center"}}>{p.photos_count > 0 ? <span style={{color:"var(--success)"}}>📷 {p.photos_count}</span> : <span style={{color:"var(--danger)"}} title="Нет фото — объявление не попадёт в фид">⚠ 0</span>}</td>
                       <td style={{textAlign:"center",whiteSpace:"nowrap"}}>
@@ -2485,6 +2650,130 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
 }
 
 // ─── ANALYTICS (свои данные PhoneBase; без парсинга Авито) ─────────────────────
+function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, includeSold }) {
+  const [expanded, setExpanded] = useState({});
+  const [details, setDetails] = useState({});
+  const [detailLoading, setDetailLoading] = useState({});
+
+  const toggle = async (key, model, storage, brand) => {
+    const isOpen = expanded[key];
+    setExpanded(prev => ({ ...prev, [key]: !isOpen }));
+    if (!isOpen && !details[key]) {
+      setDetailLoading(prev => ({ ...prev, [key]: true }));
+      try {
+        const params = new URLSearchParams();
+        params.set("q", model);
+        if (storage) params.set("storage", storage);
+        if (!includeSold) params.set("in_stock", "true");
+        params.set("is_new", "false");
+        params.set("limit", "200");
+        const data = await apiFetch(`/products/?${params.toString()}`, { token });
+        const filtered = (data.items || []).filter(p =>
+          p.model === model && (p.storage || "") === (storage || "")
+        );
+        setDetails(prev => ({ ...prev, [key]: filtered }));
+      } catch { setDetails(prev => ({ ...prev, [key]: [] })); }
+      setDetailLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const grouped = useMemo(() => {
+    const map = {};
+    for (const row of items) {
+      const key = `${row.brand||""}|${row.model}|${row.storage||""}`;
+      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, sumRetail: 0, minRetail: Infinity, maxRetail: -Infinity };
+      const g = map[key];
+      g.totalCount += row.count;
+      g.sumRetail += (row.avg_retail || 0) * row.count;
+      if ((row.min_retail || 0) < g.minRetail) g.minRetail = row.min_retail || 0;
+      if ((row.max_retail || 0) > g.maxRetail) g.maxRetail = row.max_retail || 0;
+    }
+    return Object.entries(map).map(([key, g]) => ({
+      key, brand: g.brand, model: g.model, storage: g.storage,
+      avg_retail: g.totalCount ? g.sumRetail / g.totalCount : 0,
+      min_retail: g.minRetail === Infinity ? 0 : g.minRetail,
+      max_retail: g.maxRetail === -Infinity ? 0 : g.maxRetail,
+      count: g.totalCount,
+    }));
+  }, [items]);
+
+  const sorted = useMemo(() => {
+    const d = anSortDir === "asc" ? 1 : -1;
+    return [...grouped].sort((a, b) => {
+      switch (anSortCol) {
+        case "brand": return d * (a.brand || "").localeCompare(b.brand || "", "ru");
+        case "model": return d * (a.model || "").localeCompare(b.model || "", "ru");
+        case "storage": return d * (a.storage || "").localeCompare(b.storage || "", "ru");
+        case "avg": return d * (a.avg_retail - b.avg_retail);
+        case "min": return d * (a.min_retail - b.min_retail);
+        case "max": return d * (a.max_retail - b.max_retail);
+        case "count": return d * (a.count - b.count);
+        default: return 0;
+      }
+    });
+  }, [grouped, anSortCol, anSortDir]);
+
+  const toggleSort = (col) => { anSortCol === col ? setAnSortDir(d => d === "asc" ? "desc" : "asc") : (setAnSortCol(col), setAnSortDir("asc")); };
+  const arrow = (col) => anSortCol === col ? (anSortDir === "asc" ? " ▲" : " ▼") : "";
+  const thS = { cursor: "pointer", userSelect: "none" };
+  const subStyle = { background: "rgba(255,255,255,.02)", fontSize: 11 };
+
+  return (
+    <div className="tw">
+      <table className="pt">
+        <thead><tr>
+          {[["brand","Бренд"],["model","Модель"],["storage","Память"]].map(([k,l])=>(
+            <th key={k} style={thS} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
+          ))}
+          {[["avg","Средняя","right"],["min","Мин","right"],["max","Макс","right"],["count","Шт.","center"]].map(([k,l,a])=>(
+            <th key={k} style={{...thS,textAlign:a}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {sorted.map(g => {
+            const isOpen = expanded[g.key];
+            const rows = details[g.key] || [];
+            const isLoading = detailLoading[g.key];
+            return (
+              <React.Fragment key={g.key}>
+                <tr style={{cursor:"pointer"}} onClick={()=>toggle(g.key, g.model, g.storage, g.brand)}>
+                  <td style={{fontSize:11,color:"var(--muted)"}}>{g.brand || "—"}</td>
+                  <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
+                  <td className="mono">{g.storage || "—"}</td>
+                  <td className="tr" style={{color:"var(--success)"}}>{fmt(Math.round(g.avg_retail))}</td>
+                  <td className="trm">{fmt(Math.round(g.min_retail))}</td>
+                  <td className="trm">{fmt(Math.round(g.max_retail))}</td>
+                  <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.count}</td>
+                </tr>
+                {isOpen && isLoading && (
+                  <tr style={subStyle}><td colSpan="7" style={{paddingLeft:32,color:"var(--muted)"}}><span className="spinner" style={{width:12,height:12}}/> Загрузка…</td></tr>
+                )}
+                {isOpen && !isLoading && rows.map((p, ci) => (
+                  <tr key={ci} style={subStyle}>
+                    <td style={{paddingLeft:24,color:"var(--muted)"}}>└ {p.store_name || "—"}</td>
+                    <td style={{color:"var(--muted)"}}>{p.condition || "—"}</td>
+                    <td className="mono">{p.imei || "—"}</td>
+                    <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
+                    <td className="trm">{fmt(p.price_cost)}</td>
+                    <td className="trm">{p.is_sold ? "Продан" : "В наличии"}</td>
+                    <td/>
+                  </tr>
+                ))}
+                {isOpen && !isLoading && rows.length === 0 && (
+                  <tr style={subStyle}><td colSpan="7" style={{paddingLeft:32,color:"var(--muted)"}}>Нет товаров</td></tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+          {!loading && sorted.length === 0 && (
+            <tr><td colSpan="7" style={{textAlign:"center",padding:"28px",color:"var(--muted)"}}>Нет данных для выбранных фильтров</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AnalyticsPage({ user, token, activeStore }) {
   const [q,setQ]=useState("");
   const [brand,setBrand]=useState("");
@@ -2545,35 +2834,7 @@ function AnalyticsPage({ user, token, activeStore }) {
         <span className="fc">{items.length} групп</span>
       </div>
 
-      <div className="tw">
-        <table className="pt">
-          <thead><tr>
-            {[["brand","Бренд"],["model","Модель"],["storage","Память"],["condition","Состояние"]].map(([k,l])=>(
-              <th key={k} style={{cursor:"pointer",userSelect:"none"}} onClick={()=>{anSortCol===k?setAnSortDir(d=>d==="asc"?"desc":"asc"):(setAnSortCol(k),setAnSortDir("asc"))}}>{l}{anSortCol===k?(anSortDir==="asc"?" ▲":" ▼"):""}</th>
-            ))}
-            {[["avg","Средняя","right"],["min","Мин","right"],["max","Макс","right"],["count","Шт.","center"]].map(([k,l,a])=>(
-              <th key={k} style={{textAlign:a,cursor:"pointer",userSelect:"none"}} onClick={()=>{anSortCol===k?setAnSortDir(d=>d==="asc"?"desc":"asc"):(setAnSortCol(k),setAnSortDir("asc"))}}>{l}{anSortCol===k?(anSortDir==="asc"?" ▲":" ▼"):""}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {[...items].sort((a,b)=>{const d=anSortDir==="asc"?1:-1;switch(anSortCol){case"brand":return d*(a.brand||"").localeCompare(b.brand||"","ru");case"model":return d*(a.model||"").localeCompare(b.model||"","ru");case"storage":return d*(a.storage||"").localeCompare(b.storage||"","ru");case"condition":return d*(a.condition||"").localeCompare(b.condition||"","ru");case"avg":return d*((a.avg_retail||0)-(b.avg_retail||0));case"min":return d*((a.min_retail||0)-(b.min_retail||0));case"max":return d*((a.max_retail||0)-(b.max_retail||0));case"count":return d*(a.count-b.count);default:return 0;}}).map((row,i)=>(
-              <tr key={`${row.model}-${row.storage}-${row.condition}-${i}`}>
-                <td style={{fontSize:11,color:"var(--muted)"}}>{row.brand || "—"}</td>
-                <td style={{fontWeight:500}}>{row.model}</td>
-                <td className="mono">{row.storage || "—"}</td>
-                <td>{row.condition || "—"}</td>
-                <td className="tr" style={{color:"var(--success)"}}>{fmt(Math.round(row.avg_retail))}</td>
-                <td className="trm">{fmt(Math.round(row.min_retail))}</td>
-                <td className="trm">{fmt(Math.round(row.max_retail))}</td>
-                <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{row.count}</td>
-              </tr>
-            ))}
-            {!loading && items.length===0 && (
-              <tr><td colSpan="8" style={{textAlign:"center",padding:"28px",color:"var(--muted)"}}>Нет данных для выбранных фильтров</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <AnalyticsTable items={items} loading={loading} anSortCol={anSortCol} anSortDir={anSortDir} setAnSortCol={setAnSortCol} setAnSortDir={setAnSortDir} token={token} includeSold={includeSold}/>
     </>
   );
 }
@@ -3004,6 +3265,81 @@ function UsersPage({ token, currentUserId }) {
   );
 }
 
+// ─── LOGS ─────────────────────────────────────────────────────────────────────
+
+function LogsPage({ token }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    let c = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await apiFetch(`/logs/activity?limit=200&log_type=${filter}`, { token });
+        if (c) setItems(data.items || []);
+      } catch {}
+      if (c) setLoading(false);
+    })();
+    return () => { c = false; };
+  }, [token, filter]);
+
+  const typeLabel = { import: "Импорт", doc_access: "Документы", avito: "Авито" };
+  const typeColor = { import: "var(--accent2)", doc_access: "var(--cyan)", avito: "var(--warn)" };
+  const statusColor = (s) => s === "success" || s === "ok" || s === "published" ? "var(--success)" : s === "error" ? "var(--danger)" : "var(--muted)";
+
+  const fmtDate = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleDateString("ru") + " " + d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <>
+      <div className="filters" style={{marginBottom:14}}>
+        {[["all","Все"],["import","Импорт"],["avito","Авито"],["docs","Документы"]].map(([v,l]) => (
+          <button key={v} className={`btn btn-sm ${filter===v?"btn-primary":"btn-outline"}`} onClick={()=>setFilter(v)}>{l}</button>
+        ))}
+        <span className="fc">{items.length} записей</span>
+      </div>
+
+      {loading && <div style={{color:"var(--muted)"}}><span className="spinner"/> Загрузка…</div>}
+
+      <div className="tw">
+        <table className="pt">
+          <thead><tr>
+            <th>Дата</th>
+            <th>Тип</th>
+            <th>Пользователь</th>
+            <th>Магазин</th>
+            <th>Статус</th>
+            <th>Детали</th>
+          </tr></thead>
+          <tbody>
+            {items.map((log, i) => (
+              <tr key={log.id + "-" + i}>
+                <td style={{whiteSpace:"nowrap",fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>{fmtDate(log.timestamp)}</td>
+                <td><span className="chip" style={{background:"rgba(255,255,255,.05)",color:typeColor[log.type]||"var(--muted)",border:"1px solid " + (typeColor[log.type]||"var(--border)")}}>{typeLabel[log.type] || log.type}</span></td>
+                <td style={{fontSize:12}}>{log.user_name || log.user}</td>
+                <td style={{fontSize:11,color:"var(--muted)"}}>{log.store || "—"}</td>
+                <td><span style={{color:statusColor(log.status),fontSize:11,fontWeight:600}}>{log.status}</span></td>
+                <td style={{fontSize:11,maxWidth:400}}>
+                  {log.details}
+                  {log.error && <div style={{color:"var(--danger)",marginTop:3,fontSize:10}}>⚠ {log.error}</div>}
+                </td>
+              </tr>
+            ))}
+            {!loading && items.length === 0 && (
+              <tr><td colSpan="6" style={{textAlign:"center",padding:"28px",color:"var(--muted)"}}>Нет записей</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
   const [page,setPage]=useState(()=>sessionStorage.getItem("pb_page")||"products");
@@ -3034,6 +3370,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
       ? [
           { divider: true },
           { id: "users", icon: <Icon.users/>, label: "Пользователи" },
+          { id: "logs", icon: <Icon.logs/>, label: "Логи" },
           { id: "store-settings", icon: <Icon.gear/>, label: "Настройки" },
         ]
       : []),
@@ -3045,6 +3382,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     avito: "Авито — мои объявления",
     analytics: "Аналитика цен",
     users: "Пользователи",
+    logs: "Логи",
     "store-settings": "Настройки магазина",
   };
   const goNav=(id)=>{setPage(id);sessionStorage.setItem("pb_page",id);setOpenCard(null);setSidebarOpen(false);};
@@ -3057,7 +3395,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           <div className="logo-text" style={{fontSize:22}}>Phone<span>Base</span></div>
         </div>
         <div className="sb-nav">
-          <div className="sb-sec"><span>{sidebarCollapsed?"":"Навигация"}</span><button className="sb-collapse-btn" onClick={()=>setSidebarCollapsed(v=>{localStorage.setItem("pb_sidebar_collapsed",v?"0":"1");return !v;})} title={sidebarCollapsed?"Развернуть":"Свернуть"}>{sidebarCollapsed?"▶":"◀"}</button></div>
+          <div className="sb-sec"><span/><button className="sb-collapse-btn" onClick={()=>setSidebarCollapsed(v=>{localStorage.setItem("pb_sidebar_collapsed",v?"0":"1");return !v;})} title={sidebarCollapsed?"Развернуть":"Свернуть"}>{sidebarCollapsed?"▶":"◀"}</button></div>
           {nav.map((n,i)=>n.divider?<div key={"d"+i} className="nav-divider"/>:<button key={n.id} className={`nav-item${page===n.id?" active":""}`} onClick={()=>goNav(n.id)} title={n.label}><span className="nav-icon">{n.icon}</span><span className="nav-label">{n.label}</span></button>)}
         </div>
         <div className="sb-user">
@@ -3095,7 +3433,6 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           ) : (
             <span className="badge b-store">{storeLabel}</span>
           )}
-          <div className="topbar-spacer"/>
           <span className={`badge ${isAdm?"b-admin":"b-staff"}`} style={{cursor:"pointer"}} onClick={()=>setAccountOpen(true)} title="Личный кабинет">{roleShort}</span>
         </div>
         <div className="content">
@@ -3108,6 +3445,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="avito"&&<AvitoPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
+          {page==="logs"&&isAdm&&<LogsPage token={token}/>}
           {page==="store-settings"&&isAdm&&<StoreSettingsPage token={token} activeStore={activeStore}/>}
         </div>
       </div>

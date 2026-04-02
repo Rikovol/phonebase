@@ -72,6 +72,7 @@ class Product(Base):
     in_repair: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))
     sim_count: Mapped[int | None] = mapped_column(Integer)  # 1, 2, 3 — кол-во SIM-карт
+    sim_type: Mapped[str | None] = mapped_column(String(50))  # "SIM+eSIM", "eSIM+eSIM" и т.д.
     completeness: Mapped[str | None] = mapped_column(String(100))  # комплектация: "Телефон", "Полная" и т.д.
     price_retail: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     price_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
@@ -83,6 +84,7 @@ class Product(Base):
 
     is_new: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
+    site_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avito_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avito_title: Mapped[str | None] = mapped_column(String(50))
     avito_description: Mapped[str | None] = mapped_column(Text)

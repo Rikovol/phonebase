@@ -47,3 +47,7 @@ assets/images/generated/
 
 # Logs
 *.log
+
+# 1C import data
+used.html
+new.html

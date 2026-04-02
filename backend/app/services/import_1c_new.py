@@ -30,6 +30,7 @@ class ParsedNewProduct:
     quantity:     int
     price_retail: Optional[float]
     price_cost:   Optional[float]
+    sim_type:     Optional[str] = None
 
     @property
     def brand(self) -> str:
@@ -172,11 +173,16 @@ class OneCNewHTMLParser:
         imei, _extra = _parse_imei_block(imei_raw)
         model, storage, color = _parse_new_name(name_raw)
 
-        # If no color from name, try extra from IMEI field — but only if it looks like a color
-        if not color and _extra:
-            candidate = _extra.split(',')[0].strip()
-            if candidate.lower() in _ALL_COLOR_WORDS:
-                color = candidate
+        # Parse SIM type from extra (e.g. "SIM+eSIM", "eSIM+eSIM")
+        sim_type = None
+        if _extra:
+            sim_candidate = _extra.strip()
+            if re.search(r'(?i)sim|esim', sim_candidate):
+                sim_type = sim_candidate
+            elif not color:
+                candidate = sim_candidate.split(',')[0].strip()
+                if candidate.lower() in _ALL_COLOR_WORDS:
+                    color = candidate
 
         return ParsedNewProduct(
             store_name=_norm_store(store_raw), category=category,
@@ -184,6 +190,7 @@ class OneCNewHTMLParser:
             quantity=_parse_qty(qty_raw),
             price_retail=_parse_money(retail_raw),
             price_cost=_parse_money(cost_raw),
+            sim_type=sim_type,
         )
 
     @staticmethod
