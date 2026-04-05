@@ -168,6 +168,29 @@ step_docker() {
     mark_done "docker"
 }
 
+# ── Шаг 2б: Освобождение портов 80/443 ───────────────────────────────────────
+step_free_ports() {
+    skip_if_done "free_ports" && return
+    step "Освобождение портов 80 и 443"
+
+    for svc in nginx apache2 lighttpd caddy; do
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+            log "Останавливаем $svc (занимает порт 80/443)..."
+            systemctl stop "$svc"
+            systemctl disable "$svc"
+        fi
+    done
+
+    # Проверяем что порты свободны
+    if ss -tlnp 2>/dev/null | grep -q ':80 '; then
+        warn "Порт 80 всё ещё занят: $(ss -tlnp | grep ':80 ')"
+    else
+        log "Порт 80 свободен"
+    fi
+
+    mark_done "free_ports"
+}
+
 # ── Шаг 3: Клонирование репозитория ──────────────────────────────────────────
 step_clone() {
     skip_if_done "clone" && return
@@ -498,6 +521,7 @@ main() {
 
     step_system_packages
     step_docker
+    step_free_ports
     step_clone
     step_env
     step_frontend
