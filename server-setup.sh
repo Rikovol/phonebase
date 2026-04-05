@@ -103,9 +103,9 @@ ask_questions() {
         log "SECRET_KEY сгенерирован автоматически"
     fi
 
-    # PD_ENCRYPTION_KEY
+    # PD_ENCRYPTION_KEY — должен быть валидным Fernet-ключом (44 base64 символа)
     if [ -z "${PD_ENCRYPTION_KEY:-}" ]; then
-        PD_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+        PD_ENCRYPTION_KEY="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' 2>/dev/null || openssl rand -base64 32)"
         log "PD_ENCRYPTION_KEY сгенерирован автоматически"
     fi
 
