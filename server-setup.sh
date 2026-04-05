@@ -320,11 +320,11 @@ step_ssl() {
             --email "$EMAIL" \
             -d "$DOMAIN"
 
-    # Копируем сертификаты в директорию проекта
+    # Копируем сертификаты в директорию проекта (имена должны совпадать с nginx.conf)
     mkdir -p "$INSTALL_DIR/ssl"
-    cp /etc/letsencrypt/live/"$DOMAIN"/fullchain.pem "$INSTALL_DIR/ssl/cert.pem"
-    cp /etc/letsencrypt/live/"$DOMAIN"/privkey.pem "$INSTALL_DIR/ssl/key.pem"
-    chmod 600 "$INSTALL_DIR/ssl/key.pem"
+    cp /etc/letsencrypt/live/"$DOMAIN"/fullchain.pem "$INSTALL_DIR/ssl/fullchain.pem"
+    cp /etc/letsencrypt/live/"$DOMAIN"/privkey.pem "$INSTALL_DIR/ssl/privkey.pem"
+    chmod 600 "$INSTALL_DIR/ssl/privkey.pem"
 
     # Перезапускаем nginx
     cd "$INSTALL_DIR"
@@ -353,9 +353,9 @@ docker compose -f "\$INSTALL_DIR/docker-compose.yml" stop nginx 2>/dev/null || t
 certbot renew --quiet --non-interactive
 
 if [ -f "/etc/letsencrypt/live/\$DOMAIN/fullchain.pem" ]; then
-    cp /etc/letsencrypt/live/"\$DOMAIN"/fullchain.pem "\$INSTALL_DIR/ssl/cert.pem"
-    cp /etc/letsencrypt/live/"\$DOMAIN"/privkey.pem "\$INSTALL_DIR/ssl/key.pem"
-    chmod 600 "\$INSTALL_DIR/ssl/key.pem"
+    cp /etc/letsencrypt/live/"\$DOMAIN"/fullchain.pem "\$INSTALL_DIR/ssl/fullchain.pem"
+    cp /etc/letsencrypt/live/"\$DOMAIN"/privkey.pem "\$INSTALL_DIR/ssl/privkey.pem"
+    chmod 600 "\$INSTALL_DIR/ssl/privkey.pem"
 fi
 
 cd "\$INSTALL_DIR"
