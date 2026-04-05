@@ -2026,7 +2026,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         const canOpenCard = Access.canOpenProductCard(user, row);
                         return (
                           <tr key={p.id} style={{background:"rgba(255,255,255,.04)",fontSize:12}}>
-                            <td style={{paddingLeft:28,color:"var(--text)"}}>{p.store_name || "—"}</td>
+                            <td style={{paddingLeft:28}}><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                             <td className="mono" style={{cursor:"pointer",color:"var(--text)"}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
@@ -2072,9 +2072,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               return (
                 <tr key={p.id} className={rowCls}>
                   {showSold && <td style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--muted)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
-                  <td><span style={{display:"inline-flex",alignItems:"center",fontSize:11,color:"var(--muted)"}}>
-                    <span className="sdot" style={{background:STORE_COLORS[p.store_name]||"#64748b"}}/>{p.store_name}
-                  </span></td>
+                  <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                   <td>
                     <div
                       className={`tm${canOpenCard ? "" : " tm-disabled"}`}
