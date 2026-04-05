@@ -1872,9 +1872,10 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     const st = priceStats[key];
     if (!st || !st.market_avg) return "var(--muted)";
     const diff = (p.price_cost - st.market_avg) / st.market_avg;
-    if (diff <= -0.05) return "var(--success)";   // закупили дешевле рынка на 5%+ — хорошо
-    if (diff >= 0.05)  return "var(--danger)";    // закупили дороже рынка на 5%+ — плохо
-    return "var(--warn)";
+    if (diff < -0.03)             return "var(--success)";  // дешевле рынка >3% — зелёный
+    if (diff <= 0.03)             return "var(--cyan)";     // ±3% — голубой
+    if (diff <= 0.06)             return "var(--warn)";     // +3%..+6% — жёлтый
+    return "var(--danger)";                                  // >+6% — красный
   }
 
   function priceTitle(p) {
@@ -1891,6 +1892,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     if (costColorFilter) {
       const c = costColor(p);
       if (costColorFilter === "green"  && c !== "var(--success)") return false;
+      if (costColorFilter === "cyan"   && c !== "var(--cyan)")    return false;
       if (costColorFilter === "yellow" && c !== "var(--warn)")    return false;
       if (costColorFilter === "red"    && c !== "var(--danger)")  return false;
       if (costColorFilter === "none"   && c !== "var(--muted)")   return false;
@@ -2014,9 +2016,10 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         {!isNew && !showSold && (
         <select className="fs" value={costColorFilter} onChange={e=>setCostColorFilter(e.target.value)}>
           <option value="">Учётная: все</option>
-          <option value="green">🟢 Ниже рынка</option>
-          <option value="yellow">🟡 Около рынка</option>
-          <option value="red">🔴 Выше рынка</option>
+          <option value="green">🟢 Ниже рынка (&lt;-3%)</option>
+          <option value="cyan">🔵 Около рынка (±3%)</option>
+          <option value="yellow">🟡 Немного выше (+3..6%)</option>
+          <option value="red">🔴 Выше рынка (&gt;+6%)</option>
           <option value="none">⚪ Нет данных</option>
         </select>
         )}
