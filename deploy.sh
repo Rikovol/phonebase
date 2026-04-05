@@ -110,10 +110,10 @@ cmd_update() {
 
     # Пересборка и перезапуск контейнеров
     log "Пересборка Docker-контейнеров..."
-    docker compose up -d --build
+    docker compose up -d --build --remove-orphans
 
     log "Ожидание готовности..."
-    sleep 8
+    sleep 10
 
     if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
         log "=== Обновление завершено, backend OK ==="
@@ -144,7 +144,8 @@ cmd_logs() {
 
 cmd_restart() {
     log "Перезапуск контейнеров..."
-    docker compose restart
+    docker compose down
+    docker compose up -d
     log "Готово"
 }
 
