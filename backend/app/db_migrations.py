@@ -4,7 +4,7 @@ import logging
 from sqlalchemy import text, update
 
 from app.core.database import AsyncSessionLocal, engine, Base
-from app.models.business import User, AvitoStats, AvitoMessage  # noqa: F401 — ensure tables registered
+from app.models.business import User, AvitoStats, AvitoMessage, CompetitorPrice  # noqa: F401 — ensure tables registered
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +159,66 @@ async def migrate_create_avito_tables() -> None:
         logger.info("Миграция: таблицы avito_stats/avito_messages проверены/созданы")
     except Exception:
         logger.exception("Миграция create_avito_tables не выполнена")
+
+
+async def migrate_seed_competitor_prices() -> None:
+    """Загрузить начальные цены конкурентов из CSV, если таблица пуста."""
+    import csv
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    csv_path = Path(__file__).resolve().parent.parent / "fixtures" / "goodcom_prices.csv"
+    if not csv_path.is_file():
+        return
+
+    try:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(text("SELECT count(*) FROM competitor_prices"))
+            if (res.scalar() or 0) > 0:
+                return
+
+            now = datetime.now(timezone.utc)
+            seen = set()
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    key = (row["brand"].strip(), row["model"].strip(), row["memory"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    session.add(CompetitorPrice(
+                        source="goodcom",
+                        brand=row["brand"].strip(),
+                        model=row["model"].strip(),
+                        memory=row["memory"] if row["memory"] != "-" else None,
+                        full_name=row.get("name", ""),
+                        price_excellent=int(row["price_b"]) if row["price_b"] else None,
+                        price_good=int(row["price_c"]) if row["price_c"] else None,
+                        price_poor=int(row["price_d"]) if row["price_d"] else None,
+                        price_repair=int(row["price_g"]) if row["price_g"] else None,
+                        parsed_at=now,
+                    ))
+            await session.commit()
+            logger.info("Миграция: загружены начальные цены конкурентов из CSV")
+    except Exception:
+        logger.exception("Миграция seed_competitor_prices не выполнена")
+
+
+async def migrate_add_purchased_at() -> None:
+    """Добавить колонку purchased_at (дата покупки из 1С) в products."""
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'products' AND column_name = 'purchased_at'"
+                )
+            )
+            if result.first() is None:
+                await session.execute(
+                    text("ALTER TABLE products ADD COLUMN purchased_at TIMESTAMPTZ")
+                )
+                await session.commit()
+                logger.info("Миграция: добавлена колонка purchased_at в products")
+    except Exception:
+        logger.exception("Миграция add_purchased_at не выполнена")

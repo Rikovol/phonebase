@@ -78,6 +78,8 @@ class Product(Base):
     price_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    purchased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     is_sold: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     sold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     data_cleanup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -171,6 +173,25 @@ class AvitoStats(Base):
     contacts: Mapped[int] = mapped_column(Integer, default=0)
     favorites: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class CompetitorPrice(Base):
+    __tablename__ = "competitor_prices"
+    __table_args__ = (
+        UniqueConstraint("source", "brand", "model", "memory", name="uq_competitor_price"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # "goodcom", ...
+    brand: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    memory: Mapped[str | None] = mapped_column(String(30))
+    full_name: Mapped[str | None] = mapped_column(String(500))
+    price_excellent: Mapped[int | None] = mapped_column(Integer)  # grade B
+    price_good: Mapped[int | None] = mapped_column(Integer)       # grade C
+    price_poor: Mapped[int | None] = mapped_column(Integer)       # grade D
+    price_repair: Mapped[int | None] = mapped_column(Integer)     # grade G
+    parsed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
 
 class AvitoMessage(Base):

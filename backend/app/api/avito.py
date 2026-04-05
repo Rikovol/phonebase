@@ -368,6 +368,26 @@ async def trigger_fetch_stats(
     return result
 
 
+@router.post("/import-items/{store_id}")
+async def import_avito_items_endpoint(
+    store_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Импортировать все объявления с Авито и привязать к товарам по IMEI/модели."""
+    store = await db.get(Store, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+    if not store.avito_client_id:
+        raise HTTPException(status_code=400, detail="Avito API не настроен")
+
+    from app.services.avito_import import import_avito_items
+    result = await import_avito_items(db, store)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
 @router.post("/check-feed/{store_id}")
 async def trigger_check_feed(
     store_id: str,

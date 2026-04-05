@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,18 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analytics, auth, avito, imports, logs, personal_data, photos, products, purchase_docs, stores, users
+from app.api import analytics, auth, avito, competitor_prices, imports, logs, personal_data, photos, products, purchase_docs, stores, users
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.db_migrations import (
     migrate_add_avito_api_columns,
     migrate_add_is_new_column,
+    migrate_add_purchased_at,
     migrate_add_sim_completeness,
     migrate_add_website_feed_columns,
     migrate_admin_clear_store,
     migrate_create_avito_tables,
     migrate_info_clear_store,
     migrate_legacy_role_manager_to_staff,
+    migrate_seed_competitor_prices,
 )
 from app.seed import seed_if_empty
 
@@ -36,11 +39,18 @@ async def lifespan(app: FastAPI):
     await migrate_add_avito_api_columns()
     await migrate_add_sim_completeness()
     await migrate_create_avito_tables()
+    await migrate_add_purchased_at()
     await seed_if_empty()
     await migrate_legacy_role_manager_to_staff()
     await migrate_admin_clear_store()
     await migrate_info_clear_store()
+    await migrate_seed_competitor_prices()
+
+    from app.services.auto_import import auto_import_loop
+
+    import_task = asyncio.create_task(auto_import_loop())
     yield
+    import_task.cancel()
 
 
 app = FastAPI(
@@ -75,6 +85,7 @@ app.include_router(personal_data.router, prefix="/api/pd", tags=["personal_data"
 app.include_router(purchase_docs.router, prefix="/api/purchase-docs", tags=["purchase_docs"])
 app.include_router(avito.router, prefix="/api/avito", tags=["avito"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
+app.include_router(competitor_prices.router, prefix="/api/competitor-prices", tags=["competitor_prices"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)

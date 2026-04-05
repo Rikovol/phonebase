@@ -2,7 +2,7 @@
 python -m app.cli init_users
 
 Перегенерирует временные пароли для пользователей с маркером CHANGE_ON_FIRST_RUN
-(режим PostgreSQL + seed-users.sql). При локальном SQLite с готовым bcrypt см. seed.py.
+(режим PostgreSQL + seed-users.sql). Для seed с готовым bcrypt см. seed.py.
 """
 import asyncio
 import secrets

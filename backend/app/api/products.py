@@ -93,6 +93,7 @@ class ProductDetailOut(BaseModel):
     is_sold: bool
     is_new: bool = False
     sold_at: Optional[str]
+    purchased_at: Optional[str] = None
     sim_count: Optional[int] = None
     sim_type: Optional[str] = None
     completeness: Optional[str] = None
@@ -375,6 +376,7 @@ async def get_product(
         is_sold=product.is_sold,
         is_new=product.is_new,
         sold_at=product.sold_at.isoformat() if product.sold_at else None,
+        purchased_at=product.purchased_at.isoformat() if product.purchased_at else None,
         sim_count=product.sim_count,
                 sim_type=product.sim_type,
         completeness=product.completeness,

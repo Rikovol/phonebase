@@ -32,6 +32,8 @@ async def generate_website_feed(db: AsyncSession, store_id: str) -> dict:
                 Product.is_sold == False,  # noqa: E712
                 Product.in_repair == False,  # noqa: E712
                 Product.price_retail.isnot(None),
+                Product.condition.isnot(None),
+                Product.condition != "",
             )
         )
         .options(selectinload(Product.photos))
@@ -41,6 +43,8 @@ async def generate_website_feed(db: AsyncSession, store_id: str) -> dict:
 
     items = []
     for p in products:
+        if not p.photos:
+            continue
         photos = sorted(p.photos, key=lambda ph: (not ph.is_main, ph.created_at))
         items.append({
             "id": p.id,

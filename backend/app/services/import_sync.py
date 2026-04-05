@@ -151,6 +151,7 @@ def _apply(product: Product, item: ParsedProduct, now: datetime) -> None:
     product.quantity = item.quantity
     product.price_retail = Decimal(str(item.price_retail)) if item.price_retail else None
     product.price_cost = Decimal(str(item.price_cost)) if item.price_cost else None
+    product.purchased_at = item.purchased_at
     product.synced_at = now
     product.updated_at = now
 

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    DATABASE_URL: str = "sqlite+aiosqlite:///./phonebase.db"
+    DATABASE_URL: str = "postgresql+asyncpg://phonebase:phonebase@localhost:5432/phonebase"
     REDIS_URL: str = "redis://localhost:6379/0"
     PD_ENCRYPTION_KEY: str = Field(default_factory=_default_fernet_key)
 

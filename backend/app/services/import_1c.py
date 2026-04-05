@@ -5,16 +5,21 @@
 ─────────────────────────────────────────────────────────────────
 TR.R9  + TD.R9C0 colspan=2         → заголовок группы: "iPhone", "AirPods", ...
 TR.R9 / TR.R185  + TD.R10C0/R185C0 → товарная строка:
-  ячейка 0  склад:       "REM-GSM (Склад)"
-  ячейка 1  IMEI+хар-ка: "351008267826350, Orange"
-  ячейка 2  наименование: "Apple iPhone 11 128Gb (Б/У), White, Хорошее, 75%"
-  ячейка 3  остаток:      "1,000"
-  ячейка 4  розница:      "13 500"
-  ячейка 5  учётная:      "9 000,00"
+  ячейка 0  склад:          "REM-GSM (Склад)"
+  ячейка 1  IMEI+хар-ка:    "351008267826350, Orange"
+  ячейка 2  наименование:   "Apple iPhone 11 128Gb (Б/У)"
+  ячейка 3  цвет:           "White"
+  ячейка 4  дата покупки:   "19.02.2026 0:00:00"
+  ячейка 5  состояние:      "Хорошее"
+  ячейка 6  АКБ:            "75%"
+  ячейка 7  остаток:        "1,000"
+  ячейка 8  розница:        "13 500"
+  ячейка 9  учётная:        "9 000,00"
 ─────────────────────────────────────────────────────────────────
 """
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 from bs4 import BeautifulSoup
 
@@ -33,6 +38,7 @@ class ParsedProduct:
     quantity:     int
     price_retail: Optional[float]
     price_cost:   Optional[float]
+    purchased_at: Optional[datetime] = None
 
     @property
     def brand(self) -> str:
@@ -106,6 +112,17 @@ def _parse_name_full(name: str, imei_extra: str) -> tuple[str, str, str, str, st
 
     return model, storage, color, condition, battery
 
+def _parse_date(raw: str) -> Optional[datetime]:
+    s = raw.strip()
+    if not s:
+        return None
+    for fmt in ("%d.%m.%Y %H:%M:%S", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
 def _norm_store(s: str) -> str:
     return re.sub(r'\s*\(Склад\)\s*$', '', s, flags=re.IGNORECASE).strip()
 
@@ -153,13 +170,30 @@ class OneCHTMLParser:
             return None
         get = lambda i: _clean(cells[i].get_text(' ')) if len(cells) > i else ''
         store_raw, imei_raw, name_raw = get(0), get(1), get(2)
-        qty_raw, retail_raw, cost_raw = get(3), get(4), get(5)
 
         if not store_raw or not name_raw:
             return None
 
         imei, extra, in_repair = _parse_imei_block(imei_raw)
-        model, storage, color, condition, battery = _parse_name_full(name_raw, extra)
+
+        # Новый формат (≥8 ячеек): цвет, дата, состояние, АКБ — отдельные колонки
+        if len(cells) >= 8:
+            color = get(3)
+            purchased_at = _parse_date(get(4))
+            condition = get(5)
+            battery = get(6)
+            qty_raw, retail_raw, cost_raw = get(7), get(8), get(9)
+
+            model_clean = name_raw.replace('(Б/У)', '').strip()
+            m = re.search(r'\b(\d+(?:[/+]\d+)?[GT]b)\b', model_clean, re.IGNORECASE)
+            storage = m.group(1) if m else ''
+            model = re.sub(r'\b\d+(?:[/+]\d+)?[GT]b\b', '', model_clean, flags=re.IGNORECASE)
+            model = re.sub(r'\s+', ' ', model).strip()
+        else:
+            # Старый формат (6 ячеек): всё в наименовании
+            qty_raw, retail_raw, cost_raw = get(3), get(4), get(5)
+            model, storage, color, condition, battery = _parse_name_full(name_raw, extra)
+            purchased_at = None
 
         return ParsedProduct(
             store_name=_norm_store(store_raw), category=category,
@@ -168,6 +202,7 @@ class OneCHTMLParser:
             quantity=_parse_qty(qty_raw),
             price_retail=_parse_money(retail_raw),
             price_cost=_parse_money(cost_raw),
+            purchased_at=purchased_at,
         )
 
     @staticmethod

@@ -4,10 +4,18 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 const API_BASE = "/api";
 
 const STORE_COLORS = {
-  "iPrice.Store":"#a78bfa","МОБИЛАКС":"#4ade80",
-  "REM-GSM":"#60a5fa","ДИСКИ":"#f97316","ТЕХНО":"#f472b6",
+  "iPrice.Store":"#a78bfa","МОБИЛАКС":"#c084fc",
+  "REM-GSM":"#60a5fa","ДИСКИ":"#f97316","ТЕХНО":"#f472b6","Склад":"#94a3b8",
 };
-const STORES = ["iPrice.Store","МОБИЛАКС","REM-GSM","ДИСКИ","ТЕХНО"];
+const STORE_GRADIENTS = {
+  "iPrice.Store":"linear-gradient(135deg,#a78bfa,#7c3aed)",
+  "МОБИЛАКС":"linear-gradient(135deg,#c084fc,#9333ea)",
+  "REM-GSM":"linear-gradient(135deg,#60a5fa,#2563eb)",
+  "ДИСКИ":"linear-gradient(135deg,#fb923c,#ea580c)",
+  "ТЕХНО":"linear-gradient(135deg,#f472b6,#db2777)",
+  "Склад":"linear-gradient(135deg,#94a3b8,#475569)",
+};
+const STORES = ["iPrice.Store","МОБИЛАКС","REM-GSM","ДИСКИ","ТЕХНО","Склад"];
 
 // ─── СЕССИЯ ───────────────────────────────────────────────────────────────────
 const Session = {
@@ -239,6 +247,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .pt tr.own td{border-left:1px solid rgba(52,211,153,.5)}
 .pt tr.rep td{background:var(--danger-dim)}
 .tm{font-weight:600;cursor:pointer;color:var(--accent2);transition:color .15s}
+.imei-btn{display:inline-block;padding:6px 14px;border-radius:8px;border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.08);color:var(--accent2);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.imei-btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(16,185,129,.3);background:rgba(16,185,129,.15);border-color:var(--accent)}
+.imei-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .tm:hover{color:var(--cyan);text-decoration:none}
 .tm.tm-disabled{cursor:default;color:var(--text);opacity:0.85}
 .tm.tm-disabled:hover{text-decoration:none;color:var(--text)}
@@ -362,8 +373,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .avito-settings .field{margin-bottom:12px}
 
 /* SOLD */
-.pt tr.sold td{opacity:.5}
-.pt tr.sold:hover td{opacity:.65}
+.pt tr.sold td{opacity:.75}
+.pt tr.sold:hover td{opacity:.9}
 .chip-sold{background:rgba(119,119,138,.12);color:var(--muted);border:1px solid var(--border)}
 .sold-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:3px 9px;border-radius:6px;background:rgba(119,119,138,.1);color:var(--muted);border:1px solid var(--border);white-space:nowrap;font-weight:500}
 .sold-banner{background:rgba(119,119,138,.06);border:1px solid rgba(119,119,138,.18);border-radius:var(--r);padding:10px 14px;font-size:12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--muted);line-height:1.6}
@@ -428,6 +439,7 @@ const Icon={
   check:()=><svg {...I.p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>,
   mega:()=><svg {...I.p}><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>,
   chart:()=><svg {...I.p}><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>,
+  competitors:()=><svg {...I.p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
   users:()=><svg {...I.p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   gear:()=><svg {...I.p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
   logo:()=><svg {...I.p} width={24} height={24}><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/><circle cx="12" cy="19" r=".5" fill="currentColor"/></svg>,
@@ -441,6 +453,7 @@ const Icon={
 
 // ─── МЕЛКИЕ КОМПОНЕНТЫ ────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? n.toLocaleString("ru") + " ₽" : "—";
+const fmtDt = (s) => { if(!s) return "—"; const d=new Date(s); const p=(v)=>String(v).padStart(2,"0"); return `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const ini = (n) => n ? n[0].toUpperCase() : "?";
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -1447,7 +1460,7 @@ function ProductCard({ productId, token, user, onBack }) {
       {isSold && (
         <div className="sold-banner">
           <span>🏷️</span>
-          <span><strong>Товар продан</strong>{product.sold_at ? ` (${product.sold_at})` : ""} — редактирование запрещено.</span>
+          <span><strong>Товар продан</strong>{product.sold_at ? ` (${fmtDt(product.sold_at)})` : ""} — редактирование запрещено.</span>
         </div>
       )}
 
@@ -1477,6 +1490,7 @@ function ProductCard({ productId, token, user, onBack }) {
                   <span className="sdot" style={{background:STORE_COLORS[product.store_name]||"#64748b"}}/>{product.store_name}
                 </span>
               </div>
+              {product.purchased_at && <div className="ir"><span className="ik">Дата покупки</span><span className="iv">{new Date(product.purchased_at).toLocaleDateString("ru-RU")}</span></div>}
               <div className="ir"><span className="ik">Розница</span><span className="iv" style={{color:"var(--success)"}}>{fmt(product.price_retail)}</span></div>
               {seeCost ? <>
                 <div className="ir"><span className="ik">Учётная</span><span className="iv" style={{color:"var(--muted)"}}>{fmt(product.price_cost)}</span></div>
@@ -1866,6 +1880,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         case "store":    va = a.store_name||""; vb = b.store_name||""; break;
         case "model":    va = (a.model||"")+" "+(a.storage||""); vb = (b.model||"")+" "+(b.storage||""); break;
         case "condition":va = a.condition||""; vb = b.condition||""; break;
+        case "sold_at":  va = a.sold_at||""; vb = b.sold_at||""; break;
         case "imei":     va = a.imei||""; vb = b.imei||""; break;
         case "quantity": return dir * ((a.quantity||0) - (b.quantity||0));
         case "retail":   return dir * ((a.price_retail||0) - (b.price_retail||0));
@@ -2028,6 +2043,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       <div className="tw">
         <table className="pt">
           <thead><tr>
+            {showSold && <th style={thStyle} onClick={()=>toggleSort("sold_at")}>Продано{sortArrow("sold_at")}</th>}
             <th style={thStyle} onClick={()=>toggleSort("store")}>Магазин{sortArrow("store")}</th>
             <th style={thStyle} onClick={()=>toggleSort("model")}>Модель{sortArrow("model")}</th>
             <th style={thStyle} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>
@@ -2049,6 +2065,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":""].filter(Boolean).join(" ");
               return (
                 <tr key={p.id} className={rowCls}>
+                  {showSold && <td style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--muted)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-flex",alignItems:"center",fontSize:11,color:"var(--muted)"}}>
                     <span className="sdot" style={{background:STORE_COLORS[p.store_name]||"#64748b"}}/>{p.store_name}
                   </span></td>
@@ -2062,7 +2079,6 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   </td>
                   <td>
                     <Chip condition={p.condition} repair={p.in_repair} sold={p.is_sold}/>
-                    {p.is_sold&&p.sold_at&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2,fontFamily:"var(--mono)"}}>{p.sold_at}</div>}
                   </td>
                   <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei}</span></td>
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
@@ -2650,7 +2666,7 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
 }
 
 // ─── ANALYTICS (свои данные PhoneBase; без парсинга Авито) ─────────────────────
-function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, includeSold }) {
+function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, includeSold, user, onOpenProduct }) {
   const [expanded, setExpanded] = useState({});
   const [details, setDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState({});
@@ -2668,8 +2684,11 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
         params.set("is_new", "false");
         params.set("limit", "200");
         const data = await apiFetch(`/products/?${params.toString()}`, { token });
+        const excluded = ["Новый","Требуется ремонт","Ремонт","Залог"];
         const filtered = (data.items || []).filter(p =>
           p.model === model && (p.storage || "") === (storage || "")
+          && !p.in_repair
+          && !excluded.includes(p.condition)
         );
         setDetails(prev => ({ ...prev, [key]: filtered }));
       } catch { setDetails(prev => ({ ...prev, [key]: [] })); }
@@ -2681,20 +2700,28 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
     const map = {};
     for (const row of items) {
       const key = `${row.brand||""}|${row.model}|${row.storage||""}`;
-      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, sumRetail: 0, minRetail: Infinity, maxRetail: -Infinity };
+      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, sumRetail: 0, sumCost: 0, costCount: 0, competitor: null };
       const g = map[key];
       g.totalCount += row.count;
       g.sumRetail += (row.avg_retail || 0) * row.count;
-      if ((row.min_retail || 0) < g.minRetail) g.minRetail = row.min_retail || 0;
-      if ((row.max_retail || 0) > g.maxRetail) g.maxRetail = row.max_retail || 0;
+      if (row.avg_cost) { g.sumCost += row.avg_cost * row.count; g.costCount += row.count; }
+      if (row.competitor && !g.competitor) g.competitor = row.competitor;
     }
-    return Object.entries(map).map(([key, g]) => ({
-      key, brand: g.brand, model: g.model, storage: g.storage,
-      avg_retail: g.totalCount ? g.sumRetail / g.totalCount : 0,
-      min_retail: g.minRetail === Infinity ? 0 : g.minRetail,
-      max_retail: g.maxRetail === -Infinity ? 0 : g.maxRetail,
-      count: g.totalCount,
-    }));
+    return Object.entries(map).map(([key, g]) => {
+      const avg_retail = g.totalCount ? g.sumRetail / g.totalCount : 0;
+      const avg_cost = g.costCount ? g.sumCost / g.costCount : 0;
+      const comp_price = g.competitor?.price_excellent || 0;
+      // Средняя рынок: среднее между нашей закупкой и ценой конкурента
+      let market_avg = 0;
+      if (avg_cost && comp_price) market_avg = (avg_cost + comp_price) / 2;
+      else if (comp_price) market_avg = comp_price;
+      else if (avg_cost) market_avg = avg_cost;
+      return {
+        key, brand: g.brand, model: g.model, storage: g.storage,
+        avg_retail, avg_cost, count: g.totalCount,
+        competitor: g.competitor, comp_price, market_avg,
+      };
+    });
   }, [items]);
 
   const sorted = useMemo(() => {
@@ -2705,8 +2732,9 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
         case "model": return d * (a.model || "").localeCompare(b.model || "", "ru");
         case "storage": return d * (a.storage || "").localeCompare(b.storage || "", "ru");
         case "avg": return d * (a.avg_retail - b.avg_retail);
-        case "min": return d * (a.min_retail - b.min_retail);
-        case "max": return d * (a.max_retail - b.max_retail);
+        case "cost": return d * ((a.avg_cost||0) - (b.avg_cost||0));
+        case "comp": return d * ((a.comp_price||0) - (b.comp_price||0));
+        case "market": return d * ((a.market_avg||0) - (b.market_avg||0));
         case "count": return d * (a.count - b.count);
         default: return 0;
       }
@@ -2717,6 +2745,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
   const arrow = (col) => anSortCol === col ? (anSortDir === "asc" ? " ▲" : " ▼") : "";
   const thS = { cursor: "pointer", userSelect: "none" };
   const subStyle = { background: "rgba(255,255,255,.02)", fontSize: 11 };
+  const cols = 8;
 
   return (
     <div className="tw">
@@ -2725,48 +2754,63 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
           {[["brand","Бренд"],["model","Модель"],["storage","Память"]].map(([k,l])=>(
             <th key={k} style={thS} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
           ))}
-          {[["avg","Средняя","right"],["min","Мин","right"],["max","Макс","right"],["count","Шт.","center"]].map(([k,l,a])=>(
-            <th key={k} style={{...thS,textAlign:a}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
-          ))}
+          <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
+          <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
+          <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("comp")}>Конкурент{arrow("comp")}</th>
+          <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("market")}>Средняя рынок{arrow("market")}</th>
+          <th style={{...thS,textAlign:"center"}} onClick={()=>toggleSort("count")}>Шт.{arrow("count")}</th>
         </tr></thead>
         <tbody>
           {sorted.map(g => {
             const isOpen = expanded[g.key];
             const rows = details[g.key] || [];
             const isLoading = detailLoading[g.key];
+            const cp = g.competitor;
+            const compPrice = cp?.price_excellent;
             return (
               <React.Fragment key={g.key}>
                 <tr style={{cursor:"pointer"}} onClick={()=>toggle(g.key, g.model, g.storage, g.brand)}>
                   <td style={{fontSize:11,color:"var(--muted)"}}>{g.brand || "—"}</td>
                   <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
                   <td className="mono">{g.storage || "—"}</td>
-                  <td className="tr" style={{color:"var(--success)"}}>{fmt(Math.round(g.avg_retail))}</td>
-                  <td className="trm">{fmt(Math.round(g.min_retail))}</td>
-                  <td className="trm">{fmt(Math.round(g.max_retail))}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)"}}>{fmt(Math.round(g.avg_retail))}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_cost?"var(--warn)":"var(--muted)"}}>{g.avg_cost?fmt(Math.round(g.avg_cost)):"—"}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compPrice?"var(--cyan)":"var(--muted)"}}>{compPrice?fmt(compPrice):"—"}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:g.market_avg?"var(--accent2)":"var(--muted)"}}>{g.market_avg?fmt(Math.round(g.market_avg)):"—"}</td>
                   <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.count}</td>
                 </tr>
                 {isOpen && isLoading && (
-                  <tr style={subStyle}><td colSpan="7" style={{paddingLeft:32,color:"var(--muted)"}}><span className="spinner" style={{width:12,height:12}}/> Загрузка…</td></tr>
+                  <tr style={subStyle}><td colSpan={cols} style={{paddingLeft:32,color:"var(--muted)"}}><span className="spinner" style={{width:12,height:12}}/> Загрузка…</td></tr>
                 )}
-                {isOpen && !isLoading && rows.map((p, ci) => (
-                  <tr key={ci} style={subStyle}>
-                    <td style={{paddingLeft:24,color:"var(--muted)"}}>└ {p.store_name || "—"}</td>
+                {isOpen && !isLoading && rows.map((p, ci) => {
+                  const cond = (p.condition||"").toLowerCase();
+                  const compForCond = cp
+                    ? (cond.includes("отличн") || cond.includes("новый") ? cp.price_excellent
+                      : cond.includes("хорош") ? cp.price_good
+                      : cond.includes("плох") || cond.includes("удовл") ? cp.price_poor
+                      : cp.price_good)
+                    : null;
+                  return (
+                  <tr key={ci} style={{...subStyle,background:`${STORE_COLORS[p.store_name]||"transparent"}08`}}>
+                    <td style={{paddingLeft:24}}><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                     <td style={{color:"var(--muted)"}}>{p.condition || "—"}</td>
-                    <td className="mono">{p.imei || "—"}</td>
-                    <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
-                    <td className="trm">{fmt(p.price_cost)}</td>
-                    <td className="trm">{p.is_sold ? "Продан" : "В наличии"}</td>
+                    <td className="mono">{Access.isAdmin(user) && p.id && onOpenProduct ? <button className="imei-btn" onClick={e=>{e.stopPropagation();onOpenProduct(p.id);}}>{p.imei||"—"}</button> : (p.imei||"—")}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)"}}>{fmt(p.price_retail)}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--warn)"}}>{fmt(p.price_cost)}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compForCond?"var(--cyan)":"var(--muted)"}}>{compForCond?fmt(compForCond):"—"}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compForCond&&p.price_cost?"var(--accent2)":"var(--muted)"}}>{compForCond&&p.price_cost?fmt(Math.round((p.price_cost+compForCond)/2)):"—"}</td>
                     <td/>
                   </tr>
-                ))}
-                {isOpen && !isLoading && rows.length === 0 && (
-                  <tr style={subStyle}><td colSpan="7" style={{paddingLeft:32,color:"var(--muted)"}}>Нет товаров</td></tr>
+                  );
+                })}
+                {isOpen && !isLoading && rows.length === 0 && !cp && (
+                  <tr style={subStyle}><td colSpan={cols} style={{paddingLeft:32,color:"var(--muted)"}}>Нет товаров</td></tr>
                 )}
               </React.Fragment>
             );
           })}
           {!loading && sorted.length === 0 && (
-            <tr><td colSpan="7" style={{textAlign:"center",padding:"28px",color:"var(--muted)"}}>Нет данных для выбранных фильтров</td></tr>
+            <tr><td colSpan={cols} style={{textAlign:"center",padding:"28px",color:"var(--muted)"}}>Нет данных для выбранных фильтров</td></tr>
           )}
         </tbody>
       </table>
@@ -2774,11 +2818,13 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
   );
 }
 
-function AnalyticsPage({ user, token, activeStore }) {
+function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const [q,setQ]=useState("");
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
   const [includeSold,setIncludeSold]=useState(false);
+  const [soldFrom,setSoldFrom]=useState("");
+  const [soldTo,setSoldTo]=useState("");
   const [minUnits,setMinUnits]=useState(1);
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -2797,6 +2843,8 @@ function AnalyticsPage({ user, token, activeStore }) {
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
         if (includeSold) params.set("include_sold", "true");
+        if (includeSold && soldFrom) params.set("sold_from", soldFrom);
+        if (includeSold && soldTo) params.set("sold_to", soldTo);
         if (minUnits > 1) params.set("min_units", String(minUnits));
         if (Access.seesAllStores(user) && storeF) params.set("store", storeF);
         params.set("is_new", "false");
@@ -2809,7 +2857,7 @@ function AnalyticsPage({ user, token, activeStore }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, q, brand, cond, includeSold, minUnits, storeF, user.role]);
+  }, [token, q, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
 
   return (
     <>
@@ -2824,9 +2872,17 @@ function AnalyticsPage({ user, token, activeStore }) {
           {["Отличное","Как новый","Хорошее","Среднее","Плохое"].map(c=><option key={c}>{c}</option>)}
         </select>
         <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--muted)",cursor:"pointer",whiteSpace:"nowrap"}}>
-          <input type="checkbox" checked={includeSold} onChange={e=>setIncludeSold(e.target.checked)} style={{accentColor:"var(--accent)"}}/>
+          <input type="checkbox" checked={includeSold} onChange={e=>{setIncludeSold(e.target.checked);if(!e.target.checked){setSoldFrom("");setSoldTo("");}}} style={{accentColor:"var(--accent)"}}/>
           С проданными
         </label>
+        {includeSold && <>
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
+            с <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldFrom} onChange={e=>setSoldFrom(e.target.value)}/>
+          </label>
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
+            по <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldTo} onChange={e=>setSoldTo(e.target.value)}/>
+          </label>
+        </>}
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
           Мин. шт. в группе
           <input type="number" min={1} max={100} value={minUnits} onChange={e=>setMinUnits(Math.min(100, Math.max(1, parseInt(e.target.value,10)||1)))} style={{width:52,padding:4,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}/>
@@ -2834,7 +2890,7 @@ function AnalyticsPage({ user, token, activeStore }) {
         <span className="fc">{items.length} групп</span>
       </div>
 
-      <AnalyticsTable items={items} loading={loading} anSortCol={anSortCol} anSortDir={anSortDir} setAnSortCol={setAnSortCol} setAnSortDir={setAnSortDir} token={token} includeSold={includeSold}/>
+      <AnalyticsTable items={items} loading={loading} anSortCol={anSortCol} anSortDir={anSortDir} setAnSortCol={setAnSortCol} setAnSortDir={setAnSortDir} token={token} includeSold={includeSold} user={user} onOpenProduct={onOpenProduct}/>
     </>
   );
 }
@@ -3340,6 +3396,150 @@ function LogsPage({ token }) {
   );
 }
 
+// ─── COMPETITOR PRICES ────────────────────────────────────────────────────────
+function CompetitorPricesPage({ user, token }) {
+  const [items,setItems]=useState([]);
+  const [brands,setBrands]=useState([]);
+  const [sources,setSources]=useState([]);
+  const [lastParsed,setLastParsed]=useState(null);
+  const [total,setTotal]=useState(0);
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState("");
+  const [q,setQ]=useState("");
+  const [brand,setBrand]=useState("");
+  const [source,setSource]=useState("");
+  const [parsing,setParsing]=useState(false);
+  const [sortCol,setSortCol]=useState("brand");
+  const [sortDir,setSortDir]=useState("asc");
+  const isAdm=Access.isAdmin(user);
+
+  const load = async () => {
+    setLoading(true); setErr("");
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      if (brand) params.set("brand", brand);
+      if (source) params.set("source", source);
+      params.set("limit","2000");
+      const data = await apiFetch(`/competitor-prices/?${params}`,{token});
+      setItems(data.items||[]);
+      setBrands(data.brands||[]);
+      setSources(data.sources||[]);
+      setLastParsed(data.last_parsed);
+      setTotal(data.total||0);
+    } catch(e){ setErr(e.message||"Ошибка"); }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[token,q,brand,source]);
+
+  const startParse = async (src) => {
+    setParsing(true);
+    try {
+      await apiFetch(`/competitor-prices/parse?source=${src}`,{token,method:"POST"});
+      setTimeout(()=>{ load(); setParsing(false); }, 3000);
+    } catch(e){ setErr(e.message); setParsing(false); }
+  };
+
+  const sorted = useMemo(()=>{
+    const arr=[...items];
+    const d = sortDir === "asc" ? 1 : -1;
+    arr.sort((a,b)=>{
+      const va=a[sortCol], vb=b[sortCol];
+      if(typeof va==="number"&&typeof vb==="number") return d*(va-vb);
+      return d*String(va||"").localeCompare(String(vb||""),"ru");
+    });
+    return arr;
+  },[items,sortCol,sortDir]);
+
+  const toggleSort=(col)=>{
+    if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
+  const arrow=(col)=>sortCol===col?(sortDir==="asc"?" ▲":" ▼"):"";
+  const thS={cursor:"pointer",userSelect:"none"};
+
+  const sourceLabel = (s) => ({ goodcom: "GoodCom" }[s] || s);
+  const sourceFull = (s) => ({ goodcom: "GoodCom (Хорошая Связь)" }[s] || s);
+
+  const stats = useMemo(()=>{
+    if(!items.length) return null;
+    const bs = {};
+    items.forEach(r=>{ bs[r.brand]=(bs[r.brand]||0)+1; });
+    return { brands: Object.keys(bs).length, total: items.length };
+  },[items]);
+
+  return (
+    <>
+      {err && <div className="err" style={{marginBottom:10}}>{err}</div>}
+
+      {stats && (
+        <div style={{display:"flex",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+          <div className="sc"><div className="sc-label">Позиций</div><div className="sc-val" style={{color:"var(--accent)"}}>{stats.total}</div></div>
+          <div className="sc"><div className="sc-label">Брендов</div><div className="sc-val">{stats.brands}</div></div>
+          <div className="sc"><div className="sc-label">Источников</div><div className="sc-val">{sources.length}</div></div>
+          {lastParsed && <div className="sc"><div className="sc-label">Обновлено</div><div className="sc-val" style={{fontSize:12}}>{new Date(lastParsed).toLocaleDateString("ru",{day:"numeric",month:"short",year:"numeric"})}</div></div>}
+        </div>
+      )}
+
+      <div className="filters">
+        <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
+          <option value="">Все бренды</option>
+          {brands.map(b=><option key={b} value={b}>{b}</option>)}
+        </select>
+        <select className="fs" value={source} onChange={e=>setSource(e.target.value)}>
+          <option value="">Все источники</option>
+          {sources.map(s=><option key={s} value={s}>{sourceFull(s)}</option>)}
+        </select>
+        {isAdm && (
+          <button className="pb-btn" disabled={parsing} onClick={()=>startParse("goodcom")} style={{marginLeft:"auto",whiteSpace:"nowrap"}}>
+            {parsing ? <><span className="spinner" style={{width:12,height:12,marginRight:6}}/>Парсинг…</> : "⟳ Обновить GoodCom"}
+          </button>
+        )}
+      </div>
+
+      {loading && <div style={{color:"var(--muted)",marginBottom:10}}><span className="spinner"/> Загрузка…</div>}
+
+      <div className="tw" style={{overflowX:"auto"}}>
+        <table className="pt">
+          <thead>
+            <tr>
+              <th style={{...thS,width:90}} onClick={()=>toggleSort("source")}>Источник{arrow("source")}</th>
+              <th style={{...thS,width:90}} onClick={()=>toggleSort("brand")}>Бренд{arrow("brand")}</th>
+              <th style={thS} onClick={()=>toggleSort("model")}>Модель{arrow("model")}</th>
+              <th style={{width:80}}>Память</th>
+              <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_excellent")}>Отличное{arrow("price_excellent")}</th>
+              <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_good")}>Хорошее{arrow("price_good")}</th>
+              <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_poor")}>Плохое{arrow("price_poor")}</th>
+              <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_repair")}>Ремонт{arrow("price_repair")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(r=>(
+              <tr key={r.id}>
+                <td><span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase",background:"rgba(16,185,129,.1)",color:"var(--accent2)",border:"1px solid rgba(16,185,129,.2)"}}>{sourceLabel(r.source)}</span></td>
+                <td style={{fontWeight:600,whiteSpace:"nowrap"}}>{r.brand}</td>
+                <td>{r.model}</td>
+                <td style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>{r.memory||"—"}</td>
+                <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)",fontWeight:600}}>{r.price_excellent?fmt(r.price_excellent):"—"}</td>
+                <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--accent2)"}}>{r.price_good?fmt(r.price_good):"—"}</td>
+                <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--warn)"}}>{r.price_poor?fmt(r.price_poor):"—"}</td>
+                <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--muted)"}}>{r.price_repair?fmt(r.price_repair):"—"}</td>
+              </tr>
+            ))}
+            {!loading && items.length===0 && (
+              <tr><td colSpan="8" style={{textAlign:"center",padding:28,color:"var(--muted)"}}>
+                Нет данных.{isAdm ? " Нажмите «Обновить GoodCom» для первого парсинга." : ""}
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
   const [page,setPage]=useState(()=>sessionStorage.getItem("pb_page")||"products");
@@ -3366,6 +3566,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     { divider: true },
     ...(!Access.isInfo(user) ? [{ id: "avito", icon: <Icon.mega/>, label: "Авито" }] : []),
     { id: "analytics", icon: <Icon.chart/>, label: "Аналитика цен" },
+    { id: "competitor-prices", icon: <Icon.competitors/>, label: "Цены конкурентов" },
     ...(isAdm
       ? [
           { divider: true },
@@ -3381,6 +3582,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     sold: openCard ? "Карточка товара" : "Продано",
     avito: "Авито — мои объявления",
     analytics: "Аналитика цен",
+    "competitor-prices": "Цены конкурентов",
     users: "Пользователи",
     logs: "Логи",
     "store-settings": "Настройки магазина",
@@ -3443,7 +3645,8 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="sold"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={false} soldOnly={true}/>}
           {page==="sold"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
           {page==="avito"&&<AvitoPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
-          {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore}/>}
+          {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
+          {page==="competitor-prices"&&<CompetitorPricesPage user={user} token={token}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
           {page==="logs"&&isAdm&&<LogsPage token={token}/>}
           {page==="store-settings"&&isAdm&&<StoreSettingsPage token={token} activeStore={activeStore}/>}
