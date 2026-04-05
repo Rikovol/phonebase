@@ -2071,8 +2071,9 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const canOpenCard = Access.canOpenProductCard(user, row);
               const profit  = (p.price_retail??0)-(p.price_cost??0);
               const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":""].filter(Boolean).join(" ");
+              const storeColor = STORE_COLORS[p.store_name];
               return (
-                <tr key={p.id} className={rowCls}>
+                <tr key={p.id} className={rowCls} style={storeColor&&!p.in_repair?{background:`${storeColor}12`}:undefined}>
                   {showSold && <td style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--muted)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                   <td>
@@ -2086,7 +2087,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   <td>
                     <Chip condition={p.condition} repair={p.in_repair} sold={p.is_sold}/>
                   </td>
-                  <td><span className="mono" style={{cursor:"pointer"}} title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei}</span></td>
+                  <td><span className="imei-btn" title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei||"—"}</span></td>
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
                   {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
