@@ -82,7 +82,7 @@ const CSS = `
 :root{
   --bg:#0c0c0e;--bg2:#141416;--bg3:#1c1c20;--bg4:#26262b;
   --border:#2a2a30;--border2:#3a3a42;
-  --text:#ececf0;--muted:#77778a;
+  --text:#ececf0;--muted:#9494a6;
   --accent:#10b981;--accent2:#34d399;--accent-glow:rgba(16,185,129,.2);
   --cyan:#22d3ee;--cyan-dim:rgba(34,211,238,.1);
   --success:#34d399;--success-dim:rgba(52,211,153,.1);
@@ -229,7 +229,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .pt th,.pt td{border-left:none;border-right:none}
 .pt th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;background:var(--bg3);border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
 .pt th.thl{color:var(--border2)}
-.pt td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;vertical-align:middle;transition:background .12s}
+.pt td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px;vertical-align:middle;transition:background .12s}
 .pt-thumb-cell{width:52px;padding:6px 8px!important;vertical-align:middle}
 .pt-thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;background:var(--bg3);transition:transform .15s}
 .pt-thumb:hover{transform:scale(1.1)}
