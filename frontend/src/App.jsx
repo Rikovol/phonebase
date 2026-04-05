@@ -2647,6 +2647,11 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
   const isInfo = Access.isInfo(user);
   const forcedStore = isAdm ? "" : (user.store_name || "");
   const [storeF, setStoreF] = useState(isAdm ? (activeStore || "") : forcedStore);
+  // Messages section
+  const [msgs, setMsgs] = useState([]);
+  const [msgsLoading, setMsgsLoading] = useState(false);
+  const [msgsErr, setMsgsErr] = useState("");
+  const [msgsStoreId, setMsgsStoreId] = useState("");
 
   useEffect(() => { if (isAdm) setStoreF(activeStore || ""); }, [activeStore, isAdm]);
 
@@ -2704,6 +2709,29 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
 
   const storeMap = {};
   stores.forEach(s => { storeMap[s.name] = s; });
+
+  // Keep msgsStoreId in sync with store filter
+  useEffect(() => {
+    if (storeF) {
+      const s = storeMap[storeF];
+      if (s?.avito_configured) setMsgsStoreId(s.id);
+    } else {
+      // default to first avito-configured store
+      const first = stores.find(s => s.avito_configured);
+      if (first && !msgsStoreId) setMsgsStoreId(first.id);
+    }
+  }, [storeF, stores]);
+
+  useEffect(() => {
+    if (!msgsStoreId) return;
+    let c = true;
+    setMsgsLoading(true); setMsgsErr("");
+    apiFetch(`/avito/messages/${msgsStoreId}?limit=100`, { token })
+      .then(d => { if (c) setMsgs(d.items || []); })
+      .catch(e => { if (c) setMsgsErr(e.message || "Ошибка загрузки сообщений"); })
+      .finally(() => { if (c) setMsgsLoading(false); });
+    return () => { c = false; };
+  }, [msgsStoreId, token]);
 
   const byStore = {};
   items.forEach(p => {
@@ -2797,6 +2825,52 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
         </div>
         );
       })}
+
+      {/* ── Сообщения Авито ─────────────────────────────── */}
+      <div style={{marginTop:28}}>
+        <div style={{fontWeight:600,fontSize:14,marginBottom:12,color:"var(--text)"}}>Сообщения Авито</div>
+
+        {/* Store picker shown only when no store filter or no avito-configured store auto-selected */}
+        {isAdm && stores.filter(s=>s.avito_configured).length > 1 && (
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <label style={{fontSize:11,color:"var(--muted)"}}>Магазин</label>
+            <select className="store-sel" style={{maxWidth:220}} value={msgsStoreId} onChange={e=>setMsgsStoreId(e.target.value)}>
+              <option value="">— выберите —</option>
+              {stores.filter(s=>s.avito_configured).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {!msgsStoreId && <div style={{fontSize:12,color:"var(--muted)"}}>Нет магазина с подключённым Avito API</div>}
+        {msgsLoading && <div style={{fontSize:12,color:"var(--muted)"}}><span className="spinner"/> Загрузка сообщений…</div>}
+        {msgsErr && <div className="err" style={{marginBottom:8}}>{msgsErr}</div>}
+
+        {!msgsLoading && msgsStoreId && msgs.length === 0 && !msgsErr && (
+          <div style={{fontSize:12,color:"var(--muted)"}}>Нет сообщений</div>
+        )}
+
+        {msgs.length > 0 && (
+          <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:480,overflowY:"auto",padding:"4px 0"}}>
+            {[...msgs].reverse().map(m => {
+              const out = m.direction === "outgoing";
+              const dt = new Date(m.created_at);
+              const dtStr = dt.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+              return (
+                <div key={m.id} style={{display:"flex",justifyContent: out ? "flex-end" : "flex-start"}}>
+                  <div style={{
+                    maxWidth:"70%",padding:"8px 12px",borderRadius: out ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                    background: out ? "rgba(16,185,129,.15)" : "var(--bg3)",
+                    border: `1px solid ${out ? "rgba(16,185,129,.25)" : "var(--border)"}`,
+                  }}>
+                    <div style={{fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content || <span style={{color:"var(--muted)",fontStyle:"italic"}}>медиа</span>}</div>
+                    <div style={{fontSize:10,color:"var(--muted)",marginTop:4,textAlign: out ? "right" : "left"}}>{dtStr} · {out ? "исх." : "вх."}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </>
   );
 }
