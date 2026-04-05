@@ -1,7 +1,7 @@
-from pathlib import Path
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from pathlib import Path
 
 # backend/app/core/config.py — _BASE = каталог core/
 _BASE = Path(__file__).resolve().parent
@@ -16,18 +16,6 @@ def _default_fernet_key() -> str:
     from cryptography.fernet import Fernet
 
     return Fernet.generate_key().decode()
-
-
-def resolve_import_1c_html_path(path_str: str) -> Path:
-    """Относительный путь — от каталога backend/, затем от корня репозитория."""
-    p = Path(path_str.strip())
-    if p.is_absolute():
-        return p
-    for base in (_BACKEND_DIR, _REPO_ROOT):
-        cand = (base / p).resolve()
-        if cand.is_file():
-            return cand
-    return (_BACKEND_DIR / p).resolve()
 
 
 class Settings(BaseSettings):
@@ -67,14 +55,11 @@ class Settings(BaseSettings):
 
     PUBLIC_URL: str = Field(default="http://localhost:8000")
 
-    # Прямая HTTP(S)-ссылка на HTML-выгрузку 1С (Google Drive «поделиться» или любой URL)
+    # Прямая HTTP(S)-ссылка на HTML-выгрузку 1С (Google Drive, Яндекс.Диск или любой URL)
     IMPORT_1C_HTML_URL: str | None = None
-    # Локальный путь к тому же HTML (от каталога backend/ или абсолютный). Имеет приоритет над URL.
-    IMPORT_1C_HTML_PATH: str | None = None
 
-    # Путь / URL для HTML-выгрузки НОВЫХ товаров из 1С
+    # URL для HTML-выгрузки НОВЫХ товаров из 1С
     IMPORT_1C_NEW_HTML_URL: str | None = None
-    IMPORT_1C_NEW_HTML_PATH: str | None = None
 
     # Интервал автоматического импорта из файлов (в минутах, 0 — отключено)
     IMPORT_INTERVAL_MINUTES: int = 30

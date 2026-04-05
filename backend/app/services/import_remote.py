@@ -1,25 +1,12 @@
 """
-Загрузка HTML-выгрузки 1С по URL (прямая ссылка или публичная ссылка Google Drive)
-или из локального файла (IMPORT_1C_HTML_PATH).
+Загрузка HTML-выгрузки 1С по URL (Google Drive, Яндекс.Диск или прямая ссылка).
 """
 import re
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
-from app.core.config import resolve_import_1c_html_path
-
 MAX_IMPORT_BYTES = 50 * 1024 * 1024  # как в uploads
-
-
-def load_import_html_from_path(path_str: str) -> tuple[bytes, str]:
-    path = resolve_import_1c_html_path(path_str)
-    if not path.is_file():
-        raise ValueError(f"Файл выгрузки не найден: {path}")
-    data = path.read_bytes()
-    if len(data) > MAX_IMPORT_BYTES:
-        raise ValueError("Файл превышает 50 МБ")
-    return data, path.name
 
 _GDRIVE_FILE_RE = re.compile(
     r"https?://drive\.google\.com/file/d/([a-zA-Z0-9_-]+)",

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_current_user
 from app.core.database import get_db
 from app.models.business import User
-from app.services.import_configured import run_configured_import
+from app.services.import_configured import run_configured_import, run_configured_import_new
 from app.services.import_sync import sync_import
 from app.services.import_sync_new import sync_import_new
 
@@ -133,41 +133,22 @@ async def import_from_configured_url_new(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Импорт HTML новых товаров из 1С: IMPORT_1C_NEW_HTML_PATH или IMPORT_1C_NEW_HTML_URL.
+    Импорт HTML новых товаров из 1С по настроенному URL (БД или .env).
     """
     if current_user.role == "info":
         raise HTTPException(status_code=403, detail="Импорт недоступен для роли «Инфо»")
-
-    from app.core.config import settings
-    from app.services.import_remote import fetch_import_html, load_import_html_from_path
-
-    path_cfg = (settings.IMPORT_1C_NEW_HTML_PATH or "").strip()
-    url = (settings.IMPORT_1C_NEW_HTML_URL or "").strip()
-    if path_cfg:
-        try:
-            data, filename = load_import_html_from_path(path_cfg)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-    elif url:
-        try:
-            data, filename = await fetch_import_html(url)
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Не удалось скачать файл по ссылке: {e!s}",
-            ) from e
-    else:
+    try:
+        result = await run_configured_import_new(db, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Не удалось скачать файл по ссылке: {e!s}") from e
+    if result is None:
         raise HTTPException(
             status_code=503,
-            detail="Не задано: укажите IMPORT_1C_NEW_HTML_PATH или IMPORT_1C_NEW_HTML_URL в .env",
+            detail="Не задано: укажите ссылку в настройках или IMPORT_1C_NEW_HTML_URL в .env",
         )
-
-    log, stores_created = await sync_import_new(
-        db=db,
-        html_bytes=data,
-        filename=filename,
-        user_id=current_user.id,
-    )
+    log, stores_created = result
     return {
         "status": log.status,
         "filename": log.filename,
