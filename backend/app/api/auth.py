@@ -110,10 +110,10 @@ async def require_active(user: User = Depends(get_current_user)) -> User:
 # ── Фоновая синхронизация 1С после входа ──────────────────────────────────────
 
 async def _sync_1c_after_login(user_id: str) -> None:
-    if not is_import_source_configured():
-        return
     try:
         async with AsyncSessionLocal() as session:
+            if not await is_import_source_configured(session):
+                return
             await run_configured_import(session, user_id)
     except Exception:
         logger.exception("Синхронизация выгрузки 1С после входа не выполнена")

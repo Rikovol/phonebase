@@ -2172,6 +2172,11 @@ function StoreSettingsPage({ token, activeStore }) {
   const [feedMsg, setFeedMsg] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  // 1С integration
+  const [onecUrl, setOnecUrl] = useState("");
+  const [onecNewUrl, setOnecNewUrl] = useState("");
+  const [onecSaved, setOnecSaved] = useState(false);
+  const [onecErr, setOnecErr] = useState("");
 
   const selName = activeStore || (stores[0]?.name ?? "");
   const current = stores.find((s) => s.name === selName) || stores[0];
@@ -2180,6 +2185,16 @@ function StoreSettingsPage({ token, activeStore }) {
     const data = await apiFetch("/stores/?include_inactive=true", { token });
     setStores(data.items || []);
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiFetch("/settings/", { token });
+        setOnecUrl(data.import_1c_url || "");
+        setOnecNewUrl(data.import_1c_new_url || "");
+      } catch {}
+    })();
+  }, [token]);
 
   useEffect(() => {
     let c = true;
@@ -2268,6 +2283,15 @@ function StoreSettingsPage({ token, activeStore }) {
     }
   };
 
+  const saveOnec = async () => {
+    setOnecErr(""); setOnecSaved(false);
+    try {
+      await apiFetch("/settings/", { token, method: "PATCH", json: { import_1c_url: onecUrl || null, import_1c_new_url: onecNewUrl || null } });
+      setOnecSaved(true);
+      setTimeout(() => setOnecSaved(false), 2000);
+    } catch (e) { setOnecErr(e.message || "Ошибка"); }
+  };
+
   const fetchStats = async () => {
     if (!current?.id) return;
     setStatsBusy(true); setStatsMsg("");
@@ -2302,6 +2326,39 @@ function StoreSettingsPage({ token, activeStore }) {
     <>
       <div>
         {err && <div className="err" style={{marginBottom:10}}>{err}</div>}
+
+        {/* ── Интеграция 1С ────────────────────────────── */}
+        <div className="panel" style={{marginBottom:16}}>
+          <div className="ph"><span className="pt2">Интеграция 1С</span></div>
+          <div className="pb2">
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
+              Ссылки на выгрузку товаров из 1С (Google Диск или прямой URL). Импорт запускается автоматически после входа и по расписанию.<br/>
+              Откройте файл на Google Диск → «Поделиться» → скопируйте ссылку.
+            </div>
+            <div className="field" style={{marginBottom:12}}>
+              <label>Ссылка на выгрузку Б/У товаров</label>
+              <input
+                placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                value={onecUrl}
+                onChange={e => setOnecUrl(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <div className="field" style={{marginBottom:12}}>
+              <label>Ссылка на выгрузку Новых товаров</label>
+              <input
+                placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                value={onecNewUrl}
+                onChange={e => setOnecNewUrl(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            {onecErr && <div className="err" style={{marginBottom:8}}>{onecErr}</div>}
+            <button type="button" className="btn btn-primary" onClick={saveOnec}>
+              {onecSaved ? "Сохранено" : "Сохранить"}
+            </button>
+          </div>
+        </div>
 
         {/* ── Avito API ─────────────────────────────────── */}
         <div className="panel">
