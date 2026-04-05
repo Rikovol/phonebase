@@ -2026,7 +2026,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         const canOpenCard = Access.canOpenProductCard(user, row);
                         return (
                           <tr key={p.id} style={{background:"rgba(255,255,255,.04)",fontSize:12}}>
-                            <td style={{paddingLeft:28,color:"var(--text)"}}>└ {p.store_name || "—"}</td>
+                            <td style={{paddingLeft:28,color:"var(--text)"}}>{p.store_name || "—"}</td>
                             <td className="mono" style={{cursor:"pointer",color:"var(--text)"}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
