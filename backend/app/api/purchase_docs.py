@@ -218,7 +218,10 @@ async def upload_purchase_doc(
         orig = orig + ext
     fname = f"{uuid.uuid4().hex}_{orig}"
     rel_dir = imei_part
-    out_dir = _purchase_root() / rel_dir
+    purchase_root = _purchase_root().resolve()
+    out_dir = (purchase_root / rel_dir).resolve()
+    if not str(out_dir).startswith(str(purchase_root)):
+        raise HTTPException(status_code=400, detail="Недопустимый путь")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / fname
     rel_path = f"{rel_dir}/{fname}".replace("\\", "/")

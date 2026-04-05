@@ -65,9 +65,11 @@ async def upload_product_photo(
     if img.mode in ("RGBA", "P") and ct == "image/jpeg":
         img = img.convert("RGB")
 
-    media_root = Path(settings.MEDIA_ROOT)
-    rel_dir = product.store_id.replace("..", "")
-    out_dir = media_root / rel_dir
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    rel_dir = product.store_id.replace("..", "").strip("/\\")
+    out_dir = (media_root / rel_dir).resolve()
+    if not str(out_dir).startswith(str(media_root)):
+        raise HTTPException(status_code=400, detail="Недопустимый путь")
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{uuid.uuid4().hex}{ext}"
     out_path = out_dir / fname
