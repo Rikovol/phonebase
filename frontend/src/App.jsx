@@ -2165,6 +2165,13 @@ function StoreSettingsPage({ token, activeStore }) {
   const [apiSecret, setApiSecret] = useState("");
   const [apiSaving, setApiSaving] = useState(false);
   const [apiMsg, setApiMsg] = useState("");
+  // Avito subsections
+  const [statsBusy, setStatsBusy] = useState(false);
+  const [statsMsg, setStatsMsg] = useState("");
+  const [feedBusy, setFeedBusy] = useState(false);
+  const [feedMsg, setFeedMsg] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
 
   const selName = activeStore || (stores[0]?.name ?? "");
   const current = stores.find((s) => s.name === selName) || stores[0];
@@ -2259,6 +2266,36 @@ function StoreSettingsPage({ token, activeStore }) {
     } finally {
       setApiSaving(false);
     }
+  };
+
+  const fetchStats = async () => {
+    if (!current?.id) return;
+    setStatsBusy(true); setStatsMsg("");
+    try {
+      const r = await apiFetch(`/avito/fetch-stats/${current.id}`, { token, method: "POST" });
+      setStatsMsg(`Собрано записей: ${r.collected ?? r.total ?? "—"}`);
+    } catch (e) { setStatsMsg(e.message || "Ошибка"); }
+    setStatsBusy(false);
+  };
+
+  const checkFeed = async () => {
+    if (!current?.id) return;
+    setFeedBusy(true); setFeedMsg("");
+    try {
+      const r = await apiFetch(`/avito/check-feed/${current.id}`, { token, method: "POST" });
+      setFeedMsg(`Активных: ${r.active ?? "—"}, ошибок: ${r.errors ?? 0}, сопоставлено: ${r.mapped ?? "—"}`);
+    } catch (e) { setFeedMsg(e.message || "Ошибка"); }
+    setFeedBusy(false);
+  };
+
+  const importItems = async () => {
+    if (!current?.id) return;
+    setImportBusy(true); setImportMsg("");
+    try {
+      const r = await apiFetch(`/avito/import-items/${current.id}`, { token, method: "POST" });
+      setImportMsg(`Всего: ${r.total_avito ?? "—"}, привязано: ${r.linked ?? 0}, не найдено: ${r.unmatched ?? 0}`);
+    } catch (e) { setImportMsg(e.message || "Ошибка"); }
+    setImportBusy(false);
   };
 
   return (
@@ -2384,6 +2421,54 @@ function StoreSettingsPage({ token, activeStore }) {
             <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:4}} disabled={!current}>
               {saved ? "Сохранено" : "Сохранить"}
             </button>
+          </div>
+        </div>
+
+        {/* ── Статистика ────────────────────────────────── */}
+        <div className="panel" style={{marginTop:16}}>
+          <div className="ph"><span className="pt2">Статистика — {selName || "—"}</span></div>
+          <div className="pb2">
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
+              Сбор просмотров, контактов и избранного по объявлениям с Авито. Запускается автоматически каждые 60 минут (AVITO_STATS_INTERVAL_MINUTES).
+              Данные отображаются в карточке товара.
+            </div>
+            <button type="button" className="btn btn-sm btn-avito" onClick={fetchStats} disabled={statsBusy || !current?.avito_configured}>
+              {statsBusy ? <><span className="spinner"/> Сбор…</> : "Собрать статистику сейчас"}
+            </button>
+            {statsMsg && <div style={{marginTop:8,fontSize:12,color: statsMsg.startsWith("Ошибка") || statsMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{statsMsg}</div>}
+            {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
+          </div>
+        </div>
+
+        {/* ── Сообщения ─────────────────────────────────── */}
+        <div className="panel" style={{marginTop:16}}>
+          <div className="ph"><span className="pt2">Сообщения — {selName || "—"}</span></div>
+          <div className="pb2">
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
+              Загрузка входящих и исходящих сообщений из мессенджера Авито. Запускается автоматически каждые 5 минут (AVITO_MESSENGER_INTERVAL_MINUTES).
+              Данные отображаются в карточке товара.
+            </div>
+            <button type="button" className="btn btn-sm btn-avito" onClick={checkFeed} disabled={feedBusy || !current?.avito_configured}>
+              {feedBusy ? <><span className="spinner"/> Проверка…</> : "Проверить автозагрузку"}
+            </button>
+            {feedMsg && <div style={{marginTop:8,fontSize:12,color: feedMsg.startsWith("Ошибка") || feedMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{feedMsg}</div>}
+            {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
+          </div>
+        </div>
+
+        {/* ── Автозагрузка ──────────────────────────────── */}
+        <div className="panel" style={{marginTop:16}}>
+          <div className="ph"><span className="pt2">Автозагрузка — {selName || "—"}</span></div>
+          <div className="pb2">
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
+              Проверка отчётов автозагрузки фида и сопоставление avito_item_id к товарам по IMEI или модели + памяти + состоянию.
+              Запускается автоматически каждые 120 минут (AVITO_FEED_CHECK_INTERVAL_MINUTES).
+            </div>
+            <button type="button" className="btn btn-sm btn-avito" onClick={importItems} disabled={importBusy || !current?.avito_configured}>
+              {importBusy ? <><span className="spinner"/> Импорт…</> : "Импортировать объявления"}
+            </button>
+            {importMsg && <div style={{marginTop:8,fontSize:12,color: importMsg.startsWith("Ошибка") || importMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{importMsg}</div>}
+            {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
           </div>
         </div>
 
