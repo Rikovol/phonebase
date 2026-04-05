@@ -364,7 +364,9 @@ RENEW_EOF
     chmod +x "$RENEW_SCRIPT"
 
     # Добавляем в cron (каждый понедельник в 04:00)
-    (crontab -l 2>/dev/null | grep -v "phonebase-ssl-renew"; echo "0 4 * * 1 $RENEW_SCRIPT >> /var/log/phonebase-ssl-renew.log 2>&1") | crontab -
+    existing_cron="$(crontab -l 2>/dev/null || true)"
+    filtered_cron="$(echo "$existing_cron" | grep -v "phonebase-ssl-renew" || true)"
+    printf '%s\n%s\n' "$filtered_cron" "0 4 * * 1 $RENEW_SCRIPT >> /var/log/phonebase-ssl-renew.log 2>&1" | crontab -
 
     log "Автообновление SSL настроено (каждый понедельник 04:00)"
     mark_done "ssl_renew"
