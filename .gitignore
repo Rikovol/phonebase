@@ -51,3 +51,9 @@ assets/images/generated/
 # 1C import data
 used.html
 new.html
+
+# Backups
+backups/
+
+# Claude local settings
+.claude/settings.local.json
