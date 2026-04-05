@@ -1752,6 +1752,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [storeFilter,setStoreFilter]=useState(() => (Access.seesAllStores(user) ? (activeStore || "") : ""));
   const showSold = soldOnly;
   const [avitoFilter,setAvitoFilter]=useState("");
+  const [costColorFilter,setCostColorFilter]=useState("");
   const [sortCol,setSortCol]=useState("model");
   const [sortDir,setSortDir]=useState("asc");
   const [visibleCount,setVisibleCount]=useState(80);
@@ -1852,7 +1853,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     return () => obs.disconnect();
   }, []);
 
-  useEffect(() => { setVisibleCount(80); }, [sortCol, sortDir, avitoFilter]);
+  useEffect(() => { setVisibleCount(80); }, [sortCol, sortDir, avitoFilter, costColorFilter]);
 
   function priceColor(p) {
     if (!p.price_retail) return "var(--muted)";
@@ -1887,6 +1888,13 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const filtered = items.filter(p => {
     if (avitoFilter === "yes" && !p.avito_published) return false;
     if (avitoFilter === "no" && p.avito_published) return false;
+    if (costColorFilter) {
+      const c = costColor(p);
+      if (costColorFilter === "green"  && c !== "var(--success)") return false;
+      if (costColorFilter === "yellow" && c !== "var(--warn)")    return false;
+      if (costColorFilter === "red"    && c !== "var(--danger)")  return false;
+      if (costColorFilter === "none"   && c !== "var(--muted)")   return false;
+    }
     return true;
   });
   const toggleSort = (col) => {
@@ -2001,6 +2009,15 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           <option value="">Авито: все</option>
           <option value="yes">На Авито</option>
           <option value="no">Не на Авито</option>
+        </select>
+        )}
+        {!isNew && !showSold && (
+        <select className="fs" value={costColorFilter} onChange={e=>setCostColorFilter(e.target.value)}>
+          <option value="">Учётная: все</option>
+          <option value="green">🟢 Ниже рынка</option>
+          <option value="yellow">🟡 Около рынка</option>
+          <option value="red">🔴 Выше рынка</option>
+          <option value="none">⚪ Нет данных</option>
         </select>
         )}
         <span className="fc">{filtered.length} шт.</span>
