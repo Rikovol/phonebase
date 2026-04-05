@@ -55,6 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup
 | SSL | Let's Encrypt сертификат через Certbot |
 | Автообновление SSL | Cron каждый понедельник в 04:00 |
 | UFW | Открывает порты 22, 80, 443 |
+| `basestock` | Устанавливает глобальную команду управления |
 | Systemd | Автозапуск после перезагрузки |
 
 ### Идемпотентность
@@ -78,8 +79,7 @@ sudo cat /var/lib/phonebase/.config
 ## Обновление
 
 ```bash
-cd /opt/phonebase
-./deploy.sh update
+basestock update
 ```
 
 Команда: `git pull` → пересборка фронтенда → перезапуск Docker-контейнеров.
@@ -88,12 +88,15 @@ cd /opt/phonebase
 
 ## Управление
 
+После установки на сервере доступна глобальная команда `basestock`:
+
 ```bash
-./deploy.sh status     # Статус контейнеров + API healthcheck
-./deploy.sh logs       # Все логи (Ctrl+C для выхода)
-./deploy.sh logs backend   # Логи конкретного сервиса
-./deploy.sh restart    # Перезапуск контейнеров
-./deploy.sh backup     # Бэкап базы данных → backups/
+basestock status          # Статус контейнеров + API healthcheck
+basestock logs            # Все логи (Ctrl+C для выхода)
+basestock logs backend    # Логи конкретного сервиса
+basestock restart         # Перезапуск контейнеров
+basestock update          # Обновить (git pull + пересборка)
+basestock backup          # Бэкап базы данных → backups/
 ```
 
 ---

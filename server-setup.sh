@@ -348,7 +348,24 @@ step_firewall() {
     mark_done "firewall"
 }
 
-# ── Шаг 10: Systemd-сервис для автозапуска ───────────────────────────────────
+# ── Шаг 10: Глобальная команда basestock ─────────────────────────────────────
+step_cli() {
+    skip_if_done "cli" && return
+    step "Установка команды basestock"
+    load_config
+
+    cat > /usr/local/bin/basestock <<CLI_EOF
+#!/usr/bin/env bash
+exec "${INSTALL_DIR}/deploy.sh" "\$@"
+CLI_EOF
+    chmod +x /usr/local/bin/basestock
+
+    log "Команда 'basestock' доступна глобально"
+    log "  basestock status | logs | restart | update | backup"
+    mark_done "cli"
+}
+
+# ── Шаг 11: Systemd-сервис для автозапуска ───────────────────────────────────
 step_systemd() {
     skip_if_done "systemd" && return
     step "Настройка автозапуска (systemd)"
@@ -472,6 +489,7 @@ main() {
     step_ssl
     step_ssl_renew
     step_firewall
+    step_cli
     step_systemd
     step_healthcheck
     show_summary
