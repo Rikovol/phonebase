@@ -3,9 +3,10 @@
 # Идемпотентный скрипт разворачивания на чистом Ubuntu 22.04 / 24.04
 #
 # Использование:
-#   curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh | bash
-# или:
-#   chmod +x server-setup.sh && ./server-setup.sh
+#   bash <(curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh)
+# или скачать и запустить:
+#   curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh -o server-setup.sh
+#   sudo bash server-setup.sh
 #
 # При повторном запуске пропускает выполненные шаги (проверяет /var/lib/phonebase/.setup_state)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ ask_questions() {
 
     # Домен
     if [ -z "${DOMAIN:-}" ]; then
-        read -rp "Домен сайта (например: phonebase.ru): " DOMAIN
+        read -rp "Домен сайта (например: phonebase.ru): " DOMAIN </dev/tty
         DOMAIN="${DOMAIN// /}"
     else
         log "Домен: $DOMAIN"
@@ -76,7 +77,7 @@ ask_questions() {
 
     # Email для Let's Encrypt
     if [ -z "${EMAIL:-}" ]; then
-        read -rp "Email для SSL-сертификата (Let's Encrypt): " EMAIL
+        read -rp "Email для SSL-сертификата (Let's Encrypt): " EMAIL </dev/tty
     else
         log "Email: $EMAIL"
     fi
@@ -257,7 +258,7 @@ step_ssl() {
     if [ "$SERVER_IP" != "$DOMAIN_IP" ] && [ "$DOMAIN_IP" != "unknown" ]; then
         warn "IP сервера ($SERVER_IP) не совпадает с DNS домена ($DOMAIN → $DOMAIN_IP)"
         warn "Убедитесь, что A-запись домена указывает на этот сервер"
-        read -rp "Продолжить получение сертификата? [y/N]: " CONFIRM
+        read -rp "Продолжить получение сертификата? [y/N]: " CONFIRM </dev/tty
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             warn "SSL пропущен. Запустите скрипт снова после настройки DNS"
             return
@@ -472,7 +473,7 @@ main() {
         log "  Email: $EMAIL"
         log "  Директория: $INSTALL_DIR"
         echo ""
-        read -rp "Продолжить с этими настройками? [Y/n]: " CONFIRM
+        read -rp "Продолжить с этими настройками? [Y/n]: " CONFIRM </dev/tty
         if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
             # Сбрасываем сохранённые значения чтобы перезадать
             DOMAIN="" EMAIL="" POSTGRES_PASSWORD="" REDIS_PASSWORD="" SECRET_KEY="" PD_ENCRYPTION_KEY=""

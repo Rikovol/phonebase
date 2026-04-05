@@ -37,7 +37,7 @@ cp .env.example .env
 ### Один командой
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh | sudo bash
+sudo bash <(curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh)
 ```
 
 Скрипт задаст вопросы (домен, email для SSL) и выполнит все шаги автоматически.
