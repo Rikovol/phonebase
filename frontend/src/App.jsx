@@ -3072,7 +3072,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         if (includeSold && soldFrom) params.set("sold_from", soldFrom);
         if (includeSold && soldTo) params.set("sold_to", soldTo);
         if (minUnits > 1) params.set("min_units", String(minUnits));
-        if (Access.seesAllStores(user) && storeF) params.set("store", storeF);
+        if (storeF) params.set("store", storeF);
         params.set("is_new", "false");
         const data = await apiFetch(`/analytics/price-aggregates?${params.toString()}`, { token });
         if (!c) return;
