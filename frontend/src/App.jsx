@@ -393,8 +393,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:299;display:none;backdrop-filter:blur(2px)}
   .sidebar-overlay.open{display:block;animation:fadeIn .2s}
   .main{width:100%;height:100vh;height:100dvh}
-  .topbar{padding:0 12px;gap:6px;height:52px}
-  .topbar-title{font-size:14px}
+  .topbar{padding:0 10px;gap:6px;height:52px;align-items:center;padding-bottom:0}
+  .topbar-title{font-size:14px;text-align:left}
+  .topbar-role-badge{display:none}
+  .topbar-store-sel{max-width:110px;font-size:10px}
   .shell::after{top:52px}
   .content{padding:10px 10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
   .lb{width:calc(100vw - 32px);max-width:400px;padding:28px 22px}
@@ -3820,7 +3822,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           ) : (
             <span className="badge b-store">{storeLabel}</span>
           )}
-          <span className={`badge ${isAdm?"b-admin":"b-staff"}`} style={{cursor:"pointer"}} onClick={()=>setAccountOpen(true)} title="Личный кабинет">{roleShort}</span>
+          <span className={`badge topbar-role-badge ${isAdm?"b-admin":"b-staff"}`} style={{cursor:"pointer"}} onClick={()=>setAccountOpen(true)} title="Личный кабинет">{roleShort}</span>
         </div>
         <div className="content">
           {page==="products"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={false}/>}
