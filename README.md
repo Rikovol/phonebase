@@ -34,10 +34,11 @@ cp .env.example .env
 - Домен с A-записью, указывающей на сервер
 - Root-доступ по SSH
 
-### Один командой
+### Установка
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh -o /tmp/setup.sh && sudo bash /tmp/setup.sh
+git clone https://github.com/Rikovol/phonebase.git /opt/phonebase
+sudo bash /opt/phonebase/server-setup.sh
 ```
 
 Скрипт задаст вопросы (домен, email для SSL) и выполнит все шаги автоматически.

@@ -3,11 +3,15 @@
 # Идемпотентный скрипт разворачивания на чистом Ubuntu 22.04 / 24.04
 #
 # Использование:
-#   curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh -o /tmp/setup.sh && sudo bash /tmp/setup.sh
+#   git clone https://github.com/Rikovol/phonebase.git /opt/phonebase
+#   sudo bash /opt/phonebase/server-setup.sh
 #
 # При повторном запуске пропускает выполненные шаги (проверяет /var/lib/phonebase/.setup_state)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
+
+# Директория самого скрипта — используем как INSTALL_DIR если запущен из проекта
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Цвета ─────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -109,9 +113,14 @@ ask_questions() {
         log "GitHub репозиторий: $GITHUB_REPO"
     fi
 
-    # Директория установки
+    # Директория установки — если скрипт запущен из клонированного репо, используем его
     if [ -z "${INSTALL_DIR:-}" ]; then
-        INSTALL_DIR="/opt/phonebase"
+        if [ -f "$SCRIPT_DIR/docker-compose.yml" ]; then
+            INSTALL_DIR="$SCRIPT_DIR"
+            log "Используем директорию скрипта: $INSTALL_DIR"
+        else
+            INSTALL_DIR="/opt/phonebase"
+        fi
     fi
 
     save_config
@@ -160,9 +169,16 @@ step_docker() {
 # ── Шаг 3: Клонирование репозитория ──────────────────────────────────────────
 step_clone() {
     skip_if_done "clone" && return
-    step "Клонирование репозитория"
     load_config
 
+    # Если INSTALL_DIR уже содержит проект — клонирование не нужно
+    if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        log "Репозиторий уже на месте: $INSTALL_DIR"
+        mark_done "clone"
+        return
+    fi
+
+    step "Клонирование репозитория"
     if [ -d "$INSTALL_DIR/.git" ]; then
         log "Репозиторий уже существует, обновляем..."
         cd "$INSTALL_DIR"
