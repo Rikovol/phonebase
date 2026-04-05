@@ -159,6 +159,18 @@ class AvitoAPIClient:
             params={"limit": limit, "offset": offset},
         )
 
+    async def subscribe_webhook(self, user_id: str, url: str) -> dict:
+        return await self._request(
+            "POST", f"/messenger/v3/accounts/{user_id}/webhooks",
+            json={"url": url},
+        )
+
+    async def get_webhooks(self, user_id: str) -> dict:
+        return await self._request("GET", f"/messenger/v3/accounts/{user_id}/webhooks")
+
+    async def delete_webhook(self, user_id: str, webhook_id: str) -> None:
+        await self._request("DELETE", f"/messenger/v3/accounts/{user_id}/webhooks/{webhook_id}")
+
     # ── Autoload Reports API ────────────────────────────────
 
     async def get_autoload_reports(self, page: int = 1, per_page: int = 10) -> dict:

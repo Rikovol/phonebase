@@ -2217,6 +2217,9 @@ function StoreSettingsPage({ token, activeStore }) {
   const [feedMsg, setFeedMsg] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  // Webhook
+  const [webhookBusy, setWebhookBusy] = useState(false);
+  const [webhookMsg, setWebhookMsg] = useState("");
   // 1С integration
   const [onecUrl, setOnecUrl] = useState("");
   const [onecNewUrl, setOnecNewUrl] = useState("");
@@ -2385,6 +2388,16 @@ function StoreSettingsPage({ token, activeStore }) {
       setImportMsg(`Всего: ${r.total_avito ?? "—"}, привязано: ${r.linked ?? 0}, не найдено: ${r.unmatched ?? 0}`);
     } catch (e) { setImportMsg(e.message || "Ошибка"); }
     setImportBusy(false);
+  };
+
+  const registerWebhook = async () => {
+    if (!current?.id) return;
+    setWebhookBusy(true); setWebhookMsg("");
+    try {
+      const r = await apiFetch(`/avito/register-webhook/${current.id}`, { token, method: "POST" });
+      setWebhookMsg(`Вебхук зарегистрирован: ${r.webhook_url}`);
+    } catch (e) { setWebhookMsg(e.message || "Ошибка"); }
+    setWebhookBusy(false);
   };
 
   const [openSections, setOpenSections] = useState(new Set(["1c"]));
@@ -2586,13 +2599,18 @@ function StoreSettingsPage({ token, activeStore }) {
           <SectionHead id="messages" title={`Сообщения — ${selName || "—"}`}/>
           {openSections.has("messages") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              Загрузка входящих и исходящих сообщений из мессенджера Авито. Запускается автоматически каждые 5 минут (AVITO_MESSENGER_INTERVAL_MINUTES).
-              Данные отображаются в карточке товара.
+              Загрузка входящих и исходящих сообщений из мессенджера Авито. При подключённом вебхуке — мгновенно, иначе каждые 5 минут (AVITO_MESSENGER_INTERVAL_MINUTES).
             </div>
-            <button type="button" className="btn btn-sm btn-avito" onClick={checkFeed} disabled={feedBusy || !current?.avito_configured}>
-              {feedBusy ? <><span className="spinner"/> Проверка…</> : "Проверить автозагрузку"}
-            </button>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <button type="button" className="btn btn-sm btn-avito" onClick={checkFeed} disabled={feedBusy || !current?.avito_configured}>
+                {feedBusy ? <><span className="spinner"/> Проверка…</> : "Проверить автозагрузку"}
+              </button>
+              <button type="button" className="btn btn-sm btn-primary" onClick={registerWebhook} disabled={webhookBusy || !current?.avito_configured}>
+                {webhookBusy ? <><span className="spinner"/> Регистрация…</> : "Зарегистрировать вебхук"}
+              </button>
+            </div>
             {feedMsg && <div style={{marginTop:8,fontSize:12,color: feedMsg.startsWith("Ошибка") || feedMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{feedMsg}</div>}
+            {webhookMsg && <div style={{marginTop:8,fontSize:12,color: webhookMsg.startsWith("Ошибка") || webhookMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)",wordBreak:"break-all"}}>{webhookMsg}</div>}
             {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
           </div>}
         </div>
