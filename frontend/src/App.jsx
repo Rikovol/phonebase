@@ -1788,7 +1788,13 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         const map = {};
         for (const r of (data.items || [])) {
           const key = [r.brand||"", r.model||"", r.storage||"", r.condition||""].join("|").toLowerCase();
-          map[key] = { avg: r.avg_retail, min: r.min_retail, max: r.max_retail };
+          const comp_price = r.competitor?.price_excellent || r.competitor?.price_good || 0;
+          const avg_cost = r.avg_cost || 0;
+          let market_avg = 0;
+          if (avg_cost && comp_price) market_avg = (avg_cost + comp_price) / 2;
+          else if (comp_price) market_avg = comp_price;
+          else if (avg_cost) market_avg = avg_cost;
+          map[key] = { avg: r.avg_retail, min: r.min_retail, max: r.max_retail, market_avg };
         }
         setPriceStats(map);
       } catch {}
@@ -1857,6 +1863,17 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     if (diff <= -0.05) return "var(--success)";   // ниже средней на 5%+ — зелёный (выгодно)
     if (diff >= 0.05) return "var(--danger)";      // выше средней на 5%+ — красный (дорого)
     return "var(--warn)";                           // около средней — жёлтый
+  }
+
+  function costColor(p) {
+    if (!p.price_cost) return "var(--muted)";
+    const key = [p.brand||"", p.model||"", p.storage||"", p.condition||""].join("|").toLowerCase();
+    const st = priceStats[key];
+    if (!st || !st.market_avg) return "var(--muted)";
+    const diff = (p.price_cost - st.market_avg) / st.market_avg;
+    if (diff <= -0.05) return "var(--success)";   // закупили дешевле рынка на 5%+ — хорошо
+    if (diff >= 0.05)  return "var(--danger)";    // закупили дороже рынка на 5%+ — плохо
+    return "var(--warn)";
   }
 
   function priceTitle(p) {
@@ -2102,9 +2119,9 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                       <span className="sw-track"/>
                     </label>
                   </td>
-                  <td className={`tr${priceColor(p)==="var(--danger)"?" price-danger":""}`} style={{color:priceColor(p)}} title={priceTitle(p)}>{fmt(p.price_retail)}</td>
+                  <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
                   {!isInfo && (seeCost
-                    ? <><td className="trm">{fmt(p.price_cost)}</td>
+                    ? <><td className="trm" style={{color:costColor(p)}} title={(()=>{const st=priceStats[[p.brand||"",p.model||"",p.storage||"",p.condition||""].join("|").toLowerCase()];return st?.market_avg?`Средняя рынок: ${Math.round(st.market_avg).toLocaleString("ru")} ₽`:""})()}>{fmt(p.price_cost)}</td>
                     <td className="tr"><span className={profit>=0?"pp":"pn"}>{profit>=0?"+":""}{profit.toLocaleString("ru")} ₽</span></td></>
                     : <><td className="tlk" title="Скрыто">🔒</td><td className="tlk" title="Скрыто">🔒</td></>)}
                   <td style={{textAlign:"center",whiteSpace:"nowrap"}}>
