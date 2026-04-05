@@ -2177,6 +2177,8 @@ function StoreSettingsPage({ token, activeStore }) {
   const [onecNewUrl, setOnecNewUrl] = useState("");
   const [onecSaved, setOnecSaved] = useState(false);
   const [onecErr, setOnecErr] = useState("");
+  const [onecSyncBusy, setOnecSyncBusy] = useState(false);
+  const [onecSyncMsg, setOnecSyncMsg] = useState("");
 
   const selName = activeStore || (stores[0]?.name ?? "");
   const current = stores.find((s) => s.name === selName) || stores[0];
@@ -2292,6 +2294,24 @@ function StoreSettingsPage({ token, activeStore }) {
     } catch (e) { setOnecErr(e.message || "Ошибка"); }
   };
 
+  const syncOnec = async () => {
+    setOnecSyncBusy(true); setOnecSyncMsg("");
+    try {
+      const results = [];
+      if (onecUrl) {
+        const r = await apiFetch("/imports/from-configured-url", { token, method: "POST" });
+        results.push(`Б/У: +${r.items_created} создано, ${r.items_updated} обновлено, ${r.items_sold} продано`);
+      }
+      if (onecNewUrl) {
+        const r = await apiFetch("/imports/from-configured-url-new", { token, method: "POST" });
+        results.push(`Новые: +${r.items_created} создано, ${r.items_updated} обновлено`);
+      }
+      if (!results.length) setOnecSyncMsg("Сначала сохраните ссылки");
+      else setOnecSyncMsg(results.join(" · "));
+    } catch (e) { setOnecSyncMsg(e.message || "Ошибка синхронизации"); }
+    setOnecSyncBusy(false);
+  };
+
   const fetchStats = async () => {
     if (!current?.id) return;
     setStatsBusy(true); setStatsMsg("");
@@ -2354,9 +2374,15 @@ function StoreSettingsPage({ token, activeStore }) {
               />
             </div>
             {onecErr && <div className="err" style={{marginBottom:8}}>{onecErr}</div>}
-            <button type="button" className="btn btn-primary" onClick={saveOnec}>
-              {onecSaved ? "Сохранено" : "Сохранить"}
-            </button>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <button type="button" className="btn btn-primary" onClick={saveOnec}>
+                {onecSaved ? "Сохранено" : "Сохранить"}
+              </button>
+              <button type="button" className="btn btn-sm btn-avito" onClick={syncOnec} disabled={onecSyncBusy || (!onecUrl && !onecNewUrl)}>
+                {onecSyncBusy ? <><span className="spinner"/> Синхронизация…</> : "Синхронизировать"}
+              </button>
+            </div>
+            {onecSyncMsg && <div style={{marginTop:8,fontSize:12,color: onecSyncMsg.includes("Ошибка") || onecSyncMsg.includes("Сначала") ? "var(--danger)" : "var(--accent)"}}>{onecSyncMsg}</div>}
           </div>
         </div>
 
