@@ -224,10 +224,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 
 /* TABLE */
-.tw{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.tw{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow:clip;box-shadow:var(--shadow)}
 .pt{width:100%;border-collapse:collapse;border-spacing:0}
 .pt th,.pt td{border-left:none;border-right:none}
-.pt th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;background:var(--bg3);border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
+.pt th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;background:var(--bg3);border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap;position:sticky;top:0;z-index:2}
 .pt th.thl{color:var(--border2)}
 .pt td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px;vertical-align:middle;transition:background .12s}
 .pt-thumb-cell{width:52px;padding:6px 8px!important;vertical-align:middle}
@@ -411,6 +411,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .legend{flex-direction:column;gap:5px;font-size:10px}
   .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px}
   .pt{min-width:660px}
+  .pt th{position:static;top:auto;z-index:auto}
   .pt th,.pt td{padding:6px 8px;font-size:11px}
   .pt-thumb-cell{width:34px;padding:3px 5px!important}
   .pt-thumb{width:30px;height:30px;border-radius:6px}
