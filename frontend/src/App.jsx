@@ -2342,6 +2342,19 @@ function StoreSettingsPage({ token, activeStore }) {
     setImportBusy(false);
   };
 
+  const [openSections, setOpenSections] = useState(new Set(["1c"]));
+  const toggleSection = (k) => setOpenSections(prev => {
+    const next = new Set(prev);
+    next.has(k) ? next.delete(k) : next.add(k);
+    return next;
+  });
+  const SectionHead = ({ id, title }) => (
+    <div className="ph" style={{cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>toggleSection(id)}>
+      <span className="pt2">{title}</span>
+      <span style={{fontSize:11,color:"var(--muted)",transition:"transform .2s",display:"inline-block",transform: openSections.has(id)?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
+    </div>
+  );
+
   return (
     <>
       <div>
@@ -2349,8 +2362,8 @@ function StoreSettingsPage({ token, activeStore }) {
 
         {/* ── Интеграция 1С ────────────────────────────── */}
         <div className="panel" style={{marginBottom:16}}>
-          <div className="ph"><span className="pt2">Интеграция 1С</span></div>
-          <div className="pb2">
+          <SectionHead id="1c" title="Интеграция 1С"/>
+          {openSections.has("1c") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Ссылки на выгрузку товаров из 1С (Google Диск или прямой URL). Импорт запускается автоматически после входа и по расписанию.<br/>
               Откройте файл на Google Диск → «Поделиться» → скопируйте ссылку.
@@ -2383,13 +2396,13 @@ function StoreSettingsPage({ token, activeStore }) {
               </button>
             </div>
             {onecSyncMsg && <div style={{marginTop:8,fontSize:12,color: onecSyncMsg.includes("Ошибка") || onecSyncMsg.includes("Сначала") ? "var(--danger)" : "var(--accent)"}}>{onecSyncMsg}</div>}
-          </div>
+          </div>}
         </div>
 
         {/* ── Avito API ─────────────────────────────────── */}
         <div className="panel">
-          <div className="ph"><span className="pt2">Avito API — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="avito-api" title={`Avito API — ${selName || "—"}`}/>
+          {openSections.has("avito-api") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Подключение к Avito REST API для управления объявлениями, статистики и мессенджера.<br/>
               Получите client_id и client_secret в <a href="https://developers.avito.ru" target="_blank" rel="noopener" style={{color:"var(--accent)"}}>developers.avito.ru</a> → Настройки → API ключи.
@@ -2444,13 +2457,13 @@ function StoreSettingsPage({ token, activeStore }) {
             >
               {apiSaving ? "Проверка..." : "Подключить API"}
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* ── Контактные данные ──────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
-          <div className="ph"><span className="pt2">Контактные данные — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="contacts" title={`Контактные данные — ${selName || "—"}`}/>
+          {openSections.has("contacts") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Контактная информация для объявлений на Авито. Выберите магазин в верхней панели.
             </div>
@@ -2471,13 +2484,13 @@ function StoreSettingsPage({ token, activeStore }) {
             <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:10}} disabled={!current}>
               {saved ? "Сохранено" : "Сохранить"}
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* ── Выгрузка на сайт ──────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
-          <div className="ph"><span className="pt2">Выгрузка на сайт — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="website" title={`Выгрузка на сайт — ${selName || "—"}`}/>
+          {openSections.has("website") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               JSON-фид с б/у товарами для сайта магазина. Содержит модель, цену, состояние, фото. Обновляется автоматически.
             </div>
@@ -2504,13 +2517,13 @@ function StoreSettingsPage({ token, activeStore }) {
             <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:4}} disabled={!current}>
               {saved ? "Сохранено" : "Сохранить"}
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* ── Статистика ────────────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
-          <div className="ph"><span className="pt2">Статистика — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="stats" title={`Статистика — ${selName || "—"}`}/>
+          {openSections.has("stats") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Сбор просмотров, контактов и избранного по объявлениям с Авито. Запускается автоматически каждые 60 минут (AVITO_STATS_INTERVAL_MINUTES).
               Данные отображаются в карточке товара.
@@ -2520,13 +2533,13 @@ function StoreSettingsPage({ token, activeStore }) {
             </button>
             {statsMsg && <div style={{marginTop:8,fontSize:12,color: statsMsg.startsWith("Ошибка") || statsMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{statsMsg}</div>}
             {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
-          </div>
+          </div>}
         </div>
 
         {/* ── Сообщения ─────────────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
-          <div className="ph"><span className="pt2">Сообщения — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="messages" title={`Сообщения — ${selName || "—"}`}/>
+          {openSections.has("messages") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Загрузка входящих и исходящих сообщений из мессенджера Авито. Запускается автоматически каждые 5 минут (AVITO_MESSENGER_INTERVAL_MINUTES).
               Данные отображаются в карточке товара.
@@ -2536,13 +2549,13 @@ function StoreSettingsPage({ token, activeStore }) {
             </button>
             {feedMsg && <div style={{marginTop:8,fontSize:12,color: feedMsg.startsWith("Ошибка") || feedMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{feedMsg}</div>}
             {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
-          </div>
+          </div>}
         </div>
 
         {/* ── Автозагрузка ──────────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
-          <div className="ph"><span className="pt2">Автозагрузка — {selName || "—"}</span></div>
-          <div className="pb2">
+          <SectionHead id="autoload" title={`Автозагрузка — ${selName || "—"}`}/>
+          {openSections.has("autoload") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
               Проверка отчётов автозагрузки фида и сопоставление avito_item_id к товарам по IMEI или модели + памяти + состоянию.
               Запускается автоматически каждые 120 минут (AVITO_FEED_CHECK_INTERVAL_MINUTES).
@@ -2552,7 +2565,7 @@ function StoreSettingsPage({ token, activeStore }) {
             </button>
             {importMsg && <div style={{marginTop:8,fontSize:12,color: importMsg.startsWith("Ошибка") || importMsg.startsWith("Не") ? "var(--danger)" : "var(--accent)"}}>{importMsg}</div>}
             {!current?.avito_configured && <div style={{marginTop:8,fontSize:11,color:"var(--muted)"}}>Требуется подключение Avito API</div>}
-          </div>
+          </div>}
         </div>
 
       </div>
