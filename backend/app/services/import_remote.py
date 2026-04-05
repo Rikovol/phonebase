@@ -25,23 +25,48 @@ _GDRIVE_FILE_RE = re.compile(
     r"https?://drive\.google\.com/file/d/([a-zA-Z0-9_-]+)",
     re.IGNORECASE,
 )
+_YADISK_RE = re.compile(
+    r"https?://(disk\.yandex\.(ru|com|com\.tr)|yadi\.sk)/",
+    re.IGNORECASE,
+)
+_YADISK_DOWNLOAD_API = "https://cloud-api.yandex.net/v1/disk/public/resources/download"
 
 
-def normalize_import_source_url(url: str) -> str:
-    """Преобразует «просмотр» Google Drive в прямую загрузку."""
+def normalize_gdrive_url(url: str) -> str | None:
+    """Возвращает прямую download-ссылку Google Drive или None если не GDrive."""
     u = url.strip()
     m = _GDRIVE_FILE_RE.match(u.split("?", 1)[0])
     if m:
-        fid = m.group(1)
-        return f"https://drive.google.com/uc?export=download&id={fid}"
+        return f"https://drive.google.com/uc?export=download&id={m.group(1)}"
     parsed = urlparse(u)
     if parsed.netloc in ("drive.google.com", "docs.google.com"):
         qs = parse_qs(parsed.query)
         if "id" in qs and qs["id"]:
             fid = qs["id"][0]
-            if "/open" in parsed.path or parsed.path.startswith("/open"):
-                return f"https://drive.google.com/uc?export=download&id={fid}"
-    return u
+            return f"https://drive.google.com/uc?export=download&id={fid}"
+    return None
+
+
+def normalize_import_source_url(url: str) -> str:
+    """Преобразует «просмотр» Google Drive в прямую загрузку."""
+    gdrive = normalize_gdrive_url(url)
+    return gdrive if gdrive is not None else url.strip()
+
+
+async def resolve_yadisk_url(url: str, client: httpx.AsyncClient) -> str:
+    """Разрешает публичную ссылку Яндекс.Диска в прямую download-ссылку через API."""
+    resp = await client.get(
+        _YADISK_DOWNLOAD_API,
+        params={"public_key": url},
+        timeout=httpx.Timeout(30.0),
+    )
+    if resp.status_code != 200:
+        raise ValueError(f"Яндекс.Диск API вернул {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    href = data.get("href")
+    if not href:
+        raise ValueError("Яндекс.Диск API не вернул ссылку для скачивания")
+    return href
 
 
 def _filename_from_response(headers: httpx.Headers) -> str | None:
@@ -66,11 +91,18 @@ def _filename_from_response(headers: httpx.Headers) -> str | None:
 
 async def fetch_import_html(url: str) -> tuple[bytes, str]:
     """
-    Скачивает тело по URL. Возвращает (bytes, имя для лога).
+    Скачивает тело по URL. Поддерживает Google Drive, Яндекс.Диск, прямые ссылки.
+    Возвращает (bytes, имя для лога).
     """
-    target = normalize_import_source_url(url)
+    u = url.strip()
     timeout = httpx.Timeout(120.0, connect=30.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        # Яндекс.Диск: сначала получаем прямую ссылку через API
+        if _YADISK_RE.match(u):
+            target = await resolve_yadisk_url(u, client)
+        else:
+            target = normalize_import_source_url(u)
+
         async with client.stream("GET", target, headers={"User-Agent": "PhoneBase/1.0"}) as r:
             r.raise_for_status()
             chunks: list[bytes] = []

@@ -2365,13 +2365,13 @@ function StoreSettingsPage({ token, activeStore }) {
           <SectionHead id="1c" title="Интеграция 1С"/>
           {openSections.has("1c") && <div className="pb2">
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              Ссылки на выгрузку товаров из 1С (Google Диск или прямой URL). Импорт запускается автоматически после входа и по расписанию.<br/>
-              Откройте файл на Google Диск → «Поделиться» → скопируйте ссылку.
+              Ссылки на выгрузку товаров из 1С. Поддерживаются Google Диск, Яндекс.Диск и прямые URL. Импорт запускается автоматически после входа и по расписанию.<br/>
+              Откройте файл → «Поделиться» → скопируйте публичную ссылку.
             </div>
             <div className="field" style={{marginBottom:12}}>
               <label>Ссылка на выгрузку Б/У товаров</label>
               <input
-                placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                placeholder="Google Drive или Яндекс.Диск — публичная ссылка на HTML-файл"
                 value={onecUrl}
                 onChange={e => setOnecUrl(e.target.value)}
                 autoComplete="off"
@@ -2380,7 +2380,7 @@ function StoreSettingsPage({ token, activeStore }) {
             <div className="field" style={{marginBottom:12}}>
               <label>Ссылка на выгрузку Новых товаров</label>
               <input
-                placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                placeholder="Google Drive или Яндекс.Диск — публичная ссылка на HTML-файл"
                 value={onecNewUrl}
                 onChange={e => setOnecNewUrl(e.target.value)}
                 autoComplete="off"
