@@ -3,10 +3,7 @@
 # Идемпотентный скрипт разворачивания на чистом Ubuntu 22.04 / 24.04
 #
 # Использование:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh)
-# или скачать и запустить:
-#   curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh -o server-setup.sh
-#   sudo bash server-setup.sh
+#   curl -fsSL https://raw.githubusercontent.com/Rikovol/phonebase/main/server-setup.sh -o /tmp/setup.sh && sudo bash /tmp/setup.sh
 #
 # При повторном запуске пропускает выполненные шаги (проверяет /var/lib/phonebase/.setup_state)
 # ─────────────────────────────────────────────────────────────────────────────
