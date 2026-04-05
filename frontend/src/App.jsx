@@ -118,10 +118,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .lw{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse at 30% 50%,rgba(16,185,129,.06) 0%,transparent 60%)}
 .lb{width:400px;background:rgba(20,20,22,.85);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;padding:40px 36px;box-shadow:var(--shadow-lg);animation:fadeUp .4s ease}
 .logo{display:flex;align-items:center;gap:14px;margin-bottom:30px}
-.logo-icon{width:52px;height:52px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent2)}
-.logo-text{font-family:var(--sans);font-size:26px;font-weight:500;letter-spacing:-.5px;color:var(--text);text-shadow:0 0 20px rgba(236,236,240,.15)}
-.logo-text span{font-weight:700;letter-spacing:0;background:linear-gradient(135deg,#10b981,#34d399,#06b6d4);background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:logoShift 4s ease infinite;filter:drop-shadow(0 0 8px rgba(16,185,129,.3))}
-@keyframes logoShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.logo-icon{width:52px;height:52px;background:linear-gradient(145deg,rgba(16,185,129,.14),rgba(6,182,212,.06));border:1px solid rgba(16,185,129,.35);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent2);box-shadow:0 6px 24px rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.04) inset,0 1px 0 rgba(255,255,255,.07) inset}
+.logo-text{font-family:var(--sans);font-size:26px;font-weight:500;letter-spacing:-.6px;color:var(--text);text-shadow:0 0 24px rgba(236,236,240,.12);display:flex;align-items:baseline;gap:3px;line-height:1.05;flex-wrap:nowrap}
+.logo-brand-base{font-weight:600;letter-spacing:-.04em;color:rgba(244,244,245,.96)}
+.logo-brand-stock{font-weight:800;letter-spacing:-.03em;background:linear-gradient(118deg,#10b981 0%,#34d399 38%,#2dd4bf 62%,#06b6d4 100%);background-size:220% 220%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:logoShift 5.5s ease-in-out infinite;filter:drop-shadow(0 0 12px rgba(16,185,129,.38))}
+@keyframes logoShift{0%,100%{background-position:0% 40%}50%{background-position:100% 60%}}
 .ltitle{font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:-.3px}
 .lsub{color:var(--muted);font-size:13px;margin-bottom:26px}
 .field{margin-bottom:16px}
@@ -451,7 +452,7 @@ const Icon={
   competitors:()=><svg {...I.p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
   users:()=><svg {...I.p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   gear:()=><svg {...I.p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
-  logo:()=><svg {...I.p} width={24} height={24}><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/><circle cx="12" cy="19" r=".5" fill="currentColor"/></svg>,
+  logo:()=><svg {...I.p} width={26} height={26} viewBox="0 0 24 24"><line x1="2.5" y1="20.75" x2="21.5" y2="20.75" strokeWidth={1.65} opacity=".9"/><rect x="3.75" y="11.25" width="5.25" height="9" rx="1.15"/><rect x="9.375" y="7.25" width="5.25" height="13" rx="1.15"/><rect x="15" y="3.25" width="5.25" height="17" rx="1.15"/></svg>,
   logs:()=><svg {...I.p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
   camera:()=><svg {...I.p} width={14} height={14}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
   file:()=><svg {...I.p} width={14} height={14}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>,
@@ -482,6 +483,15 @@ function Chip({ condition, repair, sold }) {
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
+function LogoWordmark({ compact }) {
+  return (
+    <div className="logo-text" style={compact ? { fontSize: 22 } : undefined}>
+      <span className="logo-brand-base">Base</span>
+      <span className="logo-brand-stock">Stock</span>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [loading,setLoading]=useState(false); const [err,setErr]=useState("");
   const submit = async (e) => {
@@ -509,7 +519,7 @@ function LoginScreen({ onLogin }) {
   };
   return (
     <div className="lw"><div className="lb">
-      <div className="logo"><div className="logo-icon"><Icon.logo/></div><div className="logo-text">Phone<span>Base</span></div></div>
+      <div className="logo"><div className="logo-icon"><Icon.logo/></div><LogoWordmark /></div>
       <div className="ltitle">Вход в систему</div>
       <div className="lsub">Учёт и аналитика б/у техники</div>
       {err && <div className="err">{err}</div>}
@@ -2983,7 +2993,7 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
   );
 }
 
-// ─── ANALYTICS (свои данные PhoneBase; без парсинга Авито) ─────────────────────
+// ─── ANALYTICS (свои данные BaseStock; без парсинга Авито) ─────────────────────
 function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, includeSold, user, onOpenProduct }) {
   const [expanded, setExpanded] = useState({});
   const [details, setDetails] = useState({});
@@ -3911,8 +3921,8 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
       <div className={`sidebar-overlay${sidebarOpen?" open":""}`} onClick={()=>setSidebarOpen(false)}/>
       <div className={`sidebar${sidebarOpen?" open":""}${sidebarCollapsed?" collapsed":""}`}>
         <div className="sb-logo">
-          <div className="logo-icon" style={{width:44,height:44,borderRadius:12}}><Icon.logo/></div>
-          <div className="logo-text" style={{fontSize:22}}>Phone<span>Base</span></div>
+          <div className="logo-icon" style={{width:44,height:44,borderRadius:14}}><Icon.logo/></div>
+          <LogoWordmark compact />
         </div>
         <div className="sb-nav">
           <div className="sb-sec"><span/><button className="sb-collapse-btn" onClick={()=>setSidebarCollapsed(v=>{localStorage.setItem("pb_sidebar_collapsed",v?"0":"1");return !v;})} title={sidebarCollapsed?"Развернуть":"Свернуть"}>{sidebarCollapsed?"▶":"◀"}</button></div>
