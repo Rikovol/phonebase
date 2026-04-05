@@ -47,7 +47,9 @@ fi
 CONFIG_FILE="$STATE_DIR/.config"
 
 load_config() {
-    [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
 }
 
 save_config() {
