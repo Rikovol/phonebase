@@ -1797,6 +1797,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [listErr,setListErr]=useState("");
   const [avitoListErr,setAvitoListErr]=useState("");
   const [brands,setBrands]=useState([]);
+  const [conditions,setConditions]=useState([]);
   const [photoGalleryId, setPhotoGalleryId] = useState(null);
   const [docsModalId, setDocsModalId] = useState(null);
   const [priceStats, setPriceStats] = useState({});
@@ -1872,6 +1873,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         setVisibleCount(80);
         const br = [...new Set(all.map((x) => x.brand).filter(Boolean))].sort();
         setBrands(br);
+        const cn = [...new Set(all.map((x) => x.condition).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru"));
+        setConditions(cn);
       } catch (e) {
         if (!cancelled) setListErr(e.message || "Ошибка списка");
       }
@@ -2027,7 +2030,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         {!isNew && (
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
           <option value="">Любое состояние</option>
-          {["Отличное","Как новый","Хорошее","Среднее","Плохое"].map(c=><option key={c}>{c}</option>)}
+          {conditions.map(c=><option key={c}>{c}</option>)}
         </select>
         )}
         {(Access.seesAllStores(user) || !isInfo) && (
@@ -3198,6 +3201,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const [err,setErr]=useState("");
   const [anSortCol,setAnSortCol]=useState("model");
   const [anSortDir,setAnSortDir]=useState("asc");
+  const [anConditions,setAnConditions]=useState([]);
   const storeF = Access.seesAllStores(user) ? activeStore : user.store_name;
 
   useEffect(()=>{
@@ -3217,7 +3221,9 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         params.set("is_new", "false");
         const data = await apiFetch(`/analytics/price-aggregates?${params.toString()}`, { token });
         if (!c) return;
-        setItems(data.items || []);
+        const loaded = data.items || [];
+        setItems(loaded);
+        setAnConditions([...new Set(loaded.map(x=>x.condition).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru")));
       } catch (e) {
         if (c) setErr(e.message || "Ошибка загрузки");
       }
@@ -3239,7 +3245,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         <input className="fi" style={{maxWidth:160}} placeholder="Бренд (точно)" value={brand} onChange={e=>setBrand(e.target.value)}/>
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
           <option value="">Любое состояние</option>
-          {["Отличное","Как новый","Хорошее","Среднее","Плохое"].map(c=><option key={c}>{c}</option>)}
+          {anConditions.map(c=><option key={c}>{c}</option>)}
         </select>
         <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--muted)",cursor:"pointer",whiteSpace:"nowrap"}}>
           <input type="checkbox" checked={includeSold} onChange={e=>{setIncludeSold(e.target.checked);if(!e.target.checked){setSoldFrom("");setSoldTo("");}}} style={{accentColor:"var(--accent)"}}/>
