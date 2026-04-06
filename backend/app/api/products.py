@@ -167,18 +167,21 @@ def _apply_product_filters(
         query = query.where(Product.condition == condition)
 
     if q:
-        pattern = f"%{q.strip()}%"
-        # Ищем фразу целиком в конкатенации brand+model+storage, либо в imei/sku_1c
+        # Каждый токен ищется отдельно, но в единой строке brand+model+storage
+        # (или в imei/sku_1c). Так «15 128» найдёт «Apple iPhone 15 128GB»,
+        # но не смешает поля между собой.
         combined = func.concat(
             func.coalesce(Product.brand, ""), " ",
             func.coalesce(Product.model, ""), " ",
             func.coalesce(Product.storage, ""),
         )
-        query = query.where(or_(
-            combined.ilike(pattern),
-            Product.imei.ilike(pattern),
-            Product.sku_1c.ilike(pattern),
-        ))
+        for token in q.strip().split():
+            pattern = f"%{token}%"
+            query = query.where(or_(
+                combined.ilike(pattern),
+                Product.imei.ilike(pattern),
+                Product.sku_1c.ilike(pattern),
+            ))
     return query
 
 
