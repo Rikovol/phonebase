@@ -3365,7 +3365,8 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const [anSortCol,setAnSortCol]=useState("model");
   const [anSortDir,setAnSortDir]=useState("asc");
   const [anConditions,setAnConditions]=useState([]);
-  const storeF = Access.seesAllStores(user) ? activeStore : user.store_name;
+  const [storeF, setStoreF] = useState(() => Access.seesAllStores(user) ? (activeStore || "") : (user.store_name || ""));
+  useEffect(() => { if (Access.seesAllStores(user)) setStoreF(activeStore || ""); }, [activeStore, user]);
 
   useEffect(()=>{
     let c = true;
@@ -3406,6 +3407,12 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
           {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
         <input className="fi" style={{maxWidth:160}} placeholder="Бренд (точно)" value={brand} onChange={e=>setBrand(e.target.value)}/>
+        {Access.seesAllStores(user) && (
+        <select className="fs" value={storeF} onChange={e=>{const v=e.target.value;setStoreF(v);}}>
+          <option value="">Все магазины</option>
+          {STORES.map(s=><option key={s}>{s}</option>)}
+        </select>
+        )}
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
           <option value="">Любое состояние</option>
           {anConditions.map(c=><option key={c}>{c}</option>)}
