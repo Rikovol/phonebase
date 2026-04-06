@@ -3303,7 +3303,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
                 <tr style={{cursor:"pointer"}} onClick={()=>toggle(g.key, g.model, g.storage, g.brand)}>
                   <td style={{fontSize:11,color:"var(--muted)"}}>{g.brand || "—"}</td>
                   <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
-                  <td className="mono">{g.storage || "—"}</td>
+                  <td style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:600,color:"var(--cyan)"}}>{g.storage || "—"}</td>
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)"}}>{fmt(Math.round(g.avg_retail))}</td>
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_cost?"var(--warn)":"var(--muted)"}}>{g.avg_cost?fmt(Math.round(g.avg_cost)):"—"}</td>
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compPrice?"var(--cyan)":"var(--muted)"}}>{compPrice?fmt(compPrice):"—"}</td>
@@ -4067,7 +4067,7 @@ function CompetitorPricesPage({ user, token }) {
                 <td><span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase",background:"rgba(6,182,212,.1)",color:"var(--accent2)",border:"1px solid rgba(6,182,212,.2)"}}>{sourceLabel(r.source)}</span></td>
                 <td style={{fontWeight:600,whiteSpace:"nowrap"}}>{r.brand}</td>
                 <td>{r.model}</td>
-                <td style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>{r.memory||"—"}</td>
+                <td style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:600,color:"var(--cyan)"}}>{r.memory||"—"}</td>
                 <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)",fontWeight:600}}>{r.price_excellent?fmt(r.price_excellent):"—"}</td>
                 <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--accent2)"}}>{r.price_good?fmt(r.price_good):"—"}</td>
                 <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--warn)"}}>{r.price_poor?fmt(r.price_poor):"—"}</td>
