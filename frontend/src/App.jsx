@@ -162,7 +162,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .nb-logo{display:flex;align-items:center;gap:10px;margin-right:32px;flex-shrink:0}
 .nb-logo .logo-icon{width:36px;height:36px;border-radius:10px}
 .nb-logo .logo-text{font-size:20px}
-.nb-nav{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;height:100%;padding-left:8px}
+.nb-nav{display:flex;align-items:center;justify-content:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;height:100%}
 .nb-nav::-webkit-scrollbar{display:none}
 .nav-item{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;white-space:nowrap;transition:all .2s;font-family:var(--sans)}
 .nav-icon{font-size:14px;flex-shrink:0;transition:transform .15s}
@@ -191,7 +191,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .b-store{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
 .b-admin{background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.3)}
 .b-staff{background:rgba(52,211,153,.12);color:var(--accent2);border:1px solid rgba(52,211,153,.3)}
-.content{flex:1;overflow-y:auto;padding:16px 32px;max-width:1600px;width:100%;margin:0 auto;animation:fadeUp .25s ease}
+.content{flex:1;overflow-y:auto;padding:16px 28px;max-width:1800px;width:100%;margin:0 auto;animation:fadeUp .25s ease}
 
 /* BANNER */
 .banner{padding:10px 14px;border-radius:var(--r);font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;border:1px solid;line-height:1.6;animation:slideInLeft .3s ease}
