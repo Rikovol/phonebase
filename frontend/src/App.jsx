@@ -2234,7 +2234,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         <td className="mono">{g.storage || "—"}</td>
                         <td style={{fontSize:11,color:"var(--muted)"}}>{g.color || "—"}</td>
                         <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
-                        <td/>{!isInfo && <td/>}<td/>
+                        <td className="tr" style={{color:"var(--success)"}}>{g.count ? (g.minPrice === g.maxPrice ? fmt(g.minPrice) : <>{fmt(g.minPrice)}<span style={{color:"var(--muted)",margin:"0 3px"}}>–</span>{fmt(g.maxPrice)}</>) : "—"}</td>{!isInfo && <td/>}<td/>
                       </tr>
                       {isOpen && g.items.map(p => {
                         const row = mapProductRow(p);
