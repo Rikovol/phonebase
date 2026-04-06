@@ -167,10 +167,18 @@ def _apply_product_filters(
         query = query.where(Product.condition == condition)
 
     if q:
-        pattern = f"%{q}%"
-        query = query.where(
-            Product.model.ilike(pattern) | Product.sku_1c.ilike(pattern)
-        )
+        # Разбиваем запрос на токены и проверяем каждый против конкатенации brand+model+storage+imei
+        tokens = q.strip().split()
+        for token in tokens:
+            pattern = f"%{token}%"
+            combined = func.lower(
+                func.coalesce(Product.brand, "") + " " +
+                func.coalesce(Product.model, "") + " " +
+                func.coalesce(Product.storage, "") + " " +
+                func.coalesce(Product.imei, "") + " " +
+                func.coalesce(Product.sku_1c, "")
+            )
+            query = query.where(combined.ilike(f"%{token.lower()}%"))
     return query
 
 

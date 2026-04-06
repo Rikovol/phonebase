@@ -146,7 +146,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .btn-ghost{background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:6px;transition:all .15s;font-size:14px}
 .btn-ghost:hover{color:var(--danger);background:var(--danger-dim)}
 .err{background:var(--danger-dim);border:1px solid rgba(239,68,68,.25);border-radius:var(--r);padding:10px 13px;font-size:13px;color:#fca5a5;margin-bottom:14px;animation:fadeIn .2s}
-.hint{margin-top:16px;font-size:11px;color:var(--muted);text-align:center;font-family:var(--mono)}
 
 /* SHELL */
 .shell{display:flex;height:100vh;overflow:hidden;position:relative}
@@ -528,7 +527,6 @@ function LoginScreen({ onLogin }) {
         <div className="field"><label>Пароль</label><input type="password" placeholder="••••••••" value={p} onChange={e=>setP(e.target.value)}/></div>
         <button className="btn btn-primary btn-full" disabled={loading}>{loading?<span className="spinner"/>:"Войти"}</button>
       </form>
-      <div className="hint">Первый вход: пароль <code>temp</code> — смена при входе</div>
     </div></div>
   );
 }
