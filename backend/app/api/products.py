@@ -175,7 +175,6 @@ def _apply_product_filters(
                 Product.brand.ilike(pattern),
                 Product.model.ilike(pattern),
                 Product.storage.ilike(pattern),
-                Product.sku_1c.ilike(pattern),
             ))
     return query
 
