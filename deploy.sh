@@ -93,12 +93,26 @@ cmd_update() {
     log "=== Обновление проекта ==="
     check_env
 
+    # Текущая версия (до pull)
+    local ver_before
+    ver_before=$(node -p "require('./frontend/package.json').version" 2>/dev/null || echo "?")
+
     # Получаем изменения
     if git remote | grep -q origin; then
         log "Получение изменений из git..."
         git pull --ff-only
     else
         warn "Git remote не настроен, пропускаем git pull"
+    fi
+
+    # Новая версия (после pull)
+    local ver_after
+    ver_after=$(node -p "require('./frontend/package.json').version" 2>/dev/null || echo "?")
+
+    if [ "$ver_before" = "$ver_after" ]; then
+        log "Версия: v${ver_before} (без изменений)"
+    else
+        log "Обновление версии: v${ver_before} → v${ver_after}"
     fi
 
     # Пересборка фронтенда
