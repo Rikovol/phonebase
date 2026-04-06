@@ -237,7 +237,7 @@ async def get_product_stats(
 async def get_store_messages(
     store_id: str,
     direction: Optional[str] = Query(None, description="incoming или outgoing"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
