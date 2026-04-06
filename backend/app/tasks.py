@@ -212,3 +212,20 @@ def avito_close_listing(self, product_id: str):
     except Exception as exc:
         logger.exception("Ошибка закрытия объявления Авито: %s", product_id)
         raise self.retry(exc=exc)
+
+
+@app.task(bind=True, max_retries=1, default_retry_delay=300)
+def periodic_parse_goodcom(self):
+    """Парсинг цен GoodCom — пн/ср/пт в 04:00 МСК."""
+    async def _run():
+        from app.core.database import AsyncSessionLocal
+        from app.services.parse_goodcom import run_goodcom_parse
+        async with AsyncSessionLocal() as db:
+            count = await run_goodcom_parse(db)
+            logger.info("Автопарсинг GoodCom завершён: %d записей", count)
+
+    try:
+        return _run_async(_run())
+    except Exception as exc:
+        logger.exception("Ошибка автопарсинга GoodCom")
+        raise self.retry(exc=exc)

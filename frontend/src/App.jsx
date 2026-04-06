@@ -3839,11 +3839,6 @@ function CompetitorPricesPage({ user, token }) {
           <option value="">Все источники</option>
           {sources.map(s=><option key={s} value={s}>{sourceFull(s)}</option>)}
         </select>
-        {isAdm && (
-          <button className="pb-btn" disabled={parsing} onClick={()=>startParse("goodcom")} style={{marginLeft:"auto",whiteSpace:"nowrap"}}>
-            {parsing ? <><span className="spinner" style={{width:12,height:12,marginRight:6}}/>Парсинг…</> : "⟳ Обновить GoodCom"}
-          </button>
-        )}
       </div>
 
       {loading && <div style={{color:"var(--muted)",marginBottom:10}}><span className="spinner"/> Загрузка…</div>}

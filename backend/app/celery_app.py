@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 import os
 
 app = Celery(
@@ -50,6 +51,12 @@ if _avito_feed_check > 0:
         "task": "app.tasks.periodic_check_avito_feed",
         "schedule": _avito_feed_check * 60,
     }
+
+# Парсинг GoodCom: пн/ср/пт в 04:00 МСК (timezone уже Europe/Moscow)
+_beat["parse-goodcom-mon-wed-fri"] = {
+    "task": "app.tasks.periodic_parse_goodcom",
+    "schedule": crontab(hour=4, minute=0, day_of_week="1,3,5"),
+}
 
 if _beat:
     app.conf.beat_schedule = _beat
