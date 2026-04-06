@@ -3283,14 +3283,14 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
     <div className="tw">
       <table className="pt">
         <thead><tr>
-          {[["brand","Бренд",150],["model","Модель",280],["storage","Память",70]].map(([k,l,w])=>(
+          {[["brand","Бренд",150],["model","Модель",320],["storage","Память",100]].map(([k,l,w])=>(
             <th key={k} style={{...thS,width:w}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
           ))}
           <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
           <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
           <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("comp")}>Конкурент{arrow("comp")}</th>
           <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("market")}>Средняя рынок{arrow("market")}</th>
-          <th style={{...thS,textAlign:"center"}} onClick={()=>toggleSort("count")}>Шт.{arrow("count")}</th>
+          <th style={{...thS,textAlign:"center",width:150}} onClick={()=>toggleSort("count")}>Шт.{arrow("count")}</th>
         </tr></thead>
         <tbody>
           {sorted.map(g => {
