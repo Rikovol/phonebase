@@ -265,6 +265,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .pt tbody tr:nth-child(10){animation-delay:.20s}
 .pt tr.own td{border-left:1px solid rgba(52,211,153,.5)}
 .pt tr.rep td{background:var(--danger-dim)}
+.pt tr.qty-warn td{background:rgba(239,68,68,.08)!important;border-bottom-color:rgba(239,68,68,.12)!important}
+.pt tr.qty-warn:hover td{background:rgba(239,68,68,.13)!important}
+.pt tr.qty-warn td:first-child{border-left:3px solid var(--danger)!important}
+.qty-wm{position:relative}
+.qty-wm::after{content:"⚠ По данному товару сообщите администратору";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-8deg);font-size:11px;font-weight:700;color:rgba(239,68,68,.35);white-space:nowrap;pointer-events:none;letter-spacing:.5px;text-transform:uppercase;z-index:1}
 .tm{font-weight:600;cursor:pointer;color:var(--accent2);transition:color .15s}
 .imei-btn{display:inline-block;padding:6px 14px;border-radius:8px;border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.08);color:var(--accent2);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .imei-btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(16,185,129,.3);background:rgba(16,185,129,.15);border-color:var(--accent)}
@@ -2103,10 +2108,12 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                       {isOpen && g.items.map(p => {
                         const row = mapProductRow(p);
                         const canOpenCard = Access.canOpenProductCard(user, row);
+                        const qty2 = p.quantity ?? 1;
+                        const isAbnQty = qty2 < 0 || qty2 > 1;
                         return (
-                          <tr key={p.id} style={{background:"rgba(255,255,255,.04)",fontSize:12}}>
+                          <tr key={p.id} className={isAbnQty?"qty-warn":undefined} style={{background: isAbnQty ? undefined : "rgba(255,255,255,.04)",fontSize:12}}>
                             <td style={{paddingLeft:28}}><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
-                            <td className="mono" style={{cursor:"pointer",color:"var(--text)"}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
+                            <td className={isAbnQty?"qty-wm mono":"mono"} style={{cursor:"pointer",color:"var(--text)",position:isAbnQty?"relative":undefined}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
                             <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
@@ -2147,13 +2154,15 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const seeCost = Access.canSeeCost(user, row);
               const canOpenCard = Access.canOpenProductCard(user, row);
               const profit  = (p.price_retail??0)-(p.price_cost??0);
-              const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":""].filter(Boolean).join(" ");
+              const qty = p.quantity ?? 1;
+              const isAbnormalQty = qty < 0 || qty > 1;
+              const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":"", isAbnormalQty?"qty-warn":""].filter(Boolean).join(" ");
               const storeColor = STORE_COLORS[p.store_name];
               return (
-                <tr key={p.id} className={rowCls} style={storeColor&&!p.in_repair?{background:`${storeColor}12`}:undefined}>
+                <tr key={p.id} className={rowCls} style={storeColor&&!p.in_repair&&!isAbnormalQty?{background:`${storeColor}12`}:undefined}>
                   {showSold && <td style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--text)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
-                  <td>
+                  <td className={isAbnormalQty?"qty-wm":undefined} style={isAbnormalQty?{position:"relative"}:undefined}>
                     <div
                       className={`tm${canOpenCard ? "" : " tm-disabled"}`}
                       title={canOpenCard ? "" : "Карточка доступна только для товаров вашего магазина"}
@@ -2168,14 +2177,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
                   {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
-                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
+                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
+                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
                       <span className="sw-track"/>
                     </label>
                   </td>
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
-                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
+                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
+                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
                       <span className="sw-track"/>
                     </label>
                   </td>
