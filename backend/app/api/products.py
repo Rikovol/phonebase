@@ -171,15 +171,12 @@ def _apply_product_filters(
         # IMEI подключается только если токен целиком цифровой.
         for token in q.strip().split():
             pattern = f"%{token}%"
-            conditions = [
+            query = query.where(or_(
                 Product.brand.ilike(pattern),
                 Product.model.ilike(pattern),
                 Product.storage.ilike(pattern),
                 Product.sku_1c.ilike(pattern),
-            ]
-            if token.isdigit():
-                conditions.append(Product.imei.ilike(pattern))
-            query = query.where(or_(*conditions))
+            ))
     return query
 
 
