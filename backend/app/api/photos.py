@@ -3,7 +3,7 @@ import io
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -114,6 +114,55 @@ async def upload_product_photo(
         "url": f"/media/{rel_path}",
         "is_main": photo.is_main,
     }
+
+
+@router.post("/{photo_id}/rotate")
+async def rotate_product_photo(
+    photo_id: str,
+    degrees: int = Query(90, description="Угол поворота по часовой стрелке (90 или -90)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    photo = await db.get(ProductPhoto, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+    product = await db.get(Product, photo.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    _reject_info(current_user)
+    _ensure_product_write(product, current_user)
+    if product.is_sold and current_user.role != "admin":
+        raise HTTPException(status_code=400, detail="Нельзя изменять фото проданного товара")
+
+    full = (Path(settings.MEDIA_ROOT) / photo.file_path).resolve()
+    if not full.is_file():
+        raise HTTPException(status_code=404, detail="Файл изображения не найден на диске")
+
+    def _rotate() -> None:
+        img = Image.open(full)
+        img.load()
+        rotated = img.rotate(-degrees, expand=True)
+        ext = full.suffix.lower()
+        tmp = full.with_suffix(".tmp" + full.suffix)
+        try:
+            if ext in (".jpg", ".jpeg"):
+                rgb = rotated if rotated.mode == "RGB" else rotated.convert("RGB")
+                rgb.save(tmp, format="JPEG", quality=88, optimize=True)
+            elif ext == ".png":
+                rotated.save(tmp, format="PNG", optimize=True)
+            else:
+                rotated.save(tmp, format="WEBP", quality=88, method=4)
+            tmp.replace(full)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, _rotate)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Не удалось обработать изображение") from exc
+
+    return {"status": "rotated", "id": photo_id}
 
 
 @router.delete("/{photo_id}")

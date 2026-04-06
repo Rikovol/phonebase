@@ -1266,38 +1266,101 @@ function defaultAvitoTitle(p) {
   return parts.filter(Boolean).join(" ").trim().slice(0, 50);
 }
 
+function normStorage(s) {
+  return s ? s.replace(/[Gg][Bb]/g, "ГБ") : "";
+}
+
+function normCompleteness(v) {
+  const map = {
+    "полная": "Полный комплект",
+    "полный комплект": "Полный комплект",
+    "телефон": "Телефон",
+    "телефон + зарядное устройство": "Телефон + зарядное устройство",
+    "телефон + зарядка": "Телефон + зарядное устройство",
+    "телефон + аксессуары": "Телефон + аксессуары",
+  };
+  if (!v) return "Телефон";
+  const norm = map[v.toLowerCase().trim()];
+  if (norm) return norm;
+  const valid = new Set(["Телефон","Телефон + зарядное устройство","Телефон + аксессуары","Полный комплект"]);
+  return valid.has(v) ? v : "Телефон";
+}
+
 function defaultAvitoDescription(p, store) {
-  const name = [p.brand, p.model, p.storage ? p.storage.replace(/[Gg][Bb]/, "ГБ") : ""].filter(Boolean).join(" ");
-  const title = [name, "б/у"].filter(Boolean).join(" ");
-  const parts = [];
-  if (p.battery_pct) parts.push(`аккумулятор ${p.battery_pct}`);
-  const headline = [title, parts.length ? "— " + parts.join(", ") : ""].filter(Boolean).join(" ");
+  const brand = p.brand || "";
+  const model = p.model || "";
+  const baseName = (brand && model.toLowerCase().startsWith(brand.toLowerCase())) ? model : [brand, model].filter(Boolean).join(" ");
+  const storage = normStorage(p.storage);
+  const name = [baseName, storage].filter(Boolean).join(" ");
 
-  const lines = [headline, ""];
+  const condAdj = {
+    "Как новый": "идеальном",
+    "Отличное": "отличном",
+    "Хорошее": "хорошем",
+    "Среднее": "среднем",
+    "Удовлетворительное": "удовлетворительном",
+    "Плохое": "б/у",
+  }[p.condition] || "б/у";
 
-  lines.push("Состояние:", "");
-  if (p.battery_pct) lines.push(`Аккумулятор: ${p.battery_pct} ёмкости.`);
-  if (p.condition) lines.push(`Общее состояние: ${p.condition}.`);
+  const condDetail = {
+    "Как новый": "Корпус и экран без дефектов.",
+    "Отличное": "Корпус и экран без дефектов.",
+    "Хорошее": "На экране 1–2 мелкие царапины, на корпусе мелкие царапины.",
+    "Среднее": "На экране 1–2 мелкие царапины, на корпусе глубокие царапины.",
+    "Удовлетворительное": "На экране и корпусе заметные царапины и потёртости.",
+    "Плохое": "На экране много мелких царапин, на корпусе глубокие царапины.",
+  }[p.condition] || "";
+
+  const lines = [`НЕ УПУСТИТЕ СВОЙ ШАНС купить ${name} в ${condAdj} состоянии!`, ""];
+
+  if (name) lines.push(`Модель: ${name}.`);
   if (p.color) lines.push(`Цвет: ${p.color}.`);
-  if (p.in_repair) {
-    lines.push("Внимание: товар находится в ремонте.");
-  } else {
-    lines.push("Все функции работают исправно.");
+  if (p.battery_pct) lines.push(`Состояние аккумулятора: ${p.battery_pct}.`);
+  if (p.sim_count) {
+    const simLine = `SIM-карт: ${p.sim_count}${p.sim_type ? ` (${p.sim_type})` : ""}.`;
+    lines.push(simLine);
   }
-  lines.push("Гарантия: 30 дней на проверку работоспособности.");
+  lines.push(`Комплектация: ${normCompleteness(p.completeness)}.`);
+  lines.push("");
 
-  lines.push("", "Преимущества покупки:", "");
-  lines.push("Проверка перед покупкой.");
-  lines.push("Помощь в настройке и переносе данных.");
-  lines.push("Возможность Trade-in.");
-  lines.push("Рассрочка платежа.");
+  if (p.condition) {
+    lines.push(condDetail
+      ? `✔️Состояние: ${p.condition} — ${condDetail}`
+      : `✔️Состояние: ${p.condition}.`);
+  }
+  lines.push("✔️Без ремонтов, 1 месяц на проверку качества.");
+  lines.push("✔️Поможем перенести данные и настроить устройство.");
+  lines.push("");
+
+  const storeName = (store && store.name) || p.store_name || "МобилАкс";
+  lines.push(`🟣${storeName} — ваш надёжный партнёр в мире цифровых технологий. Только проверенная техника.`);
+  lines.push("");
+  lines.push("Сдайте своё старое устройство по программе Trade-in и получите дополнительную выгоду!");
+  lines.push("");
+  lines.push("🏦Покупайте сейчас, платите потом!");
+  lines.push("");
+  lines.push("Официальные банки-партнёры.");
+  lines.push("Оформление за 15 минут.");
+  lines.push("90% одобрения заявок.");
+  lines.push("");
+  lines.push("💳Способы оплаты:");
+  lines.push("");
+  lines.push("Наличные / перевод.");
+  lines.push("QR / терминал.");
+  lines.push("Оплата по счёту для юридических лиц.");
+  lines.push("Кредит от 9 банков-партнёров.");
+  lines.push("Оплата частями через Яндекс Сплит.");
+  lines.push("");
+  lines.push("🕘График работы:");
+  lines.push("");
+  lines.push("Магазин: 9:00–19:00 (без выходных).");
+  lines.push("Онлайн-консультации: 9:00–21:00.");
 
   if (store && store.avito_address) {
-    const sName = store.name || p.store_name || "Магазин";
-    lines.push("", `Где найти: Магазин «${sName}», ${store.avito_address}. Часы работы: 9:00–19:00 (консультации до 21:00).`);
+    lines.push("", "🎈Наш адрес:", "", store.avito_address);
   }
-  lines.push("", "Доставка: по всей России, быстрая обработка заказа.");
-  lines.push("", "Примечание: устройство б/у, возможны незначительные следы эксплуатации, не влияющие на работу.");
+
+  lines.push("", `🥳Купите ${name} уже сегодня по самым выгодным условиям в городе!`);
 
   return lines.join("\n").slice(0, 7500);
 }
