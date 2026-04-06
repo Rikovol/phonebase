@@ -1929,6 +1929,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [docsModalId, setDocsModalId] = useState(null);
   const [priceStats, setPriceStats] = useState({});
   const [expandedNew, setExpandedNew] = useState({});
+  const [revealedCostId, setRevealedCostId] = useState(null);
 
   const isAdm  = Access.isAdmin(user);
   const isInfo = Access.isInfo(user);
@@ -2247,7 +2248,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
                             <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
-                            {!isInfo && <td className="tr" style={{color:"var(--text)"}}>{fmt(p.price_cost)}</td>}
+                            {!isInfo && <td className="tr" style={{cursor:"pointer",userSelect:"none"}} onClick={()=>setRevealedCostId(prev=>prev===p.id?null:p.id)} title="Нажмите чтобы показать"><span style={{filter:revealedCostId===p.id?"none":"blur(6px)",transition:"filter .2s",color:"var(--text)"}}>{fmt(p.price_cost)}</span></td>}
                             <td style={{textAlign:"right"}}>{canOpenCard && <button type="button" className="act" onClick={()=>onOpen(p.id)}>Карточка</button>}</td>
                           </tr>
                         );
