@@ -1989,7 +1989,10 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
 
 
       <div className="filters">
-        <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)}/>
+        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+          <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+        </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
           {brands.map(b=><option key={b}>{b}</option>)}
@@ -3191,7 +3194,10 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       {loading && <div style={{marginBottom:10,color:"var(--muted)"}}><span className="spinner"/> Загрузка…</div>}
 
       <div className="filters">
-        <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+        </div>
         <input className="fi" style={{maxWidth:160}} placeholder="Бренд (точно)" value={brand} onChange={e=>setBrand(e.target.value)}/>
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
           <option value="">Любое состояние</option>
@@ -3809,7 +3815,10 @@ function CompetitorPricesPage({ user, token }) {
       )}
 
       <div className="filters">
-        <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+        </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
           {brands.map(b=><option key={b} value={b}>{b}</option>)}
