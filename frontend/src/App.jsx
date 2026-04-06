@@ -5,11 +5,11 @@ import { version as APP_VERSION } from "../package.json";
 const API_BASE = "/api";
 
 const STORE_COLORS = {
-  "iPrice.Store":"#34d399","МОБИЛАКС":"#c084fc",
+  "iPrice.Store":"#059669","МОБИЛАКС":"#c084fc",
   "REM-GSM":"#60a5fa","ДИСКИ":"#f97316","ТЕХНО":"#f472b6","Склад":"#94a3b8",
 };
 const STORE_GRADIENTS = {
-  "iPrice.Store":"linear-gradient(135deg,#34d399,#10b981)",
+  "iPrice.Store":"linear-gradient(135deg,#059669,#047857)",
   "МОБИЛАКС":"linear-gradient(135deg,#c084fc,#9333ea)",
   "REM-GSM":"linear-gradient(135deg,#60a5fa,#2563eb)",
   "ДИСКИ":"linear-gradient(135deg,#fb923c,#ea580c)",
