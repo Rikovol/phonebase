@@ -268,8 +268,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .pt tr.qty-warn td{background:rgba(239,68,68,.08)!important;border-bottom-color:rgba(239,68,68,.12)!important}
 .pt tr.qty-warn:hover td{background:rgba(239,68,68,.13)!important}
 .pt tr.qty-warn td:first-child{border-left:3px solid var(--danger)!important}
-.qty-wm{position:relative}
-.qty-wm::after{content:"⚠ По данному товару сообщите администратору";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-8deg);font-size:11px;font-weight:700;color:rgba(239,68,68,.35);white-space:nowrap;pointer-events:none;letter-spacing:.5px;text-transform:uppercase;z-index:1}
+.qty-wm{position:relative;overflow:hidden}
+.qty-wm::after{content:"⚠ По данному товару сообщите администратору";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-8deg);font-size:11px;font-weight:700;color:rgba(239,68,68,.35);white-space:nowrap;pointer-events:none;letter-spacing:.5px;text-transform:uppercase;z-index:1;max-width:100%}
 .tm{font-weight:600;cursor:pointer;color:var(--accent2);transition:color .15s}
 .imei-btn{display:inline-block;padding:6px 14px;border-radius:8px;border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.08);color:var(--accent2);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .imei-btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(16,185,129,.3);background:rgba(16,185,129,.15);border-color:var(--accent)}
