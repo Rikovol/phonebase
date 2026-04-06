@@ -1756,7 +1756,7 @@ function mapProductRow(p) {
 }
 
 function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, isNew, soldOnly = false }) {
-  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState("");
+  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
   const [brand,setBrand]=useState(""); const [cond,setCond]=useState("");
   const [storeFilter,setStoreFilter]=useState(() => (Access.seesAllStores(user) ? (activeStore || "") : ""));
   const showSold = soldOnly;
@@ -1816,6 +1816,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     const t = setTimeout(()=>setDebouncedQ(q), 300);
     return ()=>clearTimeout(t);
   }, [q]);
+  const submitSearch = () => setSubmittedQ(q);
 
   useEffect(()=>{
     let cancelled = false;
@@ -1823,7 +1824,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       setLoading(true); setListErr("");
       try {
         const base = new URLSearchParams();
-        if (debouncedQ.trim()) base.set("q", debouncedQ.trim());
+        if (submittedQ.trim()) base.set("q", submittedQ.trim());
         if (brand) base.set("brand", brand);
         if (cond) base.set("condition", cond);
         if (soldOnly) base.set("sold_only", "true");
@@ -1849,7 +1850,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [token, debouncedQ, brand, cond, showSold, storeFilter, isNew]);
+  }, [token, submittedQ, brand, cond, showSold, storeFilter, isNew]);
 
   const sentinelRef = useRef(null);
   useEffect(() => {
@@ -1990,8 +1991,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
 
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center"}}>
-          <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+          <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
         </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
@@ -3148,7 +3149,8 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
 }
 
 function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
-  const [q,setQ]=useState("");
+  const [q,setQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
+  const submitSearch = () => setSubmittedQ(q);
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
   const [includeSold,setIncludeSold]=useState(false);
@@ -3168,7 +3170,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       setLoading(true); setErr("");
       try {
         const params = new URLSearchParams();
-        if (q.trim()) params.set("q", q.trim());
+        if (submittedQ.trim()) params.set("q", submittedQ.trim());
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
         if (includeSold) params.set("include_sold", "true");
@@ -3186,7 +3188,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, q, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
+  }, [token, submittedQ, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
 
   return (
     <>
@@ -3195,8 +3197,8 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
 
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center"}}>
-          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
         </div>
         <input className="fi" style={{maxWidth:160}} placeholder="Бренд (точно)" value={brand} onChange={e=>setBrand(e.target.value)}/>
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
@@ -3737,10 +3739,11 @@ function CompetitorPricesPage({ user, token }) {
   const [total,setTotal]=useState(0);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState("");
-  const [q,setQ]=useState("");
+  const [q,setQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
   const [brand,setBrand]=useState("");
   const [source,setSource]=useState("");
   const [parsing,setParsing]=useState(false);
+  const submitSearch = () => setSubmittedQ(q);
   const [sortCol,setSortCol]=useState("brand");
   const [sortDir,setSortDir]=useState("asc");
   const isAdm=Access.isAdmin(user);
@@ -3749,7 +3752,7 @@ function CompetitorPricesPage({ user, token }) {
     setLoading(true); setErr("");
     try {
       const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
+      if (submittedQ.trim()) params.set("q", submittedQ.trim());
       if (brand) params.set("brand", brand);
       if (source) params.set("source", source);
       params.set("limit","2000");
@@ -3763,7 +3766,7 @@ function CompetitorPricesPage({ user, token }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ load(); },[token,q,brand,source]);
+  useEffect(()=>{ load(); },[token,submittedQ,brand,source]);
 
   const startParse = async (src) => {
     setParsing(true);
@@ -3816,8 +3819,8 @@ function CompetitorPricesPage({ user, token }) {
 
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center"}}>
-          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
+          <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
+          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:6,background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}} title="Очистить">×</button>}
         </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
