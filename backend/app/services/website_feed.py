@@ -34,6 +34,7 @@ async def generate_website_feed(db: AsyncSession, store_id: str) -> dict:
                 Product.price_retail.isnot(None),
                 Product.condition.isnot(None),
                 Product.condition != "",
+                Product.condition.notin_(["Ремонт", "Требуется ремонт", "Залог"]),
             )
         )
         .options(selectinload(Product.photos))

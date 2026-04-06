@@ -150,6 +150,7 @@ async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
                 Product.in_repair == False,  # noqa: E712
                 Product.condition.isnot(None),
                 Product.condition != "",
+                Product.condition.notin_(["Ремонт", "Требуется ремонт", "Залог"]),
             )
         )
         .options(selectinload(Product.photos))

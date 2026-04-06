@@ -2159,6 +2159,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const profit  = (p.price_retail??0)-(p.price_cost??0);
               const qty = p.quantity ?? 1;
               const isAbnormalQty = qty < 0 || qty > 1;
+              const isRepairCondition = p.in_repair || ["Ремонт","Требуется ремонт","Залог"].includes(p.condition);
               const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":"", isAbnormalQty?"qty-warn":""].filter(Boolean).join(" ");
               const storeColor = STORE_COLORS[p.store_name];
               return (
@@ -2180,14 +2181,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
                   {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
-                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
+                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
+                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
                       <span className="sw-track"/>
                     </label>
                   </td>
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
-                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
+                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
+                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
                       <span className="sw-track"/>
                     </label>
                   </td>
