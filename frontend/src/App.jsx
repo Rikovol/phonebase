@@ -3863,7 +3863,7 @@ function LogsPage({ token }) {
     (async () => {
       setLoading(true);
       try {
-        const data = await apiFetch(`/logs/activity?limit=200&log_type=${filter}`, { token });
+        const data = await apiFetch(`/logs/activity?limit=500&log_type=${filter}`, { token });
         if (c) setItems(data.items || []);
       } catch {}
       if (c) setLoading(false);
@@ -3871,8 +3871,8 @@ function LogsPage({ token }) {
     return () => { c = false; };
   }, [token, filter]);
 
-  const typeLabel = { import: "Импорт", doc_access: "Документы", avito: "Авито" };
-  const typeColor = { import: "var(--accent2)", doc_access: "var(--cyan)", avito: "var(--warn)" };
+  const typeLabel = { import: "Импорт", doc_access: "Документы", avito: "Авито", staff: "Сотрудник" };
+  const typeColor = { import: "var(--accent2)", doc_access: "var(--cyan)", avito: "var(--warn)", staff: "var(--accent)" };
   const statusColor = (s) => s === "success" || s === "ok" || s === "published" ? "var(--success)" : s === "error" ? "var(--danger)" : "var(--muted)";
 
   const fmtDate = (iso) => {
@@ -3884,7 +3884,7 @@ function LogsPage({ token }) {
   return (
     <>
       <div className="filters" style={{marginBottom:14}}>
-        {[["all","Все"],["import","Импорт"],["avito","Авито"],["docs","Документы"]].map(([v,l]) => (
+        {[["all","Все"],["staff","Сотрудники"],["import","Импорт"],["avito","Авито"],["docs","Документы"]].map(([v,l]) => (
           <button key={v} className={`btn btn-sm ${filter===v?"btn-primary":"btn-outline"}`} onClick={()=>setFilter(v)}>{l}</button>
         ))}
         <span className="fc">{items.length} записей</span>

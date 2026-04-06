@@ -22,8 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
-from app.models.business import User, Store
-from app.services.import_configured import is_import_source_configured, run_configured_import
+from app.models.business import User, Store, StaffActionLog
 
 logger = logging.getLogger(__name__)
 
@@ -109,16 +108,6 @@ async def require_active(user: User = Depends(get_current_user)) -> User:
 
 # ── Фоновая синхронизация 1С после входа ──────────────────────────────────────
 
-async def _sync_1c_after_login(user_id: str) -> None:
-    try:
-        async with AsyncSessionLocal() as session:
-            if not await is_import_source_configured(session):
-                return
-            await run_configured_import(session, user_id, auto_label="авто при входе")
-    except Exception:
-        logger.exception("Синхронизация выгрузки 1С после входа не выполнена")
-
-
 # ── Эндпоинты ─────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
@@ -147,7 +136,10 @@ async def login(
     )
     await db.commit()
 
-    background_tasks.add_task(_sync_1c_after_login, str(user.id))
+    # Логируем вход
+    store_row = (await db.execute(select(Store).where(Store.id == user.store_id))).scalar_one_or_none() if user.store_id else None
+    db.add(StaffActionLog(user_id=str(user.id), action="login", store_name=store_row.name if store_row else None))
+    await db.commit()
 
     # Магазин в ответе только для staff (admin и info не привязаны к точке)
     store_name = None

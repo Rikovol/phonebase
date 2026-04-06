@@ -12,7 +12,7 @@ from app.api.access import can_modify_product, can_view_product
 from app.api.auth import get_current_user
 from app.api.purchase_docs import DOC_LABELS
 from app.core.database import get_db
-from app.models.business import Product, ProductPhoto, PurchaseDoc, Store, User
+from app.models.business import Product, ProductPhoto, PurchaseDoc, StaffActionLog, Store, User
 from app.utils.imei_sn import imei_or_sn_display
 
 router = APIRouter()
@@ -473,6 +473,18 @@ async def update_product(
         product.avito_description = body.avito_description[:7500] if body.avito_description else None
 
     product.updated_at = datetime.now(timezone.utc)
+
+    # Логируем изменения
+    changes = {k: v for k, v in body.dict(exclude_unset=True).items() if v is not None}
+    if changes:
+        store_row = (await db.execute(select(Store).where(Store.id == product.store_id))).scalar_one_or_none()
+        action = "avito_toggle" if list(changes.keys()) == ["avito_published"] else "product_edit"
+        db.add(StaffActionLog(
+            user_id=str(current_user.id), action=action, target_id=product.id,
+            details=f"{product.model}: {', '.join(f'{k}={v}' for k, v in changes.items())}",
+            store_name=store_row.name if store_row else None,
+        ))
+
     await db.commit()
 
     # Авто-синхронизация с Авито при изменении цены

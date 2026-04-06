@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
 from app.core.database import get_db
-from app.models.business import ImportLog, Store, User, DocAccessLog, Product
+from app.models.business import ImportLog, StaffActionLog, Store, User, DocAccessLog, Product
 from app.models.personal_data import PDAccessLog
 
 LOG_RETENTION_DAYS = 365
@@ -21,12 +21,13 @@ async def cleanup_old_logs(db: AsyncSession):
     cutoff = datetime.now(timezone.utc) - timedelta(days=LOG_RETENTION_DAYS)
     await db.execute(delete(ImportLog).where(ImportLog.started_at < cutoff))
     await db.execute(delete(DocAccessLog).where(DocAccessLog.created_at < cutoff))
+    await db.execute(delete(StaffActionLog).where(StaffActionLog.created_at < cutoff))
     await db.commit()
 
 
 @router.get("/activity")
 async def get_activity_logs(
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     log_type: str = Query("all"),
     db: AsyncSession = Depends(get_db),
@@ -102,6 +103,42 @@ async def get_activity_logs(
                 "store": None,
                 "status": "ok",
                 "details": f"Документ: {r.action}",
+                "error": None,
+            })
+
+    # Staff action logs
+    if log_type in ("all", "staff"):
+        q = (
+            select(
+                StaffActionLog.id,
+                StaffActionLog.action,
+                StaffActionLog.target_id,
+                StaffActionLog.details,
+                StaffActionLog.store_name,
+                StaffActionLog.created_at,
+                User.username.label("user"),
+                User.full_name.label("user_name"),
+            )
+            .outerjoin(User, StaffActionLog.user_id == User.id)
+            .order_by(desc(StaffActionLog.created_at))
+            .limit(limit)
+        )
+        rows = (await db.execute(q)).all()
+        action_labels = {
+            "login": "Вход", "product_edit": "Редактирование",
+            "photo_upload": "Загрузка фото", "photo_delete": "Удаление фото",
+            "avito_toggle": "Авито",
+        }
+        for r in rows:
+            results.append({
+                "type": "staff",
+                "id": r.id,
+                "timestamp": r.created_at.isoformat() if r.created_at else None,
+                "user": r.user or "—",
+                "user_name": r.user_name,
+                "store": r.store_name,
+                "status": action_labels.get(r.action, r.action),
+                "details": r.details or "",
                 "error": None,
             })
 

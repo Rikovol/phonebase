@@ -12,7 +12,7 @@ from app.api.access import can_modify_product
 from app.api.auth import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.business import Product, ProductPhoto, User
+from app.models.business import Product, ProductPhoto, StaffActionLog, Store, User
 
 router = APIRouter()
 
@@ -106,6 +106,12 @@ async def upload_product_photo(
         is_main=is_main,
     )
     db.add(photo)
+    store_row = (await db.execute(select(Store).where(Store.id == product.store_id))).scalar_one_or_none()
+    db.add(StaffActionLog(
+        user_id=str(current_user.id), action="photo_upload", target_id=product_id,
+        details=f"{product.model}: загрузка фото",
+        store_name=store_row.name if store_row else None,
+    ))
     await db.commit()
     await db.refresh(photo)
 
@@ -187,6 +193,12 @@ async def delete_product_photo(
     full = Path(settings.MEDIA_ROOT) / photo.file_path
 
     await db.delete(photo)
+    store_row = (await db.execute(select(Store).where(Store.id == product.store_id))).scalar_one_or_none()
+    db.add(StaffActionLog(
+        user_id=str(current_user.id), action="photo_delete", target_id=str(product.id),
+        details=f"{product.model}: удаление фото",
+        store_name=store_row.name if store_row else None,
+    ))
     await db.flush()
 
     if was_main:
