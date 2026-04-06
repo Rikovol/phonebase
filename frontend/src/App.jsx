@@ -122,8 +122,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--accent2);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle}
 
 /* LOGIN */
-.lw{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse at 30% 50%,rgba(6,182,212,.06) 0%,transparent 60%)}
-.lb{width:400px;background:rgba(20,20,22,.85);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;padding:40px 36px;box-shadow:var(--shadow-lg);animation:fadeUp .4s ease}
+.lw{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:url('/login-bg.png');background-size:cover;background-position:center}
+.lb{width:400px;background:rgba(16,16,24,.88);backdrop-filter:blur(16px);border:1px solid rgba(6,182,212,.15);border-radius:16px;padding:40px 36px;box-shadow:var(--shadow-lg),0 0 60px rgba(6,182,212,.08);animation:fadeUp .4s ease}
 .logo{display:flex;align-items:center;gap:14px;margin-bottom:30px}
 .logo-icon{width:52px;height:52px;background:linear-gradient(145deg,rgba(6,182,212,.14),rgba(6,182,212,.06));border:1px solid rgba(6,182,212,.35);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent2);box-shadow:0 6px 24px rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.04) inset,0 1px 0 rgba(255,255,255,.07) inset}
 .logo-text{font-family:var(--sans);font-size:26px;font-weight:500;letter-spacing:-.6px;color:var(--text);text-shadow:0 0 24px rgba(236,236,240,.12);display:flex;align-items:baseline;gap:3px;line-height:1.05;flex-wrap:nowrap}
