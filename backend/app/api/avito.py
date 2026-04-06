@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import can_modify_product
 from app.api.auth import get_current_user, require_admin
 from app.core.database import get_db
 from app.models.business import AvitoMessage, AvitoStats, Product, Store, User
@@ -311,6 +312,8 @@ async def close_listing_endpoint(
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Товар не найден")
+    if not can_modify_product(current_user, product):
+        raise HTTPException(status_code=403, detail="Нет доступа к данному товару")
     if not product.avito_item_id:
         raise HTTPException(status_code=400, detail="У товара нет avito_item_id")
 

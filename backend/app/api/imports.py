@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_current_user
 from app.core.database import get_db
 from app.models.business import User
-from app.services.auto_import import _import_lock
+from app.services.auto_import import get_import_lock
 from app.services.import_configured import run_configured_import, run_configured_import_new
 from app.services.import_sync import sync_import
 from app.services.import_sync_new import sync_import_new
@@ -64,9 +64,9 @@ async def import_from_configured_url(
     """
     if current_user.role == "info":
         raise HTTPException(status_code=403, detail="Импорт недоступен для роли «Инфо»")
-    if _import_lock.locked():
+    if get_import_lock().locked():
         raise HTTPException(status_code=409, detail="Импорт уже выполняется, попробуйте позже")
-    async with _import_lock:
+    async with get_import_lock():
         try:
             result = await run_configured_import(db, current_user.id)
         except ValueError as e:
@@ -141,9 +141,9 @@ async def import_from_configured_url_new(
     """
     if current_user.role == "info":
         raise HTTPException(status_code=403, detail="Импорт недоступен для роли «Инфо»")
-    if _import_lock.locked():
+    if get_import_lock().locked():
         raise HTTPException(status_code=409, detail="Импорт уже выполняется, попробуйте позже")
-    async with _import_lock:
+    async with get_import_lock():
         try:
             result = await run_configured_import_new(db, current_user.id)
         except ValueError as e:

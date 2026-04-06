@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.models.business import ImportLog, Product, Store
 from app.services.import_1c import OneCHTMLParser, ParsedProduct
@@ -170,8 +171,11 @@ async def _store_map(db: AsyncSession) -> dict[str, str]:
 
 async def _existing_products(db: AsyncSession, store_id: str) -> dict[str, Product]:
     result = await db.execute(
-        select(Product).where(
-            and_(Product.store_id == store_id, Product.is_new == False)  # noqa: E712
-        )
+        select(Product)
+        .where(and_(Product.store_id == store_id, Product.is_new == False))  # noqa: E712
+        .options(load_only(
+            Product.id, Product.sku_1c, Product.is_sold,
+            Product.avito_published, Product.avito_item_id,
+        ))
     )
     return {p.sku_1c: p for p in result.scalars().all()}

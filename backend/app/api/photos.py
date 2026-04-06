@@ -85,7 +85,7 @@ async def upload_product_photo(
         return out, ext
 
     try:
-        out_path, ext = await asyncio.get_event_loop().run_in_executor(None, _process)
+        out_path, ext = await asyncio.get_running_loop().run_in_executor(None, _process)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
