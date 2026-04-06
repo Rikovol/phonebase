@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -167,18 +167,16 @@ def _apply_product_filters(
         query = query.where(Product.condition == condition)
 
     if q:
-        # Разбиваем запрос на токены и проверяем каждый против конкатенации brand+model+storage+imei
-        tokens = q.strip().split()
-        for token in tokens:
+        # Каждый токен должен встречаться хотя бы в одном из полей
+        for token in q.strip().split():
             pattern = f"%{token}%"
-            combined = func.lower(
-                func.coalesce(Product.brand, "") + " " +
-                func.coalesce(Product.model, "") + " " +
-                func.coalesce(Product.storage, "") + " " +
-                func.coalesce(Product.imei, "") + " " +
-                func.coalesce(Product.sku_1c, "")
-            )
-            query = query.where(combined.ilike(f"%{token.lower()}%"))
+            query = query.where(or_(
+                Product.brand.ilike(pattern),
+                Product.model.ilike(pattern),
+                Product.storage.ilike(pattern),
+                Product.imei.ilike(pattern),
+                Product.sku_1c.ilike(pattern),
+            ))
     return query
 
 
