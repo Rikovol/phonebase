@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_current_user
 from app.core.database import get_db
 from app.models.business import User
+from app.services.auto_import import _import_lock
 from app.services.import_configured import run_configured_import, run_configured_import_new
 from app.services.import_sync import sync_import
 from app.services.import_sync_new import sync_import_new
@@ -63,15 +64,18 @@ async def import_from_configured_url(
     """
     if current_user.role == "info":
         raise HTTPException(status_code=403, detail="Импорт недоступен для роли «Инфо»")
-    try:
-        result = await run_configured_import(db, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Не удалось скачать файл по ссылке: {e!s}",
-        ) from e
+    if _import_lock.locked():
+        raise HTTPException(status_code=409, detail="Импорт уже выполняется, попробуйте позже")
+    async with _import_lock:
+        try:
+            result = await run_configured_import(db, current_user.id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Не удалось скачать файл по ссылке: {e!s}",
+            ) from e
     if result is None:
         raise HTTPException(
             status_code=503,
@@ -137,12 +141,15 @@ async def import_from_configured_url_new(
     """
     if current_user.role == "info":
         raise HTTPException(status_code=403, detail="Импорт недоступен для роли «Инфо»")
-    try:
-        result = await run_configured_import_new(db, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Не удалось скачать файл по ссылке: {e!s}") from e
+    if _import_lock.locked():
+        raise HTTPException(status_code=409, detail="Импорт уже выполняется, попробуйте позже")
+    async with _import_lock:
+        try:
+            result = await run_configured_import_new(db, current_user.id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Не удалось скачать файл по ссылке: {e!s}") from e
     if result is None:
         raise HTTPException(
             status_code=503,

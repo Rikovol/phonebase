@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import ImportLog, Product, Store
@@ -104,18 +104,25 @@ async def sync_import(
                 product.sold_at = None
                 product.data_cleanup_at = None
 
-        for imei, product in existing.items():
-            if imei not in imeis_in_file and not product.is_sold:
-                product.is_sold = True
-                product.sold_at = now
-                product.data_cleanup_at = now + timedelta(days=DATA_RETENTION_DAYS)
-                product.updated_at = now
-                sold += 1
-                # Авто-закрытие на Авито
-                if product.avito_published and product.avito_item_id:
+        to_sell = [p for imei, p in existing.items() if imei not in imeis_in_file and not p.is_sold]
+        if to_sell:
+            sell_ids = [p.id for p in to_sell]
+            await db.execute(
+                update(Product)
+                .where(Product.id.in_(sell_ids))
+                .values(
+                    is_sold=True,
+                    sold_at=now,
+                    data_cleanup_at=now + timedelta(days=DATA_RETENTION_DAYS),
+                    updated_at=now,
+                )
+            )
+            sold += len(to_sell)
+            for p in to_sell:
+                if p.avito_published and p.avito_item_id:
                     try:
                         from app.tasks import avito_close_listing
-                        avito_close_listing.delay(product.id)
+                        avito_close_listing.delay(p.id)
                     except Exception:
                         pass
 

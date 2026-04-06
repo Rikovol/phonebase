@@ -163,7 +163,8 @@ async def price_aggregates(
     comp_rows = (await db.execute(select(CompetitorPrice))).scalars().all()
     # Индекс по очищенной модели: brand|clean_model|storage
     comp_clean: dict[str, CompetitorPrice] = {}
-    comp_list: list[tuple[str, str, str, CompetitorPrice]] = []
+    # Сгруппировать по бренду для O(k) поиска вместо O(n)
+    comp_by_brand: dict[str, list[tuple[str, str, CompetitorPrice]]] = {}
     for cp in comp_rows:
         mem_norm = _normalize_storage(cp.memory)
         b = (cp.brand or "").strip().lower()
@@ -171,7 +172,7 @@ async def price_aggregates(
         key = f"{b}|{m_clean}|{mem_norm}"
         if key not in comp_clean:
             comp_clean[key] = cp
-        comp_list.append((b, m_clean, mem_norm, cp))
+        comp_by_brand.setdefault(b, []).append((m_clean, mem_norm, cp))
 
     def _find_competitor(brand_val: str | None, model_val: str | None, storage_val: str | None):
         if not brand_val or not model_val:
@@ -185,9 +186,9 @@ async def price_aggregates(
         if hit:
             return hit
 
-        # 2. Подстрока в обе стороны (по бренду и памяти)
-        for cb, cm, cs, cp in comp_list:
-            if cb != b or cs != s:
+        # 2. Подстрока в обе стороны (только по тому же бренду и памяти)
+        for cm, cs, cp in comp_by_brand.get(b, []):
+            if cs != s:
                 continue
             if cm in m_norm or m_norm in cm:
                 return cp

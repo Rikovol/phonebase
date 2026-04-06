@@ -20,6 +20,8 @@ from app.services.import_configured import (
 
 logger = logging.getLogger(__name__)
 
+_import_lock = asyncio.Lock()
+
 
 async def _get_admin_id(db) -> str | None:
     result = await db.execute(
@@ -103,7 +105,8 @@ async def auto_import_loop() -> None:
     last_competitor_parse_day: str | None = None
 
     while True:
-        await _run_once()
+        async with _import_lock:
+            await _run_once()
 
         # Парсинг конкурентов: каждую пятницу в 03:00 MSK (один раз за день)
         from datetime import timedelta

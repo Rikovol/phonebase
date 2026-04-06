@@ -175,6 +175,7 @@ def _apply_product_filters(
                 Product.brand.ilike(pattern),
                 Product.model.ilike(pattern),
                 Product.storage.ilike(pattern),
+                Product.color.ilike(pattern),
             ))
     return query
 
@@ -195,7 +196,7 @@ async def list_products(
     sold_from: Optional[str] = Query(None, description="Продано с (YYYY-MM-DD)"),
     sold_to: Optional[str] = Query(None, description="Продано по (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=20000),
+    size: int = Query(20, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -458,6 +459,8 @@ async def update_product(
             product.avito_published = False
     if body.sim_count is not None:
         product.sim_count = body.sim_count if body.sim_count in (1, 2, 3) else None
+    if body.sim_type is not None:
+        product.sim_type = body.sim_type[:50] if body.sim_type else None
     if body.completeness is not None:
         product.completeness = body.completeness[:100] if body.completeness else None
     if body.site_published is not None:

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import uuid
 from pathlib import Path
@@ -55,36 +56,40 @@ async def upload_product_photo(
     if len(raw) > max_b:
         raise HTTPException(status_code=400, detail=f"Файл больше {settings.MAX_PHOTO_SIZE_MB} МБ")
 
-    try:
-        img = Image.open(io.BytesIO(raw))
-        img.load()
-    except OSError:
-        raise HTTPException(status_code=400, detail="Не удалось прочитать изображение")
-
-    ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(ct, ".jpg")
-    if img.mode in ("RGBA", "P") and ct == "image/jpeg":
-        img = img.convert("RGB")
-
     media_root = Path(settings.MEDIA_ROOT).resolve()
     rel_dir = product.store_id.replace("..", "").strip("/\\")
     out_dir = (media_root / rel_dir).resolve()
     if not str(out_dir).startswith(str(media_root)):
         raise HTTPException(status_code=400, detail="Недопустимый путь")
     out_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4().hex}{ext}"
-    out_path = out_dir / fname
+    fname = f"{uuid.uuid4().hex}"
+    out_path_base = out_dir / fname
 
-    if ct == "image/jpeg":
-        rgb = img.convert("RGB") if img.mode in ("RGBA", "P", "LA") else img
-        if rgb.mode != "RGB":
-            rgb = rgb.convert("RGB")
-        rgb.save(out_path, format="JPEG", quality=88, optimize=True)
-    elif ct == "image/png":
-        img.save(out_path, format="PNG", optimize=True)
-    else:
-        img.save(out_path, format="WEBP", quality=88, method=4)
+    def _process() -> tuple[Path, str]:
+        try:
+            img = Image.open(io.BytesIO(raw))
+            img.load()
+        except OSError as exc:
+            raise ValueError("Не удалось прочитать изображение") from exc
+        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(ct, ".jpg")
+        out = Path(str(out_path_base) + ext)
+        if ct == "image/jpeg":
+            rgb = img.convert("RGB") if img.mode in ("RGBA", "P", "LA") else img
+            if rgb.mode != "RGB":
+                rgb = rgb.convert("RGB")
+            rgb.save(out, format="JPEG", quality=88, optimize=True)
+        elif ct == "image/png":
+            img.save(out, format="PNG", optimize=True)
+        else:
+            img.save(out, format="WEBP", quality=88, method=4)
+        return out, ext
 
-    rel_path = f"{rel_dir}/{fname}".replace("\\", "/")
+    try:
+        out_path, ext = await asyncio.get_event_loop().run_in_executor(None, _process)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    rel_path = f"{rel_dir}/{fname}{ext}".replace("\\", "/")
 
     existing = (
         await db.execute(

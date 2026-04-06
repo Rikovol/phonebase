@@ -152,6 +152,8 @@ async def get_store_stats(
     store = await db.get(Store, store_id)
     if not store:
         raise HTTPException(status_code=404, detail="Магазин не найден")
+    if current_user.role != "admin" and current_user.store_id != store_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к данному магазину")
 
     query = select(AvitoStats).where(AvitoStats.store_id == store_id)
 
@@ -196,6 +198,11 @@ async def get_product_stats(
     current_user: User = Depends(get_current_user),
 ):
     """Статистика Авито по конкретному товару (time series)."""
+    store = await db.get(Store, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+    if current_user.role != "admin" and current_user.store_id != store_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к данному магазину")
     rows = (await db.execute(
         select(AvitoStats)
         .where(
@@ -238,6 +245,8 @@ async def get_store_messages(
     store = await db.get(Store, store_id)
     if not store:
         raise HTTPException(status_code=404, detail="Магазин не найден")
+    if current_user.role != "admin" and current_user.store_id != store_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к данному магазину")
 
     query = select(AvitoMessage).where(AvitoMessage.store_id == store_id)
     if direction:
