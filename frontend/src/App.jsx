@@ -484,6 +484,7 @@ const Icon={
 const fmt = (n) => n != null ? n.toLocaleString("ru") + " ₽" : "—";
 const fmtDt = (s) => { if(!s) return "—"; const d=new Date(s); const p=(v)=>String(v).padStart(2,"0"); return `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const ini = (n) => n ? n[0].toUpperCase() : "?";
+const storageNum = (s) => parseInt(s, 10) || 0;
 function copyText(text) {
   navigator.clipboard.writeText(text);
   const el = document.createElement("div");
@@ -2213,7 +2214,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           if (p.price_retail) { g.sumPrice += p.price_retail; g.count++; if (p.price_retail < g.minPrice) g.minPrice = p.price_retail; if (p.price_retail > g.maxPrice) g.maxPrice = p.price_retail; }
         }
         const groups = Object.entries(groupMap).map(([key, g]) => ({ key, ...g, avgPrice: g.count ? g.sumPrice / g.count : 0 }));
-        groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || (a.storage || "").localeCompare(b.storage || "", "ru"));
+        groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || storageNum(a.storage) - storageNum(b.storage));
         return (
           <div className="tw">
             <table className="pt">
@@ -3261,7 +3262,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
       switch (anSortCol) {
         case "brand": return d * (a.brand || "").localeCompare(b.brand || "", "ru");
         case "model": return d * (a.model || "").localeCompare(b.model || "", "ru");
-        case "storage": return d * (a.storage || "").localeCompare(b.storage || "", "ru");
+        case "storage": return d * (storageNum(a.storage) - storageNum(b.storage));
         case "avg": return d * (a.avg_retail - b.avg_retail);
         case "cost": return d * ((a.avg_cost||0) - (b.avg_cost||0));
         case "comp": return d * ((a.comp_price||0) - (b.comp_price||0));
@@ -3994,6 +3995,7 @@ function CompetitorPricesPage({ user, token }) {
     const d = sortDir === "asc" ? 1 : -1;
     arr.sort((a,b)=>{
       const va=a[sortCol], vb=b[sortCol];
+      if(sortCol==="memory") return d*(storageNum(va)-storageNum(vb));
       if(typeof va==="number"&&typeof vb==="number") return d*(va-vb);
       return d*String(va||"").localeCompare(String(vb||""),"ru");
     });
