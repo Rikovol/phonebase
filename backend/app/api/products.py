@@ -196,7 +196,7 @@ async def list_products(
     sold_from: Optional[str] = Query(None, description="Продано с (YYYY-MM-DD)"),
     sold_to: Optional[str] = Query(None, description="Продано по (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=20000),
+    size: int = Query(20, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

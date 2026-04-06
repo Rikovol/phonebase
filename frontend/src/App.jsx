@@ -1742,7 +1742,7 @@ function ProductPhotoLightbox({ photos, index, onChangeIndex, onClose }) {
 
 // ─── PRODUCTS PAGE ────────────────────────────────────────────────────────────
 /** Максимальный размер одной порции (бэкенд le=20000). */
-const CATALOG_BATCH = 20000;
+const CATALOG_BATCH = 10000;
 
 function mapProductRow(p) {
   return {
