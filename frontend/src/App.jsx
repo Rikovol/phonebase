@@ -488,6 +488,7 @@ const Icon={
   clip:()=><svg {...I.p} width={14} height={14}><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>,
   trash:()=><svg {...I.p} width={14} height={14}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
   card:()=><svg {...I.p} width={14} height={14}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>,
+  msg:()=><svg {...I.p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
 };
 
 // ─── МЕЛКИЕ КОМПОНЕНТЫ ────────────────────────────────────────────────────────
@@ -768,6 +769,8 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [rotating, setRotating] = useState(false);
+  const [photoVer, setPhotoVer] = useState(Date.now());
   const fileRef = useRef(null);
 
   const loadProduct = async () => {
@@ -785,6 +788,19 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
     loadProduct().then(() => { if (!c) setProduct(null); });
     return () => { c = false; };
   }, [productId, token]);
+
+  const doRotate = async (photoId, degrees) => {
+    if (rotating) return;
+    setRotating(true);
+    try {
+      await apiFetch(`/photos/${photoId}/rotate?degrees=${degrees}`, { token, method: "POST" });
+      setPhotoVer(Date.now());
+      await loadProduct();
+    } catch (e) {
+      // ignore rotation errors silently — photo stays as-is
+    }
+    setRotating(false);
+  };
 
   const doUpload = async (file) => {
     setUploading(true); setUploadErr(""); setUploadProgress(10);
@@ -848,7 +864,7 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
                   onClick={() => setBigIdx(i)}
                   title="Увеличить"
                 >
-                  <img src={ph.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={`${ph.url}?v=${photoVer}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   {ph.is_main && <div className="pmb">ГЛАВНОЕ</div>}
                 </button>
               ))}
@@ -857,10 +873,23 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
           {product && user && Access.canEdit(user, { store_name: product.store_name }) && !product.is_sold && (
             <div style={{marginTop:12}}>
               {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
-              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0])doUpload(e.target.files[0]);}}/>
-              <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
-                {uploading?<><span className="spinner"/> Загрузка...</>:<><Icon.camera/> Загрузить фото</>}
-              </button>
+              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0])setUploadFile(e.target.files[0]);}}/>
+              {uploadFile && !uploading && (
+                <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
+                  <span>✓ {uploadFile.name}</span>
+                  <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setUploadFile(null);fileRef.current.value="";}} title="Отменить">✕</button>
+                </div>
+              )}
+              <div style={{display:"inline-flex",gap:6}}>
+                <button type="button" className="btn btn-sm btn-outline" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                  <Icon.camera/> {uploadFile ? "Выбрать другой" : "Выбрать фото"}
+                </button>
+                {uploadFile && (
+                  <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>doUpload(uploadFile)} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                    {uploading?<><span className="spinner"/> Загрузка...</>:"Сохранить"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
           <div className="mf">
@@ -900,11 +929,36 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
           onClick={() => setBigIdx(null)}
         >
           <img
-            src={photos[bigIdx].url}
+            src={`${photos[bigIdx].url}?v=${photoVer}`}
             alt=""
-            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", cursor: "default" }}
+            style={{ maxWidth: "100%", maxHeight: "calc(100% - 60px)", objectFit: "contain", cursor: "default" }}
             onClick={(e) => e.stopPropagation()}
           />
+          {product && user && Access.canEdit(user, { store_name: product.store_name }) && !product.is_sold && (
+            <div
+              style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={rotating}
+                onClick={() => doRotate(photos[bigIdx].id, -90)}
+                title="Повернуть влево"
+                style={{ background: "rgba(30,30,34,.9)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 18, display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {rotating ? <span className="spinner"/> : "↺"} <span style={{fontSize:12}}>Влево</span>
+              </button>
+              <button
+                type="button"
+                disabled={rotating}
+                onClick={() => doRotate(photos[bigIdx].id, 90)}
+                title="Повернуть вправо"
+                style={{ background: "rgba(30,30,34,.9)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 18, display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {rotating ? <span className="spinner"/> : "↻"} <span style={{fontSize:12}}>Вправо</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </>
@@ -920,6 +974,7 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
   const [docType, setDocType] = useState("receipt");
+  const [docFile, setDocFile] = useState(null);
   const docFileRef = useRef(null);
 
   const refreshProduct = async () => {
@@ -1013,6 +1068,8 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка загрузки");
+      setDocFile(null);
+      if (docFileRef.current) docFileRef.current.value = "";
       await refreshProduct();
     } catch (e) {
       setUploadErr(e.message || "Ошибка");
@@ -1084,6 +1141,12 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
         {canManageDocs && (
           <div style={{marginTop:12,padding:"12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
             {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
+            {docFile && !uploading && (
+              <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
+                <span>✓ {docFile.name}</span>
+                <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setDocFile(null);docFileRef.current.value="";}} title="Отменить">✕</button>
+              </div>
+            )}
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <select value={docType} onChange={e=>setDocType(e.target.value)} style={{padding:"6px 8px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}>
                 <option value="receipt">Чек / Квитанция</option>
@@ -1091,10 +1154,16 @@ function PurchaseDocsListModal({ productId, token, user, onClose, onOpenCard }) 
                 <option value="passport_copy">Копия паспорта</option>
                 <option value="other">Другой документ</option>
               </select>
-              <input ref={docFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={e=>{if(e.target.files[0])uploadDoc(e.target.files[0]);}}/>
-              <button type="button" className="btn btn-sm btn-doc" disabled={uploading} onClick={()=>docFileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                {uploading?<><span className="spinner"/> Загрузка...</>:<><Icon.clip/> Загрузить документ</>}
+              <input ref={docFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={e=>{if(e.target.files[0])setDocFile(e.target.files[0]);}}/>
+              <button type="button" className="btn btn-sm btn-outline" disabled={uploading} onClick={()=>docFileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                <Icon.clip/> {docFile ? "Другой файл" : "Выбрать файл"}
               </button>
+              {docFile && !uploading && (
+                <button type="button" className="btn btn-sm btn-doc" onClick={()=>uploadDoc(docFile)} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                  Сохранить
+                </button>
+              )}
+              {uploading && <span style={{fontSize:12,color:"var(--muted)",display:"inline-flex",alignItems:"center",gap:4}}><span className="spinner"/> Загрузка...</span>}
             </div>
           </div>
         )}
@@ -1770,7 +1839,7 @@ function ProductPhotoLightbox({ photos, index, onChangeIndex, onClose }) {
 }
 
 // ─── PRODUCTS PAGE ────────────────────────────────────────────────────────────
-/** Максимальный размер одной порции (бэкенд le=20000). */
+/** Максимальный размер одной порции (бэкенд le=10000). */
 const CATALOG_BATCH = 10000;
 
 function mapProductRow(p) {
@@ -1787,7 +1856,7 @@ function mapProductRow(p) {
 }
 
 function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, isNew, soldOnly = false }) {
-  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
+  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState("");
   const [soldFrom,setSoldFrom]=useState(""); const [soldTo,setSoldTo]=useState("");
   const [brand,setBrand]=useState(""); const [cond,setCond]=useState("");
   const [storeFilter,setStoreFilter]=useState(() => (Access.seesAllStores(user) ? (activeStore || "") : ""));
@@ -1849,7 +1918,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     const t = setTimeout(()=>setDebouncedQ(q), 300);
     return ()=>clearTimeout(t);
   }, [q]);
-  const submitSearch = () => setSubmittedQ(q);
+  const submitSearch = () => setDebouncedQ(q);
 
   useEffect(()=>{
     let cancelled = false;
@@ -1857,7 +1926,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       setLoading(true); setListErr("");
       try {
         const base = new URLSearchParams();
-        if (submittedQ.trim()) base.set("q", submittedQ.trim());
+        if (debouncedQ.trim()) base.set("q", debouncedQ.trim());
         if (brand) base.set("brand", brand);
         if (cond) base.set("condition", cond);
         if (soldOnly) base.set("sold_only", "true");
@@ -1887,7 +1956,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [token, submittedQ, brand, cond, showSold, storeFilter, isNew, soldFrom, soldTo]);
+  }, [token, debouncedQ, brand, cond, showSold, storeFilter, isNew, soldFrom, soldTo]);
 
   const [sentinelEl, setSentinelEl] = useState(null);
   useEffect(() => {
@@ -2027,7 +2096,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
@@ -2694,6 +2763,114 @@ function StoreSettingsPage({ token, activeStore }) {
   );
 }
 
+// ─── СООБЩЕНИЯ АВИТО ─────────────────────────────────────────────────────────
+function MessagesPage({ user, token, activeStore }) {
+  const isAdm = Access.isAdmin(user);
+  const [stores, setStores] = useState([]);
+  const [storeId, setStoreId] = useState("");
+  const [msgs, setMsgs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiFetch("/stores/", { token });
+        setStores(data.items || []);
+      } catch {}
+    })();
+  }, [token]);
+
+  // Staff: auto-select own store only (no fallback to other stores)
+  useEffect(() => {
+    if (!stores.length || isAdm) return;
+    const s = stores.find(s => s.name === user.store_name);
+    if (s?.avito_configured) setStoreId(s.id);
+  }, [stores, isAdm]);
+
+  const load = async (sid) => {
+    if (!sid) return;
+    setLoading(true); setErr("");
+    try {
+      const d = await apiFetch(`/avito/messages/${sid}?limit=5000`, { token });
+      setMsgs(d.items || []);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    } catch (e) {
+      setErr(e.message || "Ошибка загрузки сообщений");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(storeId); }, [storeId, token]);
+
+  const configured = stores.filter(s => s.avito_configured);
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        {isAdm && (
+          <>
+            <label style={{fontSize:11,color:"var(--muted)"}}>Магазин</label>
+            <select className="store-sel" style={{maxWidth:220}} value={storeId} onChange={e=>setStoreId(e.target.value)}>
+              <option value="">— выберите магазин —</option>
+              {configured.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </>
+        )}
+        {storeId && (
+          <button type="button" className="btn btn-sm btn-outline" disabled={loading} onClick={()=>load(storeId)} style={{marginLeft:isAdm?"0":"auto",display:"inline-flex",alignItems:"center",gap:5}}>
+            {loading ? <><span className="spinner"/> Загрузка…</> : "↻ Обновить"}
+          </button>
+        )}
+      </div>
+
+      {isAdm && !storeId && !loading && (
+        <div style={{color:"var(--muted)",fontSize:13,padding:"40px 0",textAlign:"center"}}>Выберите магазин для просмотра сообщений</div>
+      )}
+      {!isAdm && !storeId && !loading && (
+        <div style={{color:"var(--muted)",fontSize:13,padding:"40px 0",textAlign:"center"}}>Нет магазина с подключённым Avito API</div>
+      )}
+      {err && <div className="err" style={{marginBottom:10}}>{err}</div>}
+      {!loading && storeId && msgs.length === 0 && !err && (
+        <div style={{color:"var(--muted)",fontSize:13,padding:"28px 0",textAlign:"center"}}>Нет сообщений</div>
+      )}
+      {msgs.length > 0 && (
+        <div style={{display:"flex",flexDirection:"column",gap:6,overflowY:"auto",padding:"4px 0"}}>
+          {[...msgs].reverse().map(m => {
+            const out = m.direction === "outgoing";
+            const dt = new Date(m.created_at);
+            const dtStr = dt.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"});
+            return (
+              <div key={m.id} style={{display:"flex",justifyContent: out ? "flex-end" : "flex-start"}}>
+                <div style={{
+                  maxWidth:"70%",padding:"9px 13px",
+                  borderRadius: out ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                  background: out ? "rgba(16,185,129,.15)" : "var(--bg3)",
+                  border:`1px solid ${out ? "rgba(16,185,129,.3)" : "var(--border)"}`,
+                  boxShadow:"0 1px 3px rgba(0,0,0,.15)",
+                }}>
+                  {!out && m.author_name && (
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--accent2)",marginBottom:3,textTransform:"uppercase",letterSpacing:.4}}>{m.author_name}</div>
+                  )}
+                  {m.item_title && (
+                    <div style={{fontSize:10,color:"var(--muted)",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:280}}>📦 {m.item_title}</div>
+                  )}
+                  <div style={{fontSize:13,lineHeight:1.55,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+                    {m.content || <span style={{color:"var(--muted)",fontStyle:"italic"}}>медиа-сообщение</span>}
+                  </div>
+                  <div style={{fontSize:10,color:"var(--muted)",marginTop:4,textAlign: out ? "right" : "left"}}>{dtStr} · {out ? "исх." : "вх."}</div>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── АВИТО (мои объявления) ───────────────────────────────────────────────────
 function AvitoPage({ user, token, activeStore, onOpenProduct }) {
   const [items, setItems] = useState([]);
@@ -2705,12 +2882,6 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
   const isInfo = Access.isInfo(user);
   const forcedStore = isAdm ? "" : (user.store_name || "");
   const [storeF, setStoreF] = useState(isAdm ? (activeStore || "") : forcedStore);
-  // Messages section
-  const [msgs, setMsgs] = useState([]);
-  const [msgsLoading, setMsgsLoading] = useState(false);
-  const [msgsErr, setMsgsErr] = useState("");
-  const [msgsStoreId, setMsgsStoreId] = useState("");
-
   useEffect(() => { if (isAdm) setStoreF(activeStore || ""); }, [activeStore, isAdm]);
 
   // Load stores for feed URLs
@@ -2727,7 +2898,7 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
     setLoading(true); setErr("");
     try {
       const store = isAdm ? storeF : forcedStore;
-      const params = new URLSearchParams({ size: "20000", avito_published: "true", is_new: "false" });
+      const params = new URLSearchParams({ size: "10000", avito_published: "true", is_new: "false" });
       if (store) params.set("store", store);
       const data = await apiFetch(`/products/?${params}`, { token });
       setItems(data.items || []);
@@ -2767,29 +2938,6 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
 
   const storeMap = {};
   stores.forEach(s => { storeMap[s.name] = s; });
-
-  // Keep msgsStoreId in sync with store filter
-  useEffect(() => {
-    if (storeF) {
-      const s = storeMap[storeF];
-      if (s?.avito_configured) setMsgsStoreId(s.id);
-    } else {
-      // default to first avito-configured store
-      const first = stores.find(s => s.avito_configured);
-      if (first && !msgsStoreId) setMsgsStoreId(first.id);
-    }
-  }, [storeF, stores]);
-
-  useEffect(() => {
-    if (!msgsStoreId) return;
-    let c = true;
-    setMsgsLoading(true); setMsgsErr("");
-    apiFetch(`/avito/messages/${msgsStoreId}?limit=100`, { token })
-      .then(d => { if (c) setMsgs(d.items || []); })
-      .catch(e => { if (c) setMsgsErr(e.message || "Ошибка загрузки сообщений"); })
-      .finally(() => { if (c) setMsgsLoading(false); });
-    return () => { c = false; };
-  }, [msgsStoreId, token]);
 
   const byStore = {};
   items.forEach(p => {
@@ -2884,51 +3032,6 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
         );
       })}
 
-      {/* ── Сообщения Авито ─────────────────────────────── */}
-      <div style={{marginTop:28}}>
-        <div style={{fontWeight:600,fontSize:14,marginBottom:12,color:"var(--text)"}}>Сообщения Авито</div>
-
-        {/* Store picker shown only when no store filter or no avito-configured store auto-selected */}
-        {isAdm && stores.filter(s=>s.avito_configured).length > 1 && (
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <label style={{fontSize:11,color:"var(--muted)"}}>Магазин</label>
-            <select className="store-sel" style={{maxWidth:220}} value={msgsStoreId} onChange={e=>setMsgsStoreId(e.target.value)}>
-              <option value="">— выберите —</option>
-              {stores.filter(s=>s.avito_configured).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        {!msgsStoreId && <div style={{fontSize:12,color:"var(--muted)"}}>Нет магазина с подключённым Avito API</div>}
-        {msgsLoading && <div style={{fontSize:12,color:"var(--muted)"}}><span className="spinner"/> Загрузка сообщений…</div>}
-        {msgsErr && <div className="err" style={{marginBottom:8}}>{msgsErr}</div>}
-
-        {!msgsLoading && msgsStoreId && msgs.length === 0 && !msgsErr && (
-          <div style={{fontSize:12,color:"var(--muted)"}}>Нет сообщений</div>
-        )}
-
-        {msgs.length > 0 && (
-          <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:480,overflowY:"auto",padding:"4px 0"}}>
-            {[...msgs].reverse().map(m => {
-              const out = m.direction === "outgoing";
-              const dt = new Date(m.created_at);
-              const dtStr = dt.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-              return (
-                <div key={m.id} style={{display:"flex",justifyContent: out ? "flex-end" : "flex-start"}}>
-                  <div style={{
-                    maxWidth:"70%",padding:"8px 12px",borderRadius: out ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                    background: out ? "rgba(16,185,129,.15)" : "var(--bg3)",
-                    border: `1px solid ${out ? "rgba(16,185,129,.25)" : "var(--border)"}`,
-                  }}>
-                    <div style={{fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content || <span style={{color:"var(--muted)",fontStyle:"italic"}}>медиа</span>}</div>
-                    <div style={{fontSize:10,color:"var(--muted)",marginTop:4,textAlign: out ? "right" : "left"}}>{dtStr} · {out ? "исх." : "вх."}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </>
   );
 }
@@ -3195,8 +3298,9 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
 }
 
 function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
-  const [q,setQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
-  const submitSearch = () => setSubmittedQ(q);
+  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState("");
+  useEffect(()=>{const t=setTimeout(()=>setDebouncedQ(q),300);return()=>clearTimeout(t);},[q]);
+  const submitSearch = () => setDebouncedQ(q);
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
   const [includeSold,setIncludeSold]=useState(false);
@@ -3217,7 +3321,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       setLoading(true); setErr("");
       try {
         const params = new URLSearchParams();
-        if (submittedQ.trim()) params.set("q", submittedQ.trim());
+        if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
         if (includeSold) params.set("include_sold", "true");
@@ -3237,7 +3341,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, submittedQ, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
+  }, [token, debouncedQ, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
 
   return (
     <>
@@ -3247,7 +3351,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
         <input className="fi" style={{maxWidth:160}} placeholder="Бренд (точно)" value={brand} onChange={e=>setBrand(e.target.value)}/>
         <select className="fs" value={cond} onChange={e=>setCond(e.target.value)}>
@@ -3788,11 +3892,12 @@ function CompetitorPricesPage({ user, token }) {
   const [total,setTotal]=useState(0);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState("");
-  const [q,setQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
+  const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState("");
+  useEffect(()=>{const t=setTimeout(()=>setDebouncedQ(q),300);return()=>clearTimeout(t);},[q]);
   const [brand,setBrand]=useState("");
   const [source,setSource]=useState("");
   const [parsing,setParsing]=useState(false);
-  const submitSearch = () => setSubmittedQ(q);
+  const submitSearch = () => setDebouncedQ(q);
   const [sortCol,setSortCol]=useState("brand");
   const [sortDir,setSortDir]=useState("asc");
   const isAdm=Access.isAdmin(user);
@@ -3801,7 +3906,7 @@ function CompetitorPricesPage({ user, token }) {
     setLoading(true); setErr("");
     try {
       const params = new URLSearchParams();
-      if (submittedQ.trim()) params.set("q", submittedQ.trim());
+      if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
       if (brand) params.set("brand", brand);
       if (source) params.set("source", source);
       params.set("limit","2000");
@@ -3815,7 +3920,7 @@ function CompetitorPricesPage({ user, token }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ load(); },[token,submittedQ,brand,source]);
+  useEffect(()=>{ load(); },[token,debouncedQ,brand,source]);
 
   const startParse = async (src) => {
     setParsing(true);
@@ -3869,7 +3974,7 @@ function CompetitorPricesPage({ user, token }) {
       <div className="filters">
         <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
-          {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
+          {q && <button onClick={()=>setQ("")} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
         <select className="fs" value={brand} onChange={e=>setBrand(e.target.value)}>
           <option value="">Все бренды</option>
@@ -3947,6 +4052,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     ...(isAdm ? [{ id: "sold", icon: <Icon.check/>, label: "Продано" }] : []),
     { divider: true },
     ...(!Access.isInfo(user) ? [{ id: "avito", icon: <Icon.mega/>, label: "Авито" }] : []),
+    ...(!Access.isInfo(user) ? [{ id: "messages", icon: <Icon.msg/>, label: "Сообщения" }] : []),
     { id: "analytics", icon: <Icon.chart/>, label: "Аналитика цен" },
     { id: "competitor-prices", icon: <Icon.competitors/>, label: "Цены конкурентов" },
     ...(isAdm
@@ -3963,6 +4069,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     "new-products": openCard ? "Карточка товара" : "Новые товары",
     sold: openCard ? "Карточка товара" : "Продано",
     avito: "Авито — мои объявления",
+    messages: "Сообщения Авито",
     analytics: "Аналитика цен",
     "competitor-prices": "Цены конкурентов",
     users: "Пользователи",
@@ -4028,6 +4135,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="sold"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={false} soldOnly={true}/>}
           {page==="sold"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
           {page==="avito"&&<AvitoPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
+          {page==="messages"&&<MessagesPage user={user} token={token} activeStore={activeStore}/>}
           {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="competitor-prices"&&<CompetitorPricesPage user={user} token={token}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
