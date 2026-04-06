@@ -3357,8 +3357,6 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const submitSearch = () => setDebouncedQ(q);
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
-  const [soldFrom,setSoldFrom]=useState("");
-  const [soldTo,setSoldTo]=useState("");
   const [minUnits,setMinUnits]=useState(1);
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -3378,8 +3376,6 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
-        if (soldFrom) params.set("sold_from", soldFrom);
-        if (soldTo) params.set("sold_to", soldTo);
         if (minUnits > 1) params.set("min_units", String(minUnits));
         if (storeF) params.set("store", storeF);
         params.set("is_new", "false");
@@ -3394,7 +3390,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, debouncedQ, brand, cond, soldFrom, soldTo, minUnits, storeF, user.role]);
+  }, [token, debouncedQ, brand, cond, minUnits, storeF, user.role]);
 
   return (
     <>
@@ -3417,12 +3413,6 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
           <option value="">Любое состояние</option>
           {anConditions.map(c=><option key={c}>{c}</option>)}
         </select>
-        <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
-          Продано с <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldFrom} onChange={e=>setSoldFrom(e.target.value)}/>
-        </label>
-        <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
-          по <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldTo} onChange={e=>setSoldTo(e.target.value)}/>
-        </label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
           Мин. шт. в группе
           <input type="number" min={1} max={100} value={minUnits} onChange={e=>setMinUnits(Math.min(100, Math.max(1, parseInt(e.target.value,10)||1)))} style={{width:52,padding:4,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}/>
