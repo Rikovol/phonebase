@@ -3282,8 +3282,8 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
     <div className="tw">
       <table className="pt">
         <thead><tr>
-          {[["brand","Бренд"],["model","Модель"],["storage","Память"]].map(([k,l])=>(
-            <th key={k} style={thS} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
+          {[["brand","Бренд",90],["model","Модель",180],["storage","Память",70]].map(([k,l,w])=>(
+            <th key={k} style={{...thS,width:w}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
           ))}
           <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
           <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
@@ -4053,8 +4053,8 @@ function CompetitorPricesPage({ user, token }) {
             <tr>
               <th style={{...thS,width:90}} onClick={()=>toggleSort("source")}>Источник{arrow("source")}</th>
               <th style={{...thS,width:90}} onClick={()=>toggleSort("brand")}>Бренд{arrow("brand")}</th>
-              <th style={thS} onClick={()=>toggleSort("model")}>Модель{arrow("model")}</th>
-              <th style={{width:80}}>Память</th>
+              <th style={{...thS,width:180}} onClick={()=>toggleSort("model")}>Модель{arrow("model")}</th>
+              <th style={{...thS,width:70}} onClick={()=>toggleSort("memory")}>Память{arrow("memory")}</th>
               <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_excellent")}>Отличное{arrow("price_excellent")}</th>
               <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_good")}>Хорошее{arrow("price_good")}</th>
               <th style={{...thS,textAlign:"right",width:100}} onClick={()=>toggleSort("price_poor")}>Плохое{arrow("price_poor")}</th>
