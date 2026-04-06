@@ -2232,7 +2232,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                       <tr style={{cursor:"pointer"}} onClick={() => setExpandedNew(prev => ({...prev, [g.key]: !prev[g.key]}))}>
                         <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
                         <td className="mono">{g.storage || "—"}</td>
-                        <td style={{fontSize:11,color:"var(--muted)"}}>{g.color || "—"}</td>
+                        <td style={{fontSize:13,color:"var(--text)"}}>{g.color || "—"}</td>
                         <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
                         <td className="tr" style={{color:"var(--success)"}}>{g.count ? (g.minPrice === g.maxPrice ? fmt(g.minPrice) : <>{fmt(g.minPrice)}<span style={{color:"var(--muted)",margin:"0 3px"}}>–</span>{fmt(g.maxPrice)}</>) : "—"}</td>{!isInfo && <td/>}<td/>
                       </tr>
