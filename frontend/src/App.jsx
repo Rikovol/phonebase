@@ -154,53 +154,41 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .btn-ghost:hover{color:var(--danger);background:var(--danger-dim)}
 .err{background:var(--danger-dim);border:1px solid rgba(239,68,68,.25);border-radius:var(--r);padding:10px 13px;font-size:13px;color:#fca5a5;margin-bottom:14px;animation:fadeIn .2s}
 
-/* SHELL */
-.shell{display:flex;height:100vh;overflow:hidden;position:relative}
-.shell::after{content:"";position:absolute;top:56px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(6,182,212,.4),transparent);z-index:10;pointer-events:none}
-.sidebar{width:250px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width .25s cubic-bezier(.4,0,.2,1)}
-.sidebar.collapsed{width:64px}
-.sidebar.collapsed .logo-text,.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-store-sw{display:none}
-.sidebar.collapsed .sb-logo{justify-content:center;padding:14px 10px 12px}
-.sidebar.collapsed .nav-item{justify-content:center;padding:13px 0;margin:3px 8px;width:calc(100% - 16px)}
-.sidebar.collapsed .nav-item .nav-label{display:none}
-.sidebar.collapsed .nav-item .nav-icon{font-size:18px}
-.sidebar.collapsed .sb-user{justify-content:center;padding:14px 8px}
-.sidebar.collapsed .av{width:38px;height:38px}
-.sb-collapse-btn{display:none;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;font-size:12px;transition:all .2s;line-height:1}
-.sb-collapse-btn:hover{background:rgba(6,182,212,.1);color:var(--text)}
-@media(min-width:769px){.sb-collapse-btn{display:flex;align-items:center;justify-content:center}}
-.sidebar.collapsed .sb-sec{justify-content:center}
-.sb-logo{padding:14px 18px 12px;border-bottom:none;display:flex;align-items:center;gap:12px}
-.sb-nav{flex:1;overflow-y:auto;padding:2px 0}
-.sb-sec{padding:4px 14px 4px;font-size:10px;font-weight:700;color:rgba(6,182,212,.7);text-transform:uppercase;letter-spacing:1.4px;display:flex;align-items:center;justify-content:space-between}
-.nav-divider{height:1px;margin:6px 18px;background:linear-gradient(90deg,transparent,rgba(6,182,212,.25),transparent)}
-.nav-item{display:flex;align-items:center;gap:10px;padding:13px 18px;margin:3px 10px;border-radius:10px;color:rgba(236,236,240,.7);font-size:14px;font-weight:500;cursor:pointer;border:none;background:none;width:calc(100% - 20px);text-align:left;transition:all .2s cubic-bezier(.4,0,.2,1);letter-spacing:.1px}
-.nav-icon{font-size:15px;flex-shrink:0;width:20px;text-align:center;transition:transform .2s}
+/* SHELL — TOP NAVBAR */
+.shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.navbar{display:flex;align-items:center;gap:0;height:56px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+.navbar::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(6,182,212,.4),rgba(217,70,239,.3),transparent);pointer-events:none}
+.nb-logo{display:flex;align-items:center;gap:10px;margin-right:24px;flex-shrink:0}
+.nb-logo .logo-icon{width:36px;height:36px;border-radius:10px}
+.nb-logo .logo-text{font-size:20px}
+.nb-nav{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.nb-nav::-webkit-scrollbar{display:none}
+.nav-item{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;white-space:nowrap;transition:all .2s;font-family:var(--sans)}
+.nav-icon{font-size:14px;flex-shrink:0;transition:transform .15s}
 .nav-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nav-item:hover{background:rgba(6,182,212,.08);color:#e2e8f0;transform:translateX(3px)}
-.nav-item:hover .nav-icon{transform:scale(1.15)}
-.nav-item.active{background:linear-gradient(135deg,rgba(6,182,212,.22) 0%,rgba(6,182,212,.1) 100%);color:#67e8f9;font-weight:700;box-shadow:inset 3px 0 0 #06b6d4;border:1px solid rgba(6,182,212,.2)}
-.nav-item.active .nav-icon{transform:scale(1.1)}
-.sb-store-sw{padding:12px 14px;border-top:1px solid rgba(6,182,212,.1)}
-.store-sel{width:100%;padding:9px 11px;background:rgba(20,20,22,.6);border:1px solid rgba(6,182,212,.2);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:12px;cursor:pointer;outline:none;transition:all .2s}
-.store-sel:focus{border-color:#06b6d4;box-shadow:0 0 0 3px rgba(6,182,212,.15)}
-.sb-user{padding:14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(6,182,212,.1);display:flex;align-items:center;gap:10px}
-.av{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:transform .15s}
+.nav-item:hover{background:rgba(6,182,212,.08);color:var(--text)}
+.nav-item:hover .nav-icon{transform:scale(1.1)}
+.nav-item.active{background:linear-gradient(135deg,rgba(6,182,212,.15),rgba(217,70,239,.08));color:var(--cyan);font-weight:700;border:1px solid rgba(6,182,212,.2)}
+.nav-divider{width:1px;height:24px;background:var(--border);margin:0 4px;flex-shrink:0}
+.nb-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}
+.nb-user{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:8px;transition:background .15s}
+.nb-user:hover{background:rgba(6,182,212,.08)}
+.av{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;transition:transform .15s}
 .av:hover{transform:scale(1.08)}
-.av-admin{background:rgba(6,182,212,.18);border:1px solid rgba(6,182,212,.35);color:var(--accent2)}
-.av-staff{background:var(--success-dim);border:1px solid rgba(6,182,212,.3);color:var(--success)}
-.sb-info{flex:1;min-width:0}
-.sb-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-role{font-size:10px;color:var(--muted);margin-top:1px}
+.av-admin{background:rgba(6,182,212,.18);border:1px solid rgba(6,182,212,.35);color:var(--cyan)}
+.av-staff{background:rgba(217,70,239,.12);border:1px solid rgba(217,70,239,.3);color:var(--accent2)}
+.nb-name{font-size:12px;font-weight:600;color:var(--text)}
+.nb-role{font-size:10px;color:var(--muted)}
+.nb-version{font-size:10px;color:var(--muted);font-family:var(--mono);margin-left:8px}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
-.topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:10px;height:56px;flex-shrink:0;background:var(--bg2);padding-bottom:10px}
-.topbar-title{font-size:18px;font-weight:500;letter-spacing:-.2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:center;color:var(--text);text-shadow:0 0 20px rgba(236,236,240,.15)}
-.topbar-store-sel{font-size:10px;padding:4px 8px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500;background:var(--bg3);color:var(--muted);border:1px solid var(--border);cursor:pointer;outline:none;max-width:150px}
+.topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;height:48px;flex-shrink:0;background:var(--bg)}
+.topbar-title{font-size:16px;font-weight:600;letter-spacing:-.2px;flex:1;color:var(--text)}
+.topbar-store-sel{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500;background:var(--bg3);color:var(--muted);border:1px solid var(--border);cursor:pointer;outline:none;max-width:150px}
 .badge{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500}
 .b-store{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
-.b-admin{background:rgba(6,182,212,.12);color:var(--accent2);border:1px solid rgba(6,182,212,.3)}
-.b-staff{background:var(--success-dim);color:var(--success);border:1px solid rgba(6,182,212,.3)}
-.content{flex:1;overflow-y:auto;padding:16px 20px;animation:fadeUp .25s ease}
+.b-admin{background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.3)}
+.b-staff{background:rgba(217,70,239,.12);color:var(--accent2);border:1px solid rgba(217,70,239,.3)}
+.content{flex:1;overflow-y:auto;padding:16px 20px;max-width:1400px;width:100%;margin:0 auto;animation:fadeUp .25s ease}
 
 /* BANNER */
 .banner{padding:10px 14px;border-radius:var(--r);font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;border:1px solid;line-height:1.6;animation:slideInLeft .3s ease}
@@ -410,28 +398,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .sold-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:3px 9px;border-radius:6px;background:rgba(119,119,138,.1);color:var(--muted);border:1px solid var(--border);white-space:nowrap;font-weight:500}
 .sold-banner{background:rgba(119,119,138,.06);border:1px solid rgba(119,119,138,.18);border-radius:var(--r);padding:10px 14px;font-size:12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--muted);line-height:1.6}
 
-/* MOBILE HAMBURGER */
-.hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:4px 6px;line-height:1;flex-shrink:0;border-radius:6px;transition:background .15s}
+/* MOBILE NAV */
+.hamburger{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px;border-radius:6px;transition:background .15s;flex-shrink:0}
 .hamburger:hover{background:var(--bg3)}
-.sidebar-overlay{display:none}
+.mobile-menu{display:none;position:fixed;top:56px;left:0;right:0;background:var(--bg2);border-bottom:1px solid var(--border);z-index:300;padding:8px;animation:fadeUp .2s ease;max-height:calc(100vh - 56px);overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.mobile-menu.open{display:flex;flex-wrap:wrap;gap:4px}
+.mobile-overlay{display:none;position:fixed;inset:0;top:56px;background:rgba(0,0,0,.55);z-index:299;backdrop-filter:blur(2px)}
+.mobile-overlay.open{display:block;animation:fadeIn .2s}
 
-/* RESPONSIVE */
 @media(max-width:768px){
   .hamburger{display:flex;align-items:center;justify-content:center}
-  .shell{flex-direction:column;height:100vh;height:100dvh}
-  .sidebar{position:fixed;top:0;left:-280px;width:270px;height:100vh;height:100dvh;z-index:300;transition:left .3s cubic-bezier(.4,0,.2,1);box-shadow:none;background:var(--bg2)}
-  .sidebar.open{left:0;box-shadow:8px 0 32px rgba(0,0,0,.7)}
-  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:299;display:none;backdrop-filter:blur(2px)}
-  .sidebar-overlay.open{display:block;animation:fadeIn .2s}
-  .main{width:100%;height:100vh;height:100dvh}
-  .topbar{padding:0 10px;gap:6px;height:52px;align-items:center;padding-bottom:0}
-  .topbar-title{font-size:14px;text-align:left}
-  .topbar-role-badge{display:none}
+  .nb-nav{display:none}
+  .nb-name,.nb-role,.nb-version{display:none}
+  .topbar{padding:0 10px;height:44px}
+  .topbar-title{font-size:14px}
   .topbar-store-sel{max-width:110px;font-size:10px}
-  .shell::after{top:52px}
-  .content{padding:10px 10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
-  .lb{width:calc(100vw - 32px);max-width:400px;padding:28px 22px}
-  .cpwb{width:calc(100vw - 32px);max-width:420px;padding:26px 20px}
+  .content{padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
   .stats-bar{gap:6px}
   .sc{min-width:calc(50% - 3px);flex:none;padding:8px 10px}
   .sc-val{font-size:15px}
@@ -442,7 +424,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .legend{flex-direction:column;gap:5px;font-size:10px}
   .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px}
   .pt{min-width:660px}
-  .pt th{position:static;top:auto;z-index:auto}
+  .pt th{position:static}
   .pt th,.pt td{padding:6px 8px;font-size:11px}
   .pt-thumb-cell{width:34px;padding:3px 5px!important}
   .pt-thumb{width:30px;height:30px;border-radius:6px}
@@ -458,13 +440,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .pb2{padding:12px}
   .badge{max-width:80px;overflow:hidden;text-overflow:ellipsis}
 }
-
 @media(max-width:400px){
   .topbar-title{font-size:13px}
   .badge{font-size:9px;padding:3px 6px;max-width:60px}
   .sc{min-width:calc(50% - 3px)}
   .sc-val{font-size:14px}
-  .sc-label{font-size:9px}
   .pt{min-width:560px}
   .fi{min-width:100%;flex-basis:100%}
   .pgrid{grid-template-columns:repeat(2,1fr)}
@@ -4097,28 +4077,22 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
   const [activeStore,setActiveStore]=useState(()=>user.role==="staff"?(user.store_name||""):"");
   const [openCard,setOpenCard]=useState(null);
   const [accountOpen,setAccountOpen]=useState(false);
-  const [sidebarOpen,setSidebarOpen]=useState(false);
-  const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>localStorage.getItem("pb_sidebar_collapsed")==="1");
+  const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
   const isAdm = Access.isAdmin(user);
   const seesAll = Access.seesAllStores(user);
   const storeLabel = seesAll ? (activeStore || "Все магазины") : user.store_name;
-  const roleShort =
-    user.role === "admin"
-      ? "Администратор"
-      : user.role === "info"
-        ? "Инфо"
-        : "Сотрудник";
+  const roleShort = user.role === "admin" ? "Администратор" : user.role === "info" ? "Инфо" : "Сотрудник";
   const openProduct = (id) => { setPage("products"); setOpenCard(id); };
   const openNewProduct = (id) => { setPage("new-products"); setOpenCard(id); };
   const nav = [
     { id: "products", icon: <Icon.box/>, label: "Б/У Товары" },
-    { id: "new-products", icon: <Icon.plus/>, label: "Новые товары" },
+    { id: "new-products", icon: <Icon.plus/>, label: "Новые" },
     ...(isAdm ? [{ id: "sold", icon: <Icon.check/>, label: "Продано" }] : []),
     { divider: true },
     ...(!Access.isInfo(user) ? [{ id: "avito", icon: <Icon.mega/>, label: "Авито" }] : []),
     ...(!Access.isInfo(user) ? [{ id: "messages", icon: <Icon.msg/>, label: "Сообщения" }] : []),
-    { id: "analytics", icon: <Icon.chart/>, label: "Аналитика цен" },
-    { id: "competitor-prices", icon: <Icon.competitors/>, label: "Цены конкурентов" },
+    { id: "analytics", icon: <Icon.chart/>, label: "Аналитика" },
+    { id: "competitor-prices", icon: <Icon.competitors/>, label: "Конкуренты" },
     ...(isAdm
       ? [
           { divider: true },
@@ -4140,47 +4114,19 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     logs: "Логи",
     "store-settings": "Настройки магазина",
   };
-  const goNav=(id)=>{setPage(id);sessionStorage.setItem("pb_page",id);setOpenCard(null);setSidebarOpen(false);};
+  const goNav=(id)=>{setPage(id);sessionStorage.setItem("pb_page",id);setOpenCard(null);setMobileMenuOpen(false);};
   return (
     <div className="shell">
-      <div className={`sidebar-overlay${sidebarOpen?" open":""}`} onClick={()=>setSidebarOpen(false)}/>
-      <div className={`sidebar${sidebarOpen?" open":""}${sidebarCollapsed?" collapsed":""}`}>
-        <div className="sb-logo">
-          <div className="logo-icon" style={{width:44,height:44,borderRadius:14}}><Icon.logo/></div>
+      <nav className="navbar">
+        <button className="hamburger" onClick={()=>setMobileMenuOpen(o=>!o)}>☰</button>
+        <div className="nb-logo">
+          <div className="logo-icon" style={{width:36,height:36,borderRadius:10}}><Icon.logo/></div>
           <LogoWordmark compact />
         </div>
-        <div className="sb-nav">
-          <div className="sb-sec"><span/><button className="sb-collapse-btn" onClick={()=>setSidebarCollapsed(v=>{localStorage.setItem("pb_sidebar_collapsed",v?"0":"1");return !v;})} title={sidebarCollapsed?"Развернуть":"Свернуть"}>{sidebarCollapsed?"▶":"◀"}</button></div>
+        <div className="nb-nav">
           {nav.map((n,i)=>n.divider?<div key={"d"+i} className="nav-divider"/>:<button key={n.id} className={`nav-item${page===n.id?" active":""}`} onClick={()=>goNav(n.id)} title={n.label}><span className="nav-icon">{n.icon}</span><span className="nav-label">{n.label}</span></button>)}
         </div>
-        <div className="sb-user">
-          <div className={`av ${isAdm?"av-admin":"av-staff"}`} style={{cursor:"pointer"}} title="Личный кабинет" onClick={() => setAccountOpen(true)}>{ini(user.full_name)}</div>
-          <div className="sb-info" style={{cursor:"pointer"}} title="Личный кабинет" onClick={() => setAccountOpen(true)}>
-            <div className="sb-name">{user.full_name || user.username}</div>
-            <div className="sb-role">{roleShort}{user.store_name?` · ${user.store_name}`:""}</div>
-          </div>
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <button type="button" className="btn-ghost" title="Выйти" onClick={onLogout}>
-              ⏏
-            </button>
-          </div>
-        </div>
-        <div style={{padding:"8px 16px",fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)",textAlign:"center",borderTop:"1px solid var(--border)"}}>v{APP_VERSION}</div>
-      </div>
-      {accountOpen && (
-        <AccountModal
-          user={user}
-          token={token}
-          onClose={() => setAccountOpen(false)}
-          onSaved={() => {
-            onRefreshUser?.();
-          }}
-        />
-      )}
-      <div className="main">
-        <div className="topbar">
-          <button className="hamburger" onClick={()=>setSidebarOpen(o=>!o)}>☰</button>
-          <div className="topbar-title">{titles[page]}</div>
+        <div className="nb-right">
           {seesAll ? (
             <select className="topbar-store-sel" value={activeStore} onChange={e=>{setActiveStore(e.target.value);setOpenCard(null);}}>
               <option value="">Все магазины</option>
@@ -4189,7 +4135,32 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           ) : (
             <span className="badge b-store">{storeLabel}</span>
           )}
-          <span className={`badge topbar-role-badge ${isAdm?"b-admin":"b-staff"}`} style={{cursor:"pointer"}} onClick={()=>setAccountOpen(true)} title="Личный кабинет">{roleShort}</span>
+          <div className="nb-user" onClick={()=>setAccountOpen(true)} title="Личный кабинет">
+            <div className={`av ${isAdm?"av-admin":"av-staff"}`}>{ini(user.full_name)}</div>
+            <div>
+              <div className="nb-name">{user.full_name || user.username}</div>
+              <div className="nb-role">{roleShort}</div>
+            </div>
+          </div>
+          <button type="button" className="btn-ghost" title="Выйти" onClick={onLogout}>⏏</button>
+          <span className="nb-version">v{APP_VERSION}</span>
+        </div>
+      </nav>
+      <div className={`mobile-overlay${mobileMenuOpen?" open":""}`} onClick={()=>setMobileMenuOpen(false)}/>
+      <div className={`mobile-menu${mobileMenuOpen?" open":""}`}>
+        {nav.filter(n=>!n.divider).map(n=><button key={n.id} className={`nav-item${page===n.id?" active":""}`} onClick={()=>goNav(n.id)}><span className="nav-icon">{n.icon}</span><span className="nav-label">{n.label}</span></button>)}
+      </div>
+      {accountOpen && (
+        <AccountModal
+          user={user}
+          token={token}
+          onClose={() => setAccountOpen(false)}
+          onSaved={() => { onRefreshUser?.(); }}
+        />
+      )}
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-title">{titles[page]}</div>
         </div>
         <div className="content">
           {page==="products"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={false}/>}
