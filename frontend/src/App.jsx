@@ -78,26 +78,26 @@ const Access = {
 // ─── MOCK ДАННЫЕ ──────────────────────────────────────────────────────────────
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fira+Code:wght@400;500;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0c0c0e;--bg2:#141416;--bg3:#1c1c20;--bg4:#26262b;
-  --border:#2a2a30;--border2:#3a3a42;
-  --text:#ececf0;--muted:#9494a6;
-  --accent:#10b981;--accent2:#34d399;--accent-glow:rgba(16,185,129,.2);
+  --bg:#080810;--bg2:#101018;--bg3:#18182a;--bg4:#22223a;
+  --border:#1a1a2a;--border2:#2a2a3a;
+  --text:#e2e8f0;--muted:#9494a6;
+  --accent:#06b6d4;--accent2:#d946ef;--accent-glow:rgba(6,182,212,.2);
   --cyan:#22d3ee;--cyan-dim:rgba(34,211,238,.1);
   --success:#34d399;--success-dim:rgba(52,211,153,.1);
   --warn:#f59e0b;--warn-dim:rgba(245,158,11,.1);
   --danger:#ef4444;--danger-dim:rgba(239,68,68,.1);
-  --gradient:linear-gradient(135deg,#10b981,#34d399);
-  --gradient2:linear-gradient(135deg,#06b6d4,#10b981);
-  --mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;--r:8px;
+  --gradient:linear-gradient(135deg,#06b6d4,#d946ef);
+  --gradient2:linear-gradient(135deg,#22d3ee,#06b6d4);
+  --mono:'Fira Code',monospace;--sans:'Space Grotesk',system-ui,sans-serif;--r:8px;
   --shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.04);
   --shadow-lg:0 8px 32px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.06);
 }
 html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;line-height:1.5}
-::selection{background:rgba(16,185,129,.3);color:#fff}
+::selection{background:rgba(6,182,212,.3);color:#fff}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
