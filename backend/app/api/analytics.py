@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
@@ -31,6 +31,7 @@ class PriceAggRow(BaseModel):
     storage: Optional[str] = None
     condition: Optional[str] = None
     count: int = Field(..., ge=0)
+    in_stock_count: int = Field(0, ge=0)
     avg_retail: float
     min_retail: float
     max_retail: float
@@ -129,6 +130,7 @@ async def price_aggregates(
             func.min(Product.price_retail).label("min_p"),
             func.max(Product.price_retail).label("max_p"),
             func.avg(Product.price_cost).label("avg_cost"),
+            func.sum(case((Product.is_sold == False, 1), else_=0)).label("in_stock_cnt"),  # noqa: E712
         )
         .select_from(Product)
         .join(Store, Product.store_id == Store.id)
@@ -137,25 +139,29 @@ async def price_aggregates(
         .where(Product.in_repair.is_(False))
         .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
     )
+    # Аналитика всегда включает проданные за последние 2 месяца для расчёта средних цен
+    from datetime import datetime, timezone, timedelta
     base = _apply_product_filters(
         base,
         store=store,
         brand=brand,
         condition=condition,
         q=q,
-        include_sold=include_sold,
+        include_sold=True,
         is_new=is_new,
     )
-    if sold_from:
-        from datetime import datetime, timezone
-        base = base.where(Product.sold_at >= datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc))
+    # Непроданные всегда в выборке; проданные — только за последние 2 месяца (или пользовательский диапазон)
+    if not sold_from:
+        sold_from = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d")
+    dt_from = datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc)
+    base = base.where(or_(Product.is_sold == False, Product.sold_at >= dt_from))  # noqa: E712
     if sold_to:
-        from datetime import datetime, timezone, timedelta
-        end = datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)
-        base = base.where(Product.sold_at < end)
+        dt_to = datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)
+        base = base.where(or_(Product.is_sold == False, Product.sold_at < dt_to))  # noqa: E712
     base = base.group_by(Product.brand, Product.model, Product.storage, Product.condition)
-    base = base.having(func.count() >= min_units)
-    base = base.order_by(func.count().desc(), Product.model.asc()).limit(limit)
+    in_stock_expr = func.sum(case((Product.is_sold == False, 1), else_=0))  # noqa: E712
+    base = base.having(in_stock_expr >= min_units)
+    base = base.order_by(in_stock_expr.desc(), Product.model.asc()).limit(limit)
 
     rows = (await db.execute(base)).all()
 
@@ -213,6 +219,7 @@ async def price_aggregates(
             storage=r.storage,
             condition=r.condition,
             count=int(r.cnt),
+            in_stock_count=int(r.in_stock_cnt or 0),
             avg_retail=float(r.avg_p or 0),
             min_retail=float(r.min_p or 0),
             avg_cost=float(r.avg_cost) if r.avg_cost else None,

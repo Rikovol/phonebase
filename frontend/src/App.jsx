@@ -3198,7 +3198,7 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
 }
 
 // ─── ANALYTICS (свои данные BaseStock; без парсинга Авито) ─────────────────────
-function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, includeSold, user, onOpenProduct }) {
+function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, user, onOpenProduct }) {
   const [expanded, setExpanded] = useState({});
   const [details, setDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState({});
@@ -3212,7 +3212,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
         const params = new URLSearchParams();
         params.set("q", model);
         if (storage) params.set("storage", storage);
-        if (!includeSold) params.set("in_stock", "true");
+        params.set("in_stock", "true");
         params.set("is_new", "false");
         params.set("limit", "200");
         const data = await apiFetch(`/products/?${params.toString()}`, { token });
@@ -3232,9 +3232,10 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
     const map = {};
     for (const row of items) {
       const key = `${row.brand||""}|${row.model}|${row.storage||""}`;
-      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, sumRetail: 0, sumCost: 0, costCount: 0, competitor: null };
+      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, inStockCount: 0, sumRetail: 0, sumCost: 0, costCount: 0, competitor: null };
       const g = map[key];
       g.totalCount += row.count;
+      g.inStockCount += (row.in_stock_count || 0);
       g.sumRetail += (row.avg_retail || 0) * row.count;
       if (row.avg_cost) { g.sumCost += row.avg_cost * row.count; g.costCount += row.count; }
       if (row.competitor && !g.competitor) g.competitor = row.competitor;
@@ -3250,7 +3251,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
       else if (avg_cost) market_avg = avg_cost;
       return {
         key, brand: g.brand, model: g.model, storage: g.storage,
-        avg_retail, avg_cost, count: g.totalCount,
+        avg_retail, avg_cost, count: g.inStockCount,
         competitor: g.competitor, comp_price, market_avg,
       };
     });
@@ -3356,7 +3357,6 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const submitSearch = () => setDebouncedQ(q);
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
-  const [includeSold,setIncludeSold]=useState(false);
   const [soldFrom,setSoldFrom]=useState("");
   const [soldTo,setSoldTo]=useState("");
   const [minUnits,setMinUnits]=useState(1);
@@ -3378,9 +3378,8 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
-        if (includeSold) params.set("include_sold", "true");
-        if (includeSold && soldFrom) params.set("sold_from", soldFrom);
-        if (includeSold && soldTo) params.set("sold_to", soldTo);
+        if (soldFrom) params.set("sold_from", soldFrom);
+        if (soldTo) params.set("sold_to", soldTo);
         if (minUnits > 1) params.set("min_units", String(minUnits));
         if (storeF) params.set("store", storeF);
         params.set("is_new", "false");
@@ -3395,7 +3394,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, debouncedQ, brand, cond, includeSold, soldFrom, soldTo, minUnits, storeF, user.role]);
+  }, [token, debouncedQ, brand, cond, soldFrom, soldTo, minUnits, storeF, user.role]);
 
   return (
     <>
@@ -3418,18 +3417,12 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
           <option value="">Любое состояние</option>
           {anConditions.map(c=><option key={c}>{c}</option>)}
         </select>
-        <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--muted)",cursor:"pointer",whiteSpace:"nowrap"}}>
-          <input type="checkbox" checked={includeSold} onChange={e=>{setIncludeSold(e.target.checked);if(!e.target.checked){setSoldFrom("");setSoldTo("");}}} style={{accentColor:"var(--accent)"}}/>
-          С проданными
+        <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
+          Продано с <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldFrom} onChange={e=>setSoldFrom(e.target.value)}/>
         </label>
-        {includeSold && <>
-          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
-            с <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldFrom} onChange={e=>setSoldFrom(e.target.value)}/>
-          </label>
-          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
-            по <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldTo} onChange={e=>setSoldTo(e.target.value)}/>
-          </label>
-        </>}
+        <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
+          по <input type="date" className="fi" style={{maxWidth:140,fontSize:11,padding:"6px 8px"}} value={soldTo} onChange={e=>setSoldTo(e.target.value)}/>
+        </label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
           Мин. шт. в группе
           <input type="number" min={1} max={100} value={minUnits} onChange={e=>setMinUnits(Math.min(100, Math.max(1, parseInt(e.target.value,10)||1)))} style={{width:52,padding:4,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}/>
@@ -3437,7 +3430,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         <span className="fc">{items.length} групп</span>
       </div>
 
-      <AnalyticsTable items={items} loading={loading} anSortCol={anSortCol} anSortDir={anSortDir} setAnSortCol={setAnSortCol} setAnSortDir={setAnSortDir} token={token} includeSold={includeSold} user={user} onOpenProduct={onOpenProduct}/>
+      <AnalyticsTable items={items} loading={loading} anSortCol={anSortCol} anSortDir={anSortDir} setAnSortCol={setAnSortCol} setAnSortDir={setAnSortDir} token={token} user={user} onOpenProduct={onOpenProduct}/>
     </>
   );
 }
