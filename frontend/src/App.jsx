@@ -4081,7 +4081,8 @@ function CompetitorPricesPage({ user, token }) {
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
   const [page,setPage]=useState(()=>sessionStorage.getItem("pb_page")||"products");
-  const [activeStore,setActiveStore]=useState(()=>user.role==="staff"?(user.store_name||""):"");
+  const [activeStore,_setActiveStore]=useState(()=>user.role==="staff"?(user.store_name||""):(sessionStorage.getItem("pb_store")||""));
+  const setActiveStore=(v)=>{_setActiveStore(v);sessionStorage.setItem("pb_store",v);};
   const [openCard,setOpenCard]=useState(null);
   const [accountOpen,setAccountOpen]=useState(false);
   const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
