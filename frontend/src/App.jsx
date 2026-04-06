@@ -2289,9 +2289,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const isAbnormalQty = qty < 0 || qty > 1;
               const isRepairCondition = p.in_repair || ["Ремонт","Требуется ремонт","Залог"].includes(p.condition);
               const rowCls  = [p.is_sold?"sold":"", p.in_repair&&!p.is_sold?"rep":"", own?"own":"", isAbnormalQty?"qty-warn":""].filter(Boolean).join(" ");
-              const storeColor = STORE_COLORS[p.store_name];
               return (
-                <tr key={p.id} className={rowCls} style={storeColor&&!p.in_repair&&!isAbnormalQty?{background:`${storeColor}12`}:undefined}>
+                <tr key={p.id} className={rowCls}>
                   {showSold && <td style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--text)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                   <td className={isAbnormalQty?"qty-wm":undefined} style={isAbnormalQty?{position:"relative"}:undefined}>
