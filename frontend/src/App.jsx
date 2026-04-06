@@ -1852,17 +1852,15 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     return () => { cancelled = true; };
   }, [token, submittedQ, brand, cond, showSold, storeFilter, isNew]);
 
-  const sentinelRef = useRef(null);
+  const [sentinelEl, setSentinelEl] = useState(null);
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
+    if (!sentinelEl) return;
     const obs = new IntersectionObserver(([e]) => {
       if (e.isIntersecting) setVisibleCount(v => v + 80);
     }, { rootMargin: "200px" });
-    obs.observe(el);
+    obs.observe(sentinelEl);
     return () => obs.disconnect();
-  }, []);
-
+  }, [sentinelEl]);
   useEffect(() => { setVisibleCount(80); }, [sortCol, sortDir, avitoFilter, costColorFilter]);
 
   function priceColor(p) {
@@ -2179,7 +2177,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           </tbody>
         </table>
       </div>
-      {visibleCount < slice.length && <div ref={sentinelRef} style={{height:1}}/>}
+      {visibleCount < slice.length && <div ref={setSentinelEl} style={{height:1}}/>}
       </>
       )}
 
