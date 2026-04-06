@@ -134,7 +134,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .lsub{color:var(--muted);font-size:13px;margin-bottom:26px}
 .field{margin-bottom:16px}
 .field label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px}
-.field input,.field select{width:100%;padding:10px 13px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:all .2s}
+.field input,.field select{width:100%;padding:10px 13px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:all .2s;-webkit-appearance:none;-moz-appearance:none;appearance:none}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239494a6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .field input::placeholder{color:var(--muted)}
 .btn{padding:10px 18px;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);letter-spacing:.01em}
@@ -183,7 +184,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
 .topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;height:48px;flex-shrink:0;background:var(--bg)}
 .topbar-title{font-size:16px;font-weight:600;letter-spacing:-.2px;flex:1;color:var(--text)}
-.topbar-store-sel{font-size:12px;padding:6px 14px;border-radius:8px;font-family:var(--mono);white-space:nowrap;font-weight:600;background:var(--bg3);color:var(--text);border:1px solid var(--border2);cursor:pointer;outline:none;max-width:180px;transition:all .2s}
+.topbar-store-sel{font-size:12px;padding:6px 14px;border-radius:8px;font-family:var(--mono);white-space:nowrap;font-weight:600;background:var(--bg3);color:var(--text);border:1px solid var(--border2);cursor:pointer;outline:none;max-width:180px;transition:all .2s;-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239494a6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
 .topbar-store-sel:hover{border-color:var(--accent);color:var(--cyan)}
 .topbar-store-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .badge{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500}
@@ -213,7 +214,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .fi{flex:1;min-width:160px;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:all .2s}
 .fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .fi::placeholder{color:var(--muted)}
-.fs{padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:12px;cursor:pointer;outline:none;transition:all .2s}
+.fs{padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:12px;cursor:pointer;outline:none;transition:all .2s;-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239494a6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:26px}
 .fs:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .fc{font-size:11px;color:var(--accent2);font-family:var(--mono);font-weight:500}
 
