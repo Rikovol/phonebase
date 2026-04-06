@@ -156,12 +156,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 /* SHELL — TOP NAVBAR */
 .shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.navbar{display:flex;align-items:center;gap:0;height:56px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+.navbar{display:flex;align-items:center;gap:0;height:56px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative;box-sizing:border-box}
 .navbar::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(6,182,212,.4),rgba(217,70,239,.3),transparent);pointer-events:none}
 .nb-logo{display:flex;align-items:center;gap:10px;margin-right:24px;flex-shrink:0}
 .nb-logo .logo-icon{width:36px;height:36px;border-radius:10px}
 .nb-logo .logo-text{font-size:20px}
-.nb-nav{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.nb-nav{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;height:100%}
 .nb-nav::-webkit-scrollbar{display:none}
 .nav-item{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;white-space:nowrap;transition:all .2s;font-family:var(--sans)}
 .nav-icon{font-size:14px;flex-shrink:0;transition:transform .15s}
@@ -183,12 +183,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
 .topbar{padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;height:48px;flex-shrink:0;background:var(--bg)}
 .topbar-title{font-size:16px;font-weight:600;letter-spacing:-.2px;flex:1;color:var(--text)}
-.topbar-store-sel{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500;background:var(--bg3);color:var(--muted);border:1px solid var(--border);cursor:pointer;outline:none;max-width:150px}
+.topbar-store-sel{font-size:12px;padding:6px 14px;border-radius:8px;font-family:var(--mono);white-space:nowrap;font-weight:600;background:var(--bg3);color:var(--text);border:1px solid var(--border2);cursor:pointer;outline:none;max-width:180px;transition:all .2s}
+.topbar-store-sel:hover{border-color:var(--accent);color:var(--cyan)}
+.topbar-store-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .badge{font-size:10px;padding:4px 10px;border-radius:20px;font-family:var(--mono);white-space:nowrap;font-weight:500}
 .b-store{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
 .b-admin{background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.3)}
 .b-staff{background:rgba(217,70,239,.12);color:var(--accent2);border:1px solid rgba(217,70,239,.3)}
-.content{flex:1;overflow-y:auto;padding:16px 20px;max-width:1400px;width:100%;margin:0 auto;animation:fadeUp .25s ease}
+.content{flex:1;overflow-y:auto;padding:16px 24px;width:100%;animation:fadeUp .25s ease}
 
 /* BANNER */
 .banner{padding:10px 14px;border-radius:var(--r);font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;border:1px solid;line-height:1.6;animation:slideInLeft .3s ease}
