@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { version as APP_VERSION } from "../package.json";
 
 // ─── КОНФИГУРАЦИЯ ─────────────────────────────────────────────────────────────
 const API_BASE = "/api";
@@ -527,6 +528,7 @@ function LoginScreen({ onLogin }) {
         <div className="field"><label>Пароль</label><input type="password" placeholder="••••••••" value={p} onChange={e=>setP(e.target.value)}/></div>
         <button className="btn btn-primary btn-full" disabled={loading}>{loading?<span className="spinner"/>:"Войти"}</button>
       </form>
+      <div style={{marginTop:16,textAlign:"center",fontSize:11,color:"var(--muted)",fontFamily:"var(--mono)"}}>v{APP_VERSION}</div>
     </div></div>
   );
 }
@@ -3957,6 +3959,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
             </button>
           </div>
         </div>
+        <div style={{padding:"8px 16px",fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)",textAlign:"center",borderTop:"1px solid var(--border)"}}>v{APP_VERSION}</div>
       </div>
       {accountOpen && (
         <AccountModal
