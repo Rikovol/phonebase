@@ -114,7 +114,7 @@ async def _sync_1c_after_login(user_id: str) -> None:
         async with AsyncSessionLocal() as session:
             if not await is_import_source_configured(session):
                 return
-            await run_configured_import(session, user_id)
+            await run_configured_import(session, user_id, auto_label="авто при входе")
     except Exception:
         logger.exception("Синхронизация выгрузки 1С после входа не выполнена")
 

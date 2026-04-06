@@ -36,7 +36,7 @@ async def is_import_new_source_configured(db: AsyncSession | None = None) -> boo
 
 
 async def run_configured_import(
-    db: AsyncSession, user_id: str
+    db: AsyncSession, user_id: str, *, auto_label: str | None = None,
 ) -> tuple[ImportLog, list[str]] | None:
     """
     Загружает файл по настройкам и выполняет sync_import.
@@ -47,6 +47,8 @@ async def run_configured_import(
     if not url:
         return None
     data, filename = await fetch_import_html(url)
+    if auto_label:
+        filename = f"{filename} ({auto_label})"
     return await sync_import(db=db, html_bytes=data, filename=filename, user_id=user_id)
 
 
