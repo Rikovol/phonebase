@@ -3283,7 +3283,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
     <div className="tw">
       <table className="pt">
         <thead><tr>
-          {[["brand","Бренд",90],["model","Модель",220],["storage","Память",70]].map(([k,l,w])=>(
+          {[["brand","Бренд",90],["model","Модель",280],["storage","Память",70]].map(([k,l,w])=>(
             <th key={k} style={{...thS,width:w}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
           ))}
           <th style={{...thS,textAlign:"right"}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
