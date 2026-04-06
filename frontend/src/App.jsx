@@ -1988,7 +1988,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
 
 
       <div className="filters">
-        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+        <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели, IMEI, цвету..." value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
           {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
@@ -3194,7 +3194,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       {loading && <div style={{marginBottom:10,color:"var(--muted)"}}><span className="spinner"/> Загрузка…</div>}
 
       <div className="filters">
-        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+        <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
           {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
@@ -3816,7 +3816,7 @@ function CompetitorPricesPage({ user, token }) {
       )}
 
       <div className="filters">
-        <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+        <div style={{position:"relative",display:"flex",alignItems:"center",flex:1,minWidth:200}}>
           <input className="fi" placeholder="Поиск по модели…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} style={{paddingRight: q ? 28 : undefined}}/>
           {q && <button onClick={()=>{setQ("");setSubmittedQ("");}} style={{position:"absolute",right:8,background:"none",border:"none",color:"var(--text)",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",zIndex:1,opacity:.6}} title="Очистить">×</button>}
         </div>
