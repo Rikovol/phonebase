@@ -167,16 +167,18 @@ def _apply_product_filters(
         query = query.where(Product.condition == condition)
 
     if q:
-        # Каждый токен должен встречаться хотя бы в одном из полей
-        for token in q.strip().split():
-            pattern = f"%{token}%"
-            query = query.where(or_(
-                Product.brand.ilike(pattern),
-                Product.model.ilike(pattern),
-                Product.storage.ilike(pattern),
-                Product.imei.ilike(pattern),
-                Product.sku_1c.ilike(pattern),
-            ))
+        pattern = f"%{q.strip()}%"
+        # Ищем фразу целиком в конкатенации brand+model+storage, либо в imei/sku_1c
+        combined = func.concat(
+            func.coalesce(Product.brand, ""), " ",
+            func.coalesce(Product.model, ""), " ",
+            func.coalesce(Product.storage, ""),
+        )
+        query = query.where(or_(
+            combined.ilike(pattern),
+            Product.imei.ilike(pattern),
+            Product.sku_1c.ilike(pattern),
+        ))
     return query
 
 
