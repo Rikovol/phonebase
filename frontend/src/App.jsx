@@ -291,10 +291,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .cb{background:var(--danger-dim);color:#fca5a5}
 .cr{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
 .cs{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
-.act{padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-size:12px;font-weight:500;transition:all .2s cubic-bezier(.4,0,.2,1)}
-.act:hover{border-color:var(--accent);color:var(--accent2);background:rgba(16,185,129,.08);transform:translateY(-2px);box-shadow:0 5px 15px rgba(16,185,129,.15)}
+.act{padding:7px 14px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.06);color:rgba(220,220,232,.9);cursor:pointer;font-size:12px;font-weight:600;transition:all .2s cubic-bezier(.4,0,.2,1)}
+.act:hover{border-color:var(--accent);color:var(--accent2);background:rgba(16,185,129,.1);transform:translateY(-2px);box-shadow:0 5px 15px rgba(16,185,129,.18)}
 .act.lk{opacity:.25;cursor:not-allowed}
-.act.lk:hover{border-color:var(--border);color:var(--muted);background:none}
+.act.lk:hover{border-color:var(--border2);color:rgba(220,220,232,.9);background:rgba(255,255,255,.06);transform:none;box-shadow:none}
+.act-photo{border-color:rgba(16,185,129,.4)!important;color:rgba(110,231,183,.95)!important;background:rgba(16,185,129,.1)!important}
+.act-photo:hover{border-color:var(--accent)!important;background:rgba(16,185,129,.2)!important;box-shadow:0 5px 15px rgba(16,185,129,.25)!important}
+.act-doc{border-color:rgba(251,191,36,.35)!important;color:rgba(253,224,131,.95)!important;background:rgba(251,191,36,.08)!important}
+.act-doc:hover{border-color:rgba(251,191,36,.7)!important;background:rgba(251,191,36,.16)!important;box-shadow:0 5px 15px rgba(251,191,36,.2)!important}
+.act-card{border-color:rgba(99,179,237,.35)!important;color:rgba(147,210,255,.95)!important;background:rgba(99,179,237,.08)!important}
+.act-card:hover{border-color:rgba(99,179,237,.7)!important;background:rgba(99,179,237,.16)!important;box-shadow:0 5px 15px rgba(99,179,237,.2)!important}
 .mc{font-size:13px;font-family:var(--mono);color:var(--muted);white-space:nowrap}
 
 /* PAGER */
@@ -439,7 +445,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .pt th,.pt td{padding:6px 8px;font-size:11px}
   .pt-thumb-cell{width:34px;padding:3px 5px!important}
   .pt-thumb{width:30px;height:30px;border-radius:6px}
-  .act{padding:3px 7px;font-size:10px}
+  .act{padding:4px 8px;font-size:10px;font-weight:600}
   .cg2{grid-template-columns:1fr}
   .mo{padding:10px}
   .md{width:calc(100vw - 20px);max-width:440px;padding:16px}
@@ -2090,11 +2096,11 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           <div className="tw">
             <table className="pt">
               <thead><tr>
-                <th>Модель</th><th>Память</th><th>Цвет</th>
-                <th style={{textAlign:"center"}}>Кол-во</th>
-                <th style={{textAlign:"right"}}>Розница</th>
-                {!isInfo && <th style={{textAlign:"right"}}>Учётная</th>}
-                <th/>
+                <th style={{width:210}}>Модель</th><th style={{width:90}}>Память</th><th style={{width:130}}>Цвет</th>
+                <th style={{textAlign:"center",width:62}}>Кол-во</th>
+                <th style={{textAlign:"right",width:92}}>Розница</th>
+                {!isInfo && <th style={{textAlign:"right",width:92}}>Учётная</th>}
+                <th style={{width:90}}/>
               </tr></thead>
               <tbody>
                 {groups.map(g => {
@@ -2138,17 +2144,17 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       <div className="tw">
         <table className="pt">
           <thead><tr>
-            {showSold && <th style={thStyle} onClick={()=>toggleSort("sold_at")}>Продано{sortArrow("sold_at")}</th>}
-            <th style={thStyle} onClick={()=>toggleSort("store")}>Магазин{sortArrow("store")}</th>
-            <th style={thStyle} onClick={()=>toggleSort("model")}>Модель{sortArrow("model")}</th>
-            <th style={thStyle} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>
-            <th style={thStyle} onClick={()=>toggleSort("imei")}>IMEI{sortArrow("imei")}</th>
-            <th style={{...thStyle,textAlign:"center"}} onClick={()=>toggleSort("quantity")}>Кол-во{sortArrow("quantity")}</th>
-            {!isInfo && <th>Медиа</th>}<th style={{textAlign:"center"}}>Сайт</th><th style={{textAlign:"center"}}>Авито</th>
-            <th style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("retail")}>Розница{sortArrow("retail")}</th>
-            {!isInfo && <><th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("cost")}>Учётная{sortArrow("cost")}</th>
-            <th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right"}} onClick={()=>toggleSort("profit")}>Прибыль{sortArrow("profit")}</th></>}
-            <th style={{textAlign:"center"}}>Действия</th>
+            {showSold && <th style={{...thStyle,width:110}} onClick={()=>toggleSort("sold_at")}>Продано{sortArrow("sold_at")}</th>}
+            <th style={{...thStyle,width:100}} onClick={()=>toggleSort("store")}>Магазин{sortArrow("store")}</th>
+            <th style={{...thStyle,width:185}} onClick={()=>toggleSort("model")}>Модель{sortArrow("model")}</th>
+            <th style={{...thStyle,width:115}} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>
+            <th style={{...thStyle,width:155}} onClick={()=>toggleSort("imei")}>IMEI{sortArrow("imei")}</th>
+            <th style={{...thStyle,textAlign:"center",width:58}} onClick={()=>toggleSort("quantity")}>Кол-во{sortArrow("quantity")}</th>
+            {!isInfo && <th style={{width:68}}>Медиа</th>}<th style={{textAlign:"center",width:54}}>Сайт</th><th style={{textAlign:"center",width:54}}>Авито</th>
+            <th style={{...thStyle,textAlign:"right",width:90}} onClick={()=>toggleSort("retail")}>Розница{sortArrow("retail")}</th>
+            {!isInfo && <><th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right",width:90}} onClick={()=>toggleSort("cost")}>Учётная{sortArrow("cost")}</th>
+            <th className={isAdm?"":"thl"} style={{...thStyle,textAlign:"right",width:85}} onClick={()=>toggleSort("profit")}>Прибыль{sortArrow("profit")}</th></>}
+            <th style={{textAlign:"center",width:210}}>Действия</th>
           </tr></thead>
           <tbody>
             {slice.slice(0, visibleCount).map(p=>{
@@ -2202,11 +2208,11 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                       ? <span className="sold-badge">Продан</span>
                       : own
                         ? <>
-                            <button type="button" className="act" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setPhotoGalleryId(p.id)}><Icon.camera/> Фото</button>
+                            <button type="button" className="act act-photo" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setPhotoGalleryId(p.id)}><Icon.camera/> Фото</button>
                             {showPurchaseDocsBtn && (
-                              <button type="button" className="act" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setDocsModalId(p.id)} title="Документы закупки"><Icon.clip/> Документы</button>
+                              <button type="button" className="act act-doc" style={{marginRight:3,display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>setDocsModalId(p.id)} title="Документы закупки"><Icon.clip/> Документы</button>
                             )}
-                            <button type="button" className="act" style={{display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>onOpen(p.id)}><Icon.card/> Карточка</button>
+                            <button type="button" className="act act-card" style={{display:"inline-flex",alignItems:"center",gap:4}} onClick={()=>onOpen(p.id)}><Icon.card/> Карточка</button>
                           </>
                         : isInfo
                           ? <button type="button" className="act" onClick={()=>onOpen(p.id)}>Карточка</button>
@@ -3002,7 +3008,7 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
       <div className="tw">
         <table className="pt">
           <thead><tr>
-            <th>Магазин</th><th>IMEI / S/N</th><th>Модель</th><th>Тип</th><th>Клиент</th><th>Дата</th><th style={{textAlign:"center"}}>Действия</th>
+            <th style={{width:110}}>Магазин</th><th style={{width:155}}>IMEI / S/N</th><th style={{width:190}}>Модель</th><th style={{width:110}}>Тип</th><th style={{width:160}}>Клиент</th><th style={{width:110}}>Дата</th><th style={{textAlign:"center",width:90}}>Действия</th>
           </tr></thead>
           <tbody>
             {items.map((x)=>(
