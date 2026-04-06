@@ -1757,6 +1757,7 @@ function mapProductRow(p) {
 
 function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, isNew, soldOnly = false }) {
   const [q,setQ]=useState(""); const [debouncedQ,setDebouncedQ]=useState(""); const [submittedQ,setSubmittedQ]=useState("");
+  const [soldFrom,setSoldFrom]=useState(""); const [soldTo,setSoldTo]=useState("");
   const [brand,setBrand]=useState(""); const [cond,setCond]=useState("");
   const [storeFilter,setStoreFilter]=useState(() => (Access.seesAllStores(user) ? (activeStore || "") : ""));
   const showSold = soldOnly;
@@ -1829,6 +1830,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         if (cond) base.set("condition", cond);
         if (soldOnly) base.set("sold_only", "true");
         else if (showSold) base.set("include_sold", "true");
+        if (soldOnly && soldFrom) base.set("sold_from", soldFrom);
+        if (soldOnly && soldTo) base.set("sold_to", soldTo);
         if (storeFilter) base.set("store", storeFilter);
         if (isNew === true) base.set("is_new", "true");
         if (isNew === false) base.set("is_new", "false");
@@ -1850,7 +1853,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [token, submittedQ, brand, cond, showSold, storeFilter, isNew]);
+  }, [token, submittedQ, brand, cond, showSold, storeFilter, isNew, soldFrom, soldTo]);
 
   const [sentinelEl, setSentinelEl] = useState(null);
   useEffect(() => {
@@ -2024,6 +2027,12 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           <option value="no">Не на Авито</option>
         </select>
         )}
+        {showSold && (
+          <>
+            <input className="fi" type="date" style={{maxWidth:140}} value={soldFrom} onChange={e=>setSoldFrom(e.target.value)} title="Продано с"/>
+            <input className="fi" type="date" style={{maxWidth:140}} value={soldTo} onChange={e=>setSoldTo(e.target.value)} title="Продано по"/>
+          </>
+        )}
         {!isNew && !showSold && (
         <select className="fs" value={costColorFilter} onChange={e=>setCostColorFilter(e.target.value)}>
           <option value="">Учётная: все</option>
@@ -2122,7 +2131,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               const storeColor = STORE_COLORS[p.store_name];
               return (
                 <tr key={p.id} className={rowCls} style={storeColor&&!p.in_repair?{background:`${storeColor}12`}:undefined}>
-                  {showSold && <td style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--muted)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
+                  {showSold && <td style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--text)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
                   <td>
                     <div

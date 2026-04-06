@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -193,6 +193,8 @@ async def list_products(
     sold_only: bool = Query(False, description="Только проданные"),
     is_new: Optional[bool] = Query(None, description="Фильтр: новые (true) или б/у (false) товары"),
     avito_published: Optional[bool] = Query(None, description="Фильтр: на Авито (true) или нет (false)"),
+    sold_from: Optional[str] = Query(None, description="Продано с (YYYY-MM-DD)"),
+    sold_to: Optional[str] = Query(None, description="Продано по (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=20000),
     db: AsyncSession = Depends(get_db),
@@ -254,7 +256,11 @@ async def list_products(
         sold_only=sold_only,
         avito_published=avito_published,
     )
-    query = query.order_by(Product.updated_at.desc())
+    if sold_from:
+        query = query.where(Product.sold_at >= datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc))
+    if sold_to:
+        query = query.where(Product.sold_at < (datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)))
+    query = query.order_by(Product.sold_at.desc() if sold_only else Product.updated_at.desc())
 
     count_base = select(Product.id).join(Store, Product.store_id == Store.id)
     count_base = _apply_product_filters(
@@ -268,6 +274,10 @@ async def list_products(
         sold_only=sold_only,
         avito_published=avito_published,
     )
+    if sold_from:
+        count_base = count_base.where(Product.sold_at >= datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc))
+    if sold_to:
+        count_base = count_base.where(Product.sold_at < (datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)))
     total = (await db.execute(select(func.count()).select_from(count_base.subquery()))).scalar() or 0
 
     query = query.offset((page - 1) * size).limit(size)
