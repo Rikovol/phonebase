@@ -40,6 +40,7 @@ class ProductOut(BaseModel):
     completeness: Optional[str] = None
     site_published: bool = False
     avito_published: bool
+    purchased_at: Optional[str] = None
     photos_count: int = 0
     docs_count: int = 0
     thumbnail_url: Optional[str] = None
@@ -313,6 +314,7 @@ async def list_products(
                 sim_count=product.sim_count,
                 sim_type=product.sim_type,
                 completeness=product.completeness,
+                purchased_at=product.purchased_at.isoformat() if product.purchased_at else None,
                 site_published=product.site_published,
                 avito_published=product.avito_published,
                 photos_count=0 if hide_media else int(photos_count),

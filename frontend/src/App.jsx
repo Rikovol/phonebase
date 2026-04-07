@@ -448,6 +448,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .pb2{padding:12px}
   .badge{max-width:80px;overflow:hidden;text-overflow:ellipsis}
 }
+@media(min-width:769px) and (max-width:1100px){
+  .nav-label{display:none}
+  .nav-item{padding:8px 10px;gap:0}
+  .nb-logo{margin-right:16px}
+  .nb-name,.nb-role{display:none}
+  .nb-version{display:none}
+  .topbar-store-sel{max-width:130px;font-size:11px}
+}
 @media(max-width:400px){
   .topbar-title{font-size:13px}
   .badge{font-size:9px;padding:3px 6px;max-width:60px}
@@ -2084,6 +2092,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         case "model":    va = (a.model||"")+" "+(a.storage||""); vb = (b.model||"")+" "+(b.storage||""); break;
         case "condition":va = a.condition||""; vb = b.condition||""; break;
         case "sold_at":  va = a.sold_at||""; vb = b.sold_at||""; break;
+        case "purchased_at": va = a.purchased_at||""; vb = b.purchased_at||""; break;
         case "imei":     va = a.imei||""; vb = b.imei||""; break;
         case "quantity": return dir * ((a.quantity||0) - (b.quantity||0));
         case "retail":   return dir * ((a.price_retail||0) - (b.price_retail||0));
@@ -2269,6 +2278,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           <thead><tr>
             {showSold && <th style={{...thStyle,width:110}} onClick={()=>toggleSort("sold_at")}>Продано{sortArrow("sold_at")}</th>}
             <th style={{...thStyle,width:100}} onClick={()=>toggleSort("store")}>Магазин{sortArrow("store")}</th>
+            <th style={{...thStyle,width:95}} onClick={()=>toggleSort("purchased_at")}>Покупка{sortArrow("purchased_at")}</th>
             <th style={{...thStyle,width:185}} onClick={()=>toggleSort("model")}>Модель{sortArrow("model")}</th>
             <th style={{...thStyle,width:115}} onClick={()=>toggleSort("condition")}>Состояние{sortArrow("condition")}</th>
             <th style={{...thStyle,width:155}} onClick={()=>toggleSort("imei")}>IMEI{sortArrow("imei")}</th>
@@ -2294,6 +2304,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                 <tr key={p.id} className={rowCls}>
                   {showSold && <td style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--text)",whiteSpace:"nowrap"}}>{p.sold_at?fmtDt(p.sold_at):"—"}</td>}
                   <td><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
+                  <td style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--muted)",whiteSpace:"nowrap"}}>{p.purchased_at?fmtDt(p.purchased_at):"—"}</td>
                   <td className={isAbnormalQty?"qty-wm":undefined} style={isAbnormalQty?{position:"relative"}:undefined}>
                     <div
                       className={`tm${canOpenCard ? "" : " tm-disabled"}`}
