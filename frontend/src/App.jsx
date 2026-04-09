@@ -719,38 +719,66 @@ function UploadZone({ icon, text, hint, onFile, file, uploading, progress }) {
 
 // ─── PHOTO MODAL ──────────────────────────────────────────────────────────────
 function PhotoModal({ product, productId, token, onClose, onDone }) {
-  const [file,setFile]=useState(null); const [uploading,setUploading]=useState(false); const [progress,setProgress]=useState(0); const [err,setErr]=useState("");
+  const [files,setFiles]=useState([]); const [uploading,setUploading]=useState(false); const [progress,setProgress]=useState(0); const [err,setErr]=useState("");
+  const fileRef = useRef(null);
+  const addFiles = (newFiles) => setFiles(prev => [...prev, ...Array.from(newFiles)]);
   const upload = async () => {
-    if (!file) return; setUploading(true); setErr(""); setProgress(10);
+    if (!files.length) return; setUploading(true); setErr(""); setProgress(0);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`${API_BASE}/photos/product/${productId}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка загрузки");
-      setProgress(100);
-      onDone(data);
-      onClose();
+      const errors = [];
+      let done = 0; let lastData = null;
+      const uploadOne = async (file) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`${API_BASE}/photos/product/${productId}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) errors.push(file.name + ": " + (typeof data.detail === "string" ? data.detail : "Ошибка"));
+        else lastData = data;
+        done++;
+        setProgress(Math.round((done / files.length) * 100));
+      };
+      // first photo sequentially (is_main race), rest in parallel
+      await uploadOne(files[0]);
+      if (files.length > 1) await Promise.all(files.slice(1).map(uploadOne));
+      if (lastData) onDone(lastData);
+      if (errors.length) setErr(errors.join("; "));
+      else onClose();
     } catch (x) {
-      setErr(x.message || "Ошибка");
+      setErr(x.message || "Ошибка сети");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
   return (
     <div className="mo" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="md">
-        <div className="mt">📷 Добавить фотографию</div>
+        <div className="mt">📷 Добавить фотографии</div>
         <div className="ms">К товару: <strong>{product.model} {product.storage}</strong></div>
         {err && <div className="err" style={{marginBottom:10}}>{err}</div>}
-        <UploadZone icon="🖼" text="Нажмите или перетащите фотографию" hint="JPG, PNG, WEBP · максимум 10 МБ" onFile={setFile} file={file} uploading={uploading} progress={progress}/>
+        <div className={`uz`}
+          onClick={()=>fileRef.current.click()}
+          onDragOver={e=>{e.preventDefault()}}
+          onDrop={e=>{e.preventDefault();addFiles(e.dataTransfer.files)}}>
+          <div className="uz-ico">{files.length?"✅":"🖼"}</div>
+          <div className="uz-txt"><b>{files.length ? `Выбрано: ${files.length}` : "Нажмите или перетащите фотографии"}</b></div>
+          <div className="uz-h">JPG, PNG, WEBP · максимум 10 МБ · можно несколько</div>
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)addFiles(e.target.files);}}/>
+        {files.length > 0 && !uploading && (
+          <div style={{marginTop:6,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
+            <span>✓ {files.map(f=>f.name).join(", ")}</span>
+            <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setFiles([]);if(fileRef.current)fileRef.current.value="";}} title="Очистить">✕</button>
+          </div>
+        )}
+        {uploading && <div style={{marginTop:6,fontSize:12,color:"var(--muted)"}}>Загрузка: {progress}%</div>}
         <div className="mf">
           <button className="btn btn-outline btn-sm" onClick={onClose}>Отмена</button>
-          <button className="btn btn-primary btn-sm" onClick={upload} disabled={!file||uploading} style={{opacity:!file||uploading?.5:1}}>
-            {uploading?<><span className="spinner"/> Загрузка...</>:"Загрузить"}
+          <button className="btn btn-primary btn-sm" onClick={upload} disabled={!files.length||uploading} style={{opacity:!files.length||uploading?.5:1}}>
+            {uploading?<><span className="spinner"/> Загрузка...</>:`Загрузить (${files.length})`}
           </button>
         </div>
       </div>
@@ -763,7 +791,7 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
   const [product, setProduct] = useState(null);
   const [loadErr, setLoadErr] = useState("");
   const [bigIdx, setBigIdx] = useState(null);
-  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -800,25 +828,37 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
     setRotating(false);
   };
 
-  const doUpload = async (file) => {
-    setUploading(true); setUploadErr(""); setUploadProgress(10);
+  const doUpload = async (files) => {
+    if (!files.length) return;
+    setUploading(true); setUploadErr(""); setUploadProgress(0);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`${API_BASE}/photos/product/${productId}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка загрузки");
-      setUploadProgress(100);
-      setUploadFile(null);
-      await loadProduct();
+      const errors = [];
+      let done = 0;
+      const uploadOne = async (file) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`${API_BASE}/photos/product/${productId}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) errors.push(file.name + ": " + (typeof data.detail === "string" ? data.detail : "Ошибка"));
+        done++;
+        setUploadProgress(Math.round((done / files.length) * 100));
+      };
+      // first photo sequentially (is_main race), rest in parallel
+      await uploadOne(files[0]);
+      if (files.length > 1) await Promise.all(files.slice(1).map(uploadOne));
+      if (errors.length) setUploadErr(errors.join("; "));
     } catch (x) {
-      setUploadErr(x.message || "Ошибка");
+      setUploadErr(x.message || "Ошибка сети");
+    } finally {
+      setUploadFiles([]);
+      if (fileRef.current) fileRef.current.value = "";
+      await loadProduct();
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   useEffect(() => {
@@ -871,20 +911,21 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
           {product && user && Access.canEdit(user, { store_name: product.store_name }) && !product.is_sold && (
             <div style={{marginTop:12}}>
               {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
-              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0])setUploadFile(e.target.files[0]);}}/>
-              {uploadFile && !uploading && (
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files]);}}/>
+              {uploadFiles.length > 0 && !uploading && (
                 <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
-                  <span>✓ {uploadFile.name}</span>
-                  <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setUploadFile(null);fileRef.current.value="";}} title="Отменить">✕</button>
+                  <span>✓ {uploadFiles.length === 1 ? uploadFiles[0].name : `Выбрано файлов: ${uploadFiles.length}`}</span>
+                  <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setUploadFiles([]);fileRef.current.value="";}} title="Отменить">✕</button>
                 </div>
               )}
+              {uploading && <div style={{marginBottom:8,fontSize:12,color:"var(--muted)"}}>Загрузка: {uploadProgress}%</div>}
               <div style={{display:"inline-flex",gap:6}}>
                 <button type="button" className="btn btn-sm btn-outline" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
-                  <Icon.camera/> {uploadFile ? "Выбрать другой" : "Выбрать фото"}
+                  <Icon.camera/> {uploadFiles.length > 0 ? "Выбрать другие" : "Выбрать фото"}
                 </button>
-                {uploadFile && (
-                  <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>doUpload(uploadFile)} style={{display:"inline-flex",alignItems:"center",gap:5}}>
-                    {uploading?<><span className="spinner"/> Загрузка...</>:"Сохранить"}
+                {uploadFiles.length > 0 && (
+                  <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>doUpload(uploadFiles)} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                    {uploading?<><span className="spinner"/> Загрузка...</>:`Загрузить (${uploadFiles.length})`}
                   </button>
                 )}
               </div>
