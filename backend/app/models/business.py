@@ -187,6 +187,20 @@ class AvitoStats(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
 
+class CatalogPhoto(Base):
+    """Фото для каталога новых товаров — привязка к наименованию (brand+model+storage), а не к IMEI."""
+    __tablename__ = "catalog_photos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False)
+    product_key: Mapped[str] = mapped_column(String(500), nullable=False, index=True)  # lower(brand|model|storage)
+    uploaded_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    file_path: Mapped[str] = mapped_column(Text, nullable=False)
+    file_size: Mapped[int | None] = mapped_column(Integer)
+    is_main: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
 class CompetitorPrice(Base):
     __tablename__ = "competitor_prices"
     __table_args__ = (

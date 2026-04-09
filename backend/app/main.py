@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analytics, auth, avito, competitor_prices, imports, logs, personal_data, photos, products, purchase_docs, stores, users
+from app.api import analytics, auth, avito, catalog_photos, competitor_prices, imports, logs, personal_data, photos, products, purchase_docs, stores, users
 from app.api import settings as settings_api
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.3.22",
+    version="1.3.23",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -82,6 +82,7 @@ app.include_router(products.router, prefix="/api/products", tags=["products"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
 app.include_router(photos.router, prefix="/api/photos", tags=["photos"])
+app.include_router(catalog_photos.router, prefix="/api/catalog-photos", tags=["catalog_photos"])
 app.include_router(personal_data.router, prefix="/api/pd", tags=["personal_data"])
 app.include_router(purchase_docs.router, prefix="/api/purchase-docs", tags=["purchase_docs"])
 app.include_router(avito.router, prefix="/api/avito", tags=["avito"])

@@ -20,6 +20,7 @@ router = APIRouter()
 
 class ProductOut(BaseModel):
     id: str
+    store_id: str
     store_name: str
     brand: Optional[str]
     model: str
@@ -296,6 +297,7 @@ async def list_products(
         items.append(
             ProductOut(
                 id=product.id,
+                store_id=product.store_id,
                 store_name=store_name,
                 brand=product.brand,
                 model=product.model,
@@ -436,11 +438,23 @@ async def update_product(
         raise HTTPException(status_code=400, detail="Нельзя публиковать товар в ремонте на Авито")
 
     if body.avito_published is True:
-        cnt = (
-            await db.execute(
-                select(func.count()).select_from(ProductPhoto).where(ProductPhoto.product_id == product_id)
-            )
-        ).scalar() or 0
+        if product.is_new:
+            # Для новых товаров проверяем каталожные фото по наименованию
+            from app.api.catalog_photos import make_product_key
+            from app.models.business import CatalogPhoto
+            pkey = make_product_key(product.brand or "", product.model, product.storage or "")
+            cnt = (
+                await db.execute(
+                    select(func.count()).select_from(CatalogPhoto)
+                    .where(CatalogPhoto.store_id == product.store_id, CatalogPhoto.product_key == pkey)
+                )
+            ).scalar() or 0
+        else:
+            cnt = (
+                await db.execute(
+                    select(func.count()).select_from(ProductPhoto).where(ProductPhoto.product_id == product_id)
+                )
+            ).scalar() or 0
         if cnt == 0:
             raise HTTPException(
                 status_code=400,

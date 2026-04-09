@@ -786,6 +786,183 @@ function PhotoModal({ product, productId, token, onClose, onDone }) {
   );
 }
 
+/** Просмотр каталожных фото (новые товары — привязка к наименованию, а не к IMEI) */
+function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user, onClose }) {
+  const [photos, setPhotos] = useState([]);
+  const [loadErr, setLoadErr] = useState("");
+  const [bigIdx, setBigIdx] = useState(null);
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [rotating, setRotating] = useState(false);
+  const [photoVer, setPhotoVer] = useState(Date.now());
+  const fileRef = useRef(null);
+
+  const loadPhotos = async () => {
+    setLoadErr("");
+    try {
+      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+      const d = await apiFetch(`/catalog-photos/by-key?${params}`, { token });
+      setPhotos(d.photos || []);
+    } catch (e) {
+      setLoadErr(e.message || "Ошибка загрузки");
+    }
+  };
+
+  useEffect(() => {
+    let c = true;
+    loadPhotos().then(() => { if (!c) setPhotos([]); });
+    return () => { c = false; };
+  }, [storeId, brand, model, storage, token]);
+
+  const doRotate = async (photoId, degrees) => {
+    if (rotating) return;
+    setRotating(true);
+    try {
+      await apiFetch(`/catalog-photos/${photoId}/rotate?degrees=${degrees}`, { token, method: "POST" });
+      setPhotoVer(Date.now());
+      await loadPhotos();
+    } catch {}
+    setRotating(false);
+  };
+
+  const doDelete = async (photoId) => {
+    if (!confirm("Удалить фото?")) return;
+    try {
+      await apiFetch(`/catalog-photos/${photoId}`, { token, method: "DELETE" });
+      if (bigIdx != null) setBigIdx(null);
+      await loadPhotos();
+    } catch {}
+  };
+
+  const doUpload = async (files) => {
+    if (!files.length) return;
+    setUploading(true); setUploadErr(""); setUploadProgress(0);
+    try {
+      const errors = [];
+      let done = 0;
+      const uploadOne = async (file) => {
+        const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`${API_BASE}/catalog-photos/upload?${params}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) errors.push(file.name + ": " + (typeof data.detail === "string" ? data.detail : "Ошибка"));
+        done++;
+        setUploadProgress(Math.round((done / files.length) * 100));
+      };
+      await uploadOne(files[0]);
+      if (files.length > 1) await Promise.all(files.slice(1).map(uploadOne));
+      if (errors.length) setUploadErr(errors.join("; "));
+    } catch (x) {
+      setUploadErr(x.message || "Ошибка сети");
+    } finally {
+      setUploadFiles([]);
+      if (fileRef.current) fileRef.current.value = "";
+      await loadPhotos();
+      setUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (bigIdx != null) setBigIdx(null);
+      else onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bigIdx, onClose]);
+
+  const title = [brand, model, storage].filter(Boolean).join(" ").trim() || "Товар";
+  const canEdit = user && (user.role === "admin" || user.role === "staff");
+
+  return (
+    <>
+      <div className="mo" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="md" style={{ maxWidth: 720, maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+          <div className="mt">📷 Каталожные фото</div>
+          <div className="ms">{title}</div>
+          {loadErr && <div className="err" style={{ marginBottom: 10 }}>{loadErr}</div>}
+          {photos.length === 0 && !loadErr && (
+            <div style={{ color: "var(--muted)", padding: "20px 0", textAlign: "center" }}>Нет фотографий</div>
+          )}
+          {photos.length > 0 && (
+            <div className="pgrid" style={{ marginTop: 8 }}>
+              {photos.map((ph, i) => (
+                <div key={ph.id} className="pthumb" style={{ position: "relative" }}>
+                  <img
+                    src={`${ph.url}?v=${photoVer}`} alt=""
+                    style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }}
+                    onClick={() => setBigIdx(i)}
+                  />
+                  {ph.is_main && <div className="pmb">ГЛАВНОЕ</div>}
+                  {canEdit && (
+                    <button type="button" onClick={() => doDelete(ph.id)} title="Удалить"
+                      style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,.7)", border: "none", color: "#f66", cursor: "pointer", borderRadius: 4, padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {canEdit && (
+            <div style={{marginTop:12}}>
+              {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files]);}}/>
+              {uploadFiles.length > 0 && !uploading && (
+                <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
+                  <span>✓ {uploadFiles.length === 1 ? uploadFiles[0].name : `Выбрано файлов: ${uploadFiles.length}`}</span>
+                  <button type="button" style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setUploadFiles([]);fileRef.current.value="";}} title="Отменить">✕</button>
+                </div>
+              )}
+              {uploading && <div style={{marginBottom:8,fontSize:12,color:"var(--muted)"}}>Загрузка: {uploadProgress}%</div>}
+              <div style={{display:"inline-flex",gap:6}}>
+                <button type="button" className="btn btn-sm btn-outline" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                  <Icon.camera/> {uploadFiles.length > 0 ? "Выбрать другие" : "Выбрать фото"}
+                </button>
+                {uploadFiles.length > 0 && (
+                  <button type="button" className="btn btn-sm btn-primary" disabled={uploading} onClick={()=>doUpload(uploadFiles)} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                    {uploading?<><span className="spinner"/> Загрузка...</>:`Загрузить (${uploadFiles.length})`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="mf">
+            <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>Закрыть</button>
+          </div>
+        </div>
+      </div>
+      {bigIdx != null && photos[bigIdx] && (
+        <div
+          role="presentation"
+          style={{ position: "fixed", inset: 0, zIndex: 210, background: "rgba(0,0,0,.92)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}
+          onClick={() => setBigIdx(null)}
+        >
+          <img src={`${photos[bigIdx].url}?v=${photoVer}`} alt="" style={{ maxWidth: "100%", maxHeight: "calc(100% - 60px)", objectFit: "contain", cursor: "default" }} onClick={(e) => e.stopPropagation()}/>
+          {canEdit && (
+            <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+              <button type="button" disabled={rotating} onClick={() => doRotate(photos[bigIdx].id, -90)} title="Повернуть влево"
+                style={{ background: "rgba(30,30,34,.9)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {rotating ? <span className="spinner"/> : "↺"} <span style={{fontSize:12}}>Влево</span>
+              </button>
+              <button type="button" disabled={rotating} onClick={() => doRotate(photos[bigIdx].id, 90)} title="Повернуть вправо"
+                style={{ background: "rgba(30,30,34,.9)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {rotating ? <span className="spinner"/> : "↻"} <span style={{fontSize:12}}>Вправо</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Просмотр фото из каталога (кнопка «📷 Фото») — без перехода в полную карточку */
 function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
   const [product, setProduct] = useState(null);
@@ -1782,7 +1959,7 @@ function ProductCard({ productId, token, user, onBack }) {
               )}
               {product.avito_published && (
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:8}}>
-                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/feed/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed/{product.store_id}.xml</code>
+                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/"+(product.is_new?"feed-new/":"feed/")+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/{product.is_new?"feed-new/":"feed/"}{product.store_id}.xml</code>
                 </div>
               )}
             </div>
@@ -1976,10 +2153,12 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [brands,setBrands]=useState([]);
   const [conditions,setConditions]=useState([]);
   const [photoGalleryId, setPhotoGalleryId] = useState(null);
+  const [catalogPhotoGroup, setCatalogPhotoGroup] = useState(null); // {storeId, brand, model, storage}
   const [docsModalId, setDocsModalId] = useState(null);
   const [priceStats, setPriceStats] = useState({});
   const [expandedNew, setExpandedNew] = useState({});
   const [revealedCostId, setRevealedCostId] = useState(null);
+  const [catalogPhotoCounts, setCatalogPhotoCounts] = useState({}); // key -> count
 
   const isAdm  = Access.isAdmin(user);
   const isInfo = Access.isInfo(user);
@@ -2171,6 +2350,44 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     }
   };
 
+  // Авито-тоггл для группы новых товаров (переключает все товары в группе)
+  const toggleAvitoGroup = async (groupItems, next) => {
+    setAvitoListErr("");
+    const ids = new Set(groupItems.map(p => p.id));
+    setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, avito_published: next } : x));
+    try {
+      await Promise.all(groupItems.map(p =>
+        apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { avito_published: next } })
+      ));
+    } catch (e) {
+      setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, avito_published: !next } : x));
+      setAvitoListErr(e.message || "Не удалось изменить Авито");
+    }
+  };
+
+  // Загрузка счётчиков каталожных фото для новых товаров
+  useEffect(() => {
+    if (!isNew || !items.length) return;
+    let cancelled = false;
+    (async () => {
+      const keys = new Map(); // key -> {storeId, brand, model, storage}
+      for (const p of items) {
+        const k = `${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}`;
+        if (!keys.has(k)) keys.set(k, { storeId: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "" });
+      }
+      const counts = {};
+      await Promise.all([...keys.entries()].map(async ([k, v]) => {
+        try {
+          const params = new URLSearchParams({ store_id: v.storeId, brand: v.brand, model: v.model, storage: v.storage });
+          const d = await apiFetch(`/catalog-photos/by-key?${params}`, { token });
+          counts[k] = (d.photos || []).length;
+        } catch { counts[k] = 0; }
+      }));
+      if (!cancelled) setCatalogPhotoCounts(counts);
+    })();
+    return () => { cancelled = true; };
+  }, [isNew, items, token]);
+
   return (
     <>
       <div className={`banner ${isAdm?"ban-admin":"ban-staff"}`}>
@@ -2271,6 +2488,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               <thead><tr>
                 <th style={{width:210}}>Модель</th><th style={{width:90}}>Память</th><th style={{width:130}}>Цвет</th>
                 <th style={{textAlign:"center",width:62}}>Кол-во</th>
+                {!isInfo && <th style={{width:58}}>Фото</th>}
+                <th style={{textAlign:"center",width:54}}>Авито</th>
                 <th style={{textAlign:"right",width:92}}>Розница</th>
                 {!isInfo && <th style={{textAlign:"right",width:92}}>Учётная</th>}
                 <th style={{width:90}}/>
@@ -2278,6 +2497,13 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               <tbody>
                 {groups.map(g => {
                   const isOpen = expandedNew[g.key];
+                  const photoKey = `${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}`;
+                  const photoCnt = catalogPhotoCounts[photoKey] || 0;
+                  const groupAvito = g.items.some(p => p.avito_published);
+                  const canToggle = !isInfo && g.items.some(p => {
+                    const row = mapProductRow(p);
+                    return Access.canEdit(user, row) && !p.is_sold;
+                  });
                   return (
                     <React.Fragment key={g.key}>
                       <tr style={{cursor:"pointer"}} onClick={() => setExpandedNew(prev => ({...prev, [g.key]: !prev[g.key]}))}>
@@ -2285,6 +2511,17 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         <td className="mono">{g.storage || "—"}</td>
                         <td style={{fontSize:13,color:"var(--text)"}}>{g.color || "—"}</td>
                         <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
+                        {!isInfo && <td>
+                          <button type="button" className="act act-photo" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11}} onClick={(e)=>{e.stopPropagation();setCatalogPhotoGroup({storeId:g.items[0].store_id,brand:g.brand,model:g.model,storage:g.storage});}}>
+                            <Icon.camera/>{photoCnt}
+                          </button>
+                        </td>}
+                        <td style={{textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                          <label className="toggle-sw" title={canToggle ? "Опубликовать на Авито" : "Авито"}>
+                            <input type="checkbox" checked={groupAvito} disabled={!canToggle || photoCnt === 0} onChange={(e) => toggleAvitoGroup(g.items, e.target.checked)}/>
+                            <span className="sw-track"/>
+                          </label>
+                        </td>
                         <td className="tr" style={{color:"var(--success)"}}>{g.count ? (g.minPrice === g.maxPrice ? fmt(g.minPrice) : <>{fmt(g.minPrice)}<span style={{color:"var(--muted)",margin:"0 3px"}}>–</span>{fmt(g.maxPrice)}</>) : "—"}</td>{!isInfo && <td/>}<td/>
                       </tr>
                       {isOpen && g.items.map(p => {
@@ -2298,6 +2535,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                             <td className={isAbnQty?"qty-wm mono":"mono"} style={{cursor:"pointer",color:"var(--text)",position:isAbnQty?"relative":undefined}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
+                            {!isInfo && <td/>}
+                            <td/>
                             <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
                             {!isInfo && <td className="tr" style={{cursor:"pointer",userSelect:"none"}} onClick={()=>setRevealedCostId(prev=>prev===p.id?null:p.id)} title="Нажмите чтобы показать"><span style={{filter:revealedCostId===p.id?"none":"blur(6px)",transition:"filter .2s",color:"var(--text)"}}>{fmt(p.price_cost)}</span></td>}
                             <td style={{textAlign:"right"}}>{canOpenCard && <button type="button" className="act" onClick={()=>onOpen(p.id)}>Карточка</button>}</td>
@@ -2307,7 +2546,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                     </React.Fragment>
                   );
                 })}
-                {!loading && groups.length === 0 && <tr><td colSpan={!isInfo?7:6} style={{textAlign:"center",padding:"32px",color:"var(--muted)"}}>Товары не найдены</td></tr>}
+                {!loading && groups.length === 0 && <tr><td colSpan={!isInfo?9:7} style={{textAlign:"center",padding:"32px",color:"var(--muted)"}}>Товары не найдены</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2412,6 +2651,21 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           onOpenCard={(id) => {
             setPhotoGalleryId(null);
             onOpen(id);
+          }}
+        />
+      )}
+      {catalogPhotoGroup && (
+        <CatalogPhotoGalleryModal
+          storeId={catalogPhotoGroup.storeId}
+          brand={catalogPhotoGroup.brand}
+          model={catalogPhotoGroup.model}
+          storage={catalogPhotoGroup.storage}
+          token={token}
+          user={user}
+          onClose={() => {
+            setCatalogPhotoGroup(null);
+            // Обновляем счётчики фото после закрытия модалки
+            setCatalogPhotoCounts({});
           }}
         />
       )}

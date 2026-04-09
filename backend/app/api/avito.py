@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi.responses import Response
+
 from app.api.access import can_modify_product
 from app.api.auth import get_current_user, require_admin
 from app.core.database import get_db
@@ -33,6 +35,42 @@ async def website_feed(
         raise HTTPException(status_code=403, detail="Фид для сайта отключён")
 
     return await generate_website_feed(db, store_id)
+
+
+# ── Публичный XML-фид б/у товаров для Авито ─────────────
+
+@router.get("/feed/{store_id}.xml")
+async def avito_feed_used(
+    store_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Публичный XML-фид б/у товаров для автозагрузки Авито. Без авторизации."""
+    from app.services.avito_feed import generate_feed_xml
+
+    store = await db.get(Store, store_id)
+    if not store or not store.is_active:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    xml_bytes = await generate_feed_xml(db, store_id)
+    return Response(content=xml_bytes, media_type="application/xml")
+
+
+# ── Публичный XML-фид новых товаров для Авито ────────────
+
+@router.get("/feed-new/{store_id}.xml")
+async def avito_feed_new(
+    store_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Публичный XML-фид новых товаров для автозагрузки Авито. Без авторизации."""
+    from app.services.avito_feed_new import generate_feed_xml_new
+
+    store = await db.get(Store, store_id)
+    if not store or not store.is_active:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    xml_bytes = await generate_feed_xml_new(db, store_id)
+    return Response(content=xml_bytes, media_type="application/xml")
 
 
 # ── Pydantic-схемы ───────────────────────────────────────
