@@ -233,13 +233,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .pt-thumb-cell{width:52px;padding:6px 8px!important;vertical-align:middle}
 .pt-thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;background:var(--bg3);transition:transform .15s}
 .pt-thumb:hover{transform:scale(1.1)}
-.toggle-sw{position:relative;width:34px;height:18px;display:inline-block;cursor:pointer;flex-shrink:0}
-.toggle-sw input{opacity:0;width:0;height:0;position:absolute}
-.toggle-sw .sw-track{position:absolute;inset:0;background:var(--bg4);border-radius:9px;transition:background .25s ease}
-.toggle-sw input:checked+.sw-track{background:var(--accent)}
-.toggle-sw .sw-track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .25s ease;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.toggle-sw input:checked+.sw-track::after{transform:translateX(16px)}
-.toggle-sw input:disabled+.sw-track{opacity:.35;cursor:not-allowed}
+.check-tgl{position:relative;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;vertical-align:middle}
+.check-tgl input{opacity:0;width:0;height:0;position:absolute;pointer-events:none}
+.check-tgl svg{width:22px;height:22px;display:block;overflow:visible}
+.check-tgl .ct-circle{fill:transparent;stroke:var(--border2);stroke-width:2;transition:fill .22s ease,stroke .22s ease,transform .22s ease}
+.check-tgl .ct-check{fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:16;stroke-dashoffset:16;transition:stroke-dashoffset .28s ease .06s}
+.check-tgl input:checked~svg .ct-circle{fill:var(--success);stroke:var(--success);transform:scale(1.04);transform-origin:center}
+.check-tgl input:checked~svg .ct-check{stroke-dashoffset:0}
+.check-tgl:hover input:not(:disabled)~svg .ct-circle{stroke:var(--accent)}
+.check-tgl input:disabled~svg{opacity:.35;cursor:not-allowed}
+.check-tgl:has(input:disabled){cursor:not-allowed}
 .avito-cb{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;accent-color:var(--accent)}
 .avito-cb input:disabled{cursor:not-allowed;opacity:.5}
 .pt tr:last-child td{border-bottom:none}
@@ -289,6 +292,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .act.lk:hover{border-color:var(--border2);color:rgba(220,220,232,.9);background:rgba(255,255,255,.06);transform:none;box-shadow:none}
 .act-photo{border-color:rgba(6,182,212,.4)!important;color:rgba(110,231,183,.95)!important;background:rgba(6,182,212,.1)!important}
 .act-photo:hover{border-color:var(--accent)!important;background:rgba(6,182,212,.2)!important;box-shadow:0 5px 15px rgba(6,182,212,.25)!important}
+.act-photo.has-media{border-color:rgba(16,185,129,.55)!important;color:var(--success)!important;background:rgba(16,185,129,.12)!important}
+.act-photo.has-media:hover{border-color:var(--success)!important;background:rgba(16,185,129,.22)!important;box-shadow:0 5px 15px rgba(16,185,129,.25)!important}
 .act-doc{border-color:rgba(251,191,36,.35)!important;color:rgba(253,224,131,.95)!important;background:rgba(251,191,36,.08)!important}
 .act-doc:hover{border-color:rgba(251,191,36,.7)!important;background:rgba(251,191,36,.16)!important;box-shadow:0 5px 15px rgba(251,191,36,.2)!important}
 .act-card{border-color:rgba(99,179,237,.35)!important;color:rgba(147,210,255,.95)!important;background:rgba(99,179,237,.08)!important}
@@ -2350,18 +2355,47 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     }
   };
 
-  // Авито-тоггл для группы новых товаров (переключает все товары в группе)
+  // Авито-тоггл для группы новых товаров. Трогаем только товары своих магазинов
+  // (сотрудник не имеет прав на чужие — backend вернул бы 403). Сохраняем prev per-item,
+  // чтобы при частичной ошибке откатить корректно.
   const toggleAvitoGroup = async (groupItems, next) => {
     setAvitoListErr("");
-    const ids = new Set(groupItems.map(p => p.id));
+    const editable = groupItems.filter(p => {
+      const row = mapProductRow(p);
+      return Access.canEdit(user, row) && !p.is_sold;
+    });
+    if (editable.length === 0) return;
+    const prevById = new Map(editable.map(p => [p.id, !!p.avito_published]));
+    const ids = new Set(editable.map(p => p.id));
     setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, avito_published: next } : x));
     try {
-      await Promise.all(groupItems.map(p =>
+      await Promise.all(editable.map(p =>
         apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { avito_published: next } })
       ));
     } catch (e) {
-      setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, avito_published: !next } : x));
+      setItems(xs => xs.map(x => prevById.has(x.id) ? { ...x, avito_published: prevById.get(x.id) } : x));
       setAvitoListErr(e.message || "Не удалось изменить Авито");
+    }
+  };
+
+  // Сайт-тоггл для группы новых товаров. Логика идентична Avito-тогглу выше.
+  const toggleSiteGroup = async (groupItems, next) => {
+    setListErr("");
+    const editable = groupItems.filter(p => {
+      const row = mapProductRow(p);
+      return Access.canEdit(user, row) && !p.is_sold;
+    });
+    if (editable.length === 0) return;
+    const prevById = new Map(editable.map(p => [p.id, !!p.site_published]));
+    const ids = new Set(editable.map(p => p.id));
+    setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, site_published: next } : x));
+    try {
+      await Promise.all(editable.map(p =>
+        apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { site_published: next } })
+      ));
+    } catch (e) {
+      setItems(xs => xs.map(x => prevById.has(x.id) ? { ...x, site_published: prevById.get(x.id) } : x));
+      setListErr(e.message || "Не удалось изменить Сайт");
     }
   };
 
@@ -2473,15 +2507,15 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
       {isNew ? (() => {
         const groupMap = {};
         for (const p of slice) {
-          const key = `${p.model||""}|${p.storage||""}|${p.color||""}`;
-          if (!groupMap[key]) groupMap[key] = { model: p.model, storage: p.storage, color: p.color, brand: p.brand, items: [], totalQty: 0, minPrice: Infinity, maxPrice: -Infinity, sumPrice: 0, count: 0 };
+          const key = `${p.model||""}|${p.storage||""}|${p.color||""}|${p.sim_type||""}`;
+          if (!groupMap[key]) groupMap[key] = { model: p.model, storage: p.storage, color: p.color, brand: p.brand, sim_type: p.sim_type, items: [], totalQty: 0, minPrice: Infinity, maxPrice: -Infinity, sumPrice: 0, count: 0 };
           const g = groupMap[key];
           g.items.push(p);
           g.totalQty += (p.quantity || 1);
           if (p.price_retail) { g.sumPrice += p.price_retail; g.count++; if (p.price_retail < g.minPrice) g.minPrice = p.price_retail; if (p.price_retail > g.maxPrice) g.maxPrice = p.price_retail; }
         }
         const groups = Object.entries(groupMap).map(([key, g]) => ({ key, ...g, avgPrice: g.count ? g.sumPrice / g.count : 0 }));
-        groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || storageNum(a.storage) - storageNum(b.storage));
+        groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || storageNum(a.storage) - storageNum(b.storage) || (a.sim_type || "").localeCompare(b.sim_type || "", "ru"));
         return (
           <div className="tw">
             <table className="pt">
@@ -2489,6 +2523,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                 <th style={{width:210}}>Модель</th><th style={{width:90}}>Память</th><th style={{width:130}}>Цвет</th>
                 <th style={{textAlign:"center",width:62}}>Кол-во</th>
                 {!isInfo && <th style={{width:58}}>Фото</th>}
+                <th style={{textAlign:"center",width:54}}>Сайт</th>
                 <th style={{textAlign:"center",width:54}}>Авито</th>
                 <th style={{textAlign:"right",width:92}}>Розница</th>
                 {!isInfo && <th style={{textAlign:"right",width:92}}>Учётная</th>}
@@ -2499,27 +2534,41 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   const isOpen = expandedNew[g.key];
                   const photoKey = `${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}`;
                   const photoCnt = catalogPhotoCounts[photoKey] || 0;
-                  const groupAvito = g.items.some(p => p.avito_published);
-                  const canToggle = !isInfo && g.items.some(p => {
+                  const editableItems = isInfo ? [] : g.items.filter(p => {
                     const row = mapProductRow(p);
                     return Access.canEdit(user, row) && !p.is_sold;
                   });
+                  // Состояние тогглов — по редактируемым товарам (своих магазинов).
+                  // Админ видит все, сотрудник — только свои.
+                  const stateSource = editableItems.length > 0 ? editableItems : g.items;
+                  const groupAvito = stateSource.some(p => p.avito_published);
+                  const groupSite = stateSource.some(p => p.site_published);
+                  const canToggle = editableItems.length > 0;
                   return (
                     <React.Fragment key={g.key}>
                       <tr style={{cursor:"pointer"}} onClick={() => setExpandedNew(prev => ({...prev, [g.key]: !prev[g.key]}))}>
-                        <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
+                        <td style={{fontWeight:600}}>
+                          <span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}
+                          {g.sim_type ? <span style={{marginLeft:6,padding:"1px 6px",borderRadius:4,background:"rgba(6,182,212,.12)",color:"var(--accent2)",fontSize:10,fontWeight:600}}>{g.sim_type}</span> : null}
+                        </td>
                         <td className="mono">{g.storage || "—"}</td>
                         <td style={{fontSize:13,color:"var(--text)"}}>{g.color || "—"}</td>
                         <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
                         {!isInfo && <td>
-                          <button type="button" className="act act-photo" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11}} onClick={(e)=>{e.stopPropagation();setCatalogPhotoGroup({storeId:g.items[0].store_id,brand:g.brand,model:g.model,storage:g.storage});}}>
+                          <button type="button" className={`act act-photo${photoCnt > 0 ? " has-media" : ""}`} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12}} onClick={(e)=>{e.stopPropagation();setCatalogPhotoGroup({storeId:g.items[0].store_id,brand:g.brand,model:g.model,storage:g.storage});}}>
                             <Icon.camera/>{photoCnt}
                           </button>
                         </td>}
                         <td style={{textAlign:"center"}} onClick={e=>e.stopPropagation()}>
-                          <label className="toggle-sw" title={canToggle ? "Опубликовать на Авито" : "Авито"}>
+                          <label className="check-tgl" title={canToggle ? "Показать на сайте" : "Сайт"}>
+                            <input type="checkbox" checked={groupSite} disabled={!canToggle || photoCnt === 0} onChange={(e) => toggleSiteGroup(g.items, e.target.checked)}/>
+                            <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
+                          </label>
+                        </td>
+                        <td style={{textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                          <label className="check-tgl" title={canToggle ? "Опубликовать на Авито" : "Авито"}>
                             <input type="checkbox" checked={groupAvito} disabled={!canToggle || photoCnt === 0} onChange={(e) => toggleAvitoGroup(g.items, e.target.checked)}/>
-                            <span className="sw-track"/>
+                            <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
                           </label>
                         </td>
                         <td className="tr" style={{color:"var(--success)"}}>{g.count ? (g.minPrice === g.maxPrice ? fmt(g.minPrice) : <>{fmt(g.minPrice)}<span style={{color:"var(--muted)",margin:"0 3px"}}>–</span>{fmt(g.maxPrice)}</>) : "—"}</td>{!isInfo && <td/>}<td/>
@@ -2532,10 +2581,11 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         return (
                           <tr key={p.id} className={isAbnQty?"qty-warn":undefined} style={{background: isAbnQty ? undefined : "rgba(255,255,255,.04)",fontSize:12}}>
                             <td style={{paddingLeft:28}}><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
-                            <td className={isAbnQty?"qty-wm mono":"mono"} style={{cursor:"pointer",color:"var(--text)",position:isAbnQty?"relative":undefined}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}{p.sim_type ? <span style={{color:"var(--accent2)",marginLeft:6,fontFamily:"var(--sans)",fontSize:10}}>{p.sim_type}</span> : ""}</td>
+                            <td className={isAbnQty?"qty-wm mono":"mono"} style={{cursor:"pointer",color:"var(--text)",position:isAbnQty?"relative":undefined}} title="Скопировать" onClick={()=>copyText(p.imei)}>{p.imei || "—"}</td>
                             <td/>
                             <td style={{textAlign:"center",color:"var(--text)"}}>{p.quantity || 1}</td>
                             {!isInfo && <td/>}
+                            <td/>
                             <td/>
                             <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
                             {!isInfo && <td className="tr" style={{cursor:"pointer",userSelect:"none"}} onClick={()=>setRevealedCostId(prev=>prev===p.id?null:p.id)} title="Нажмите чтобы показать"><span style={{filter:revealedCostId===p.id?"none":"blur(6px)",transition:"filter .2s",color:"var(--text)"}}>{fmt(p.price_cost)}</span></td>}
@@ -2546,7 +2596,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                     </React.Fragment>
                   );
                 })}
-                {!loading && groups.length === 0 && <tr><td colSpan={!isInfo?9:7} style={{textAlign:"center",padding:"32px",color:"var(--muted)"}}>Товары не найдены</td></tr>}
+                {!loading && groups.length === 0 && <tr><td colSpan={!isInfo?10:8} style={{textAlign:"center",padding:"32px",color:"var(--muted)"}}>Товары не найдены</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2598,17 +2648,17 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   </td>
                   <td><span className="imei-btn" title="Нажмите, чтобы скопировать" onClick={()=>copyText(p.imei)}>{p.imei||"—"}</span></td>
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
-                  {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
+                  {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}><span style={{display:"inline-flex",alignItems:"center",gap:2,color:p.photos_count>0?"var(--success)":undefined}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
+                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
                       <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
-                      <span className="sw-track"/>
+                      <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
                     </label>
                   </td>
                   <td style={{textAlign:"center"}}>
-                    <label className="toggle-sw" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
+                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
                       <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
-                      <span className="sw-track"/>
+                      <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
                     </label>
                   </td>
                   <td className="tr" style={{color:"var(--success)"}}>{fmt(p.price_retail)}</td>
