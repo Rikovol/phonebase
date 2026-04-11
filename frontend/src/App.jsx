@@ -2650,14 +2650,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                   <td style={{textAlign:"center"}}>{p.quantity || ""}</td>
                   {!isInfo && <td><span className="mc" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}><span style={{display:"inline-flex",alignItems:"center",gap:2,color:p.photos_count>0?"var(--success)":undefined}}><Icon.camera/>{p.photos_count}</span><span style={{display:"inline-flex",alignItems:"center",gap:2}}><Icon.file/>{p.docs_count}</span></span></td>}
                   <td style={{textAlign:"center"}}>
-                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
-                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
+                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : !p.photos_count ? "Нет фото — выгрузка запрещена" : own && !p.is_sold ? "Показать на сайте" : "Сайт"}>
+                      <input type="checkbox" checked={!!p.site_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition || !p.photos_count} onChange={(e) => { e.stopPropagation(); toggleSiteRow(p, e.target.checked); }}/>
                       <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
                     </label>
                   </td>
                   <td style={{textAlign:"center"}}>
-                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
-                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
+                    <label className="check-tgl" title={isAbnormalQty ? "Выгрузка запрещена — сообщите администратору" : isRepairCondition ? "Ремонт/Залог — выгрузка запрещена" : !p.photos_count ? "Нет фото — выгрузка запрещена" : own && !p.is_sold ? "Опубликовать на Авито" : "Авито"}>
+                      <input type="checkbox" checked={!!p.avito_published} disabled={!own || p.is_sold || isAbnormalQty || isRepairCondition || !p.photos_count} onChange={(e) => { e.stopPropagation(); toggleAvitoRow(p, e.target.checked); }}/>
                       <svg viewBox="0 0 22 22"><circle className="ct-circle" cx="11" cy="11" r="9"/><polyline className="ct-check" points="6.5,11.5 10,15 16,8.5"/></svg>
                     </label>
                   </td>
