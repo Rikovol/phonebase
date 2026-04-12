@@ -937,7 +937,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
           {canEdit && (
             <div style={{marginTop:12}}>
               {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files]);}}/>
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files].slice(0, 10));}}/>
               {uploadFiles.length > 0 && !uploading && (
                 <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
                   <span>✓ {uploadFiles.length === 1 ? uploadFiles[0].name : `Выбрано файлов: ${uploadFiles.length}`}</span>
@@ -1123,7 +1123,7 @@ function PhotoGalleryModal({ productId, token, onClose, onOpenCard, user }) {
           {product && user && Access.canEdit(user, { store_name: product.store_name }) && !product.is_sold && (
             <div style={{marginTop:12}}>
               {uploadErr && <div className="err" style={{marginBottom:8}}>{uploadErr}</div>}
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files]);}}/>
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{if(e.target.files.length)setUploadFiles([...e.target.files].slice(0, 10));}}/>
               {uploadFiles.length > 0 && !uploading && (
                 <div style={{marginBottom:8,fontSize:12,color:"var(--accent2)",display:"flex",alignItems:"center",gap:6}}>
                   <span>✓ {uploadFiles.length === 1 ? uploadFiles[0].name : `Выбрано файлов: ${uploadFiles.length}`}</span>
@@ -2398,13 +2398,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     const prevById = new Map(editable.map(p => [p.id, !!p.avito_published]));
     const ids = new Set(editable.map(p => p.id));
     setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, avito_published: next } : x));
-    try {
-      await Promise.all(editable.map(p =>
-        apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { avito_published: next } })
-      ));
-    } catch (e) {
-      setItems(xs => xs.map(x => prevById.has(x.id) ? { ...x, avito_published: prevById.get(x.id) } : x));
-      setAvitoListErr(e.message || "Не удалось изменить Авито");
+    const results = await Promise.allSettled(editable.map(p =>
+      apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { avito_published: next } })
+    ));
+    const failed = results.filter(r => r.status === "rejected");
+    if (failed.length) {
+      const failedIds = new Set(editable.filter((_, i) => results[i].status === "rejected").map(p => p.id));
+      setItems(xs => xs.map(x => failedIds.has(x.id) ? { ...x, avito_published: prevById.get(x.id) } : x));
+      setAvitoListErr(`Не удалось изменить Авито для ${failed.length} из ${editable.length} товаров`);
     }
   };
 
@@ -2419,13 +2420,14 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     const prevById = new Map(editable.map(p => [p.id, !!p.site_published]));
     const ids = new Set(editable.map(p => p.id));
     setItems(xs => xs.map(x => ids.has(x.id) ? { ...x, site_published: next } : x));
-    try {
-      await Promise.all(editable.map(p =>
-        apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { site_published: next } })
-      ));
-    } catch (e) {
-      setItems(xs => xs.map(x => prevById.has(x.id) ? { ...x, site_published: prevById.get(x.id) } : x));
-      setListErr(e.message || "Не удалось изменить Сайт");
+    const results = await Promise.allSettled(editable.map(p =>
+      apiFetch(`/products/${p.id}`, { token, method: "PATCH", json: { site_published: next } })
+    ));
+    const failed = results.filter(r => r.status === "rejected");
+    if (failed.length) {
+      const failedIds = new Set(editable.filter((_, i) => results[i].status === "rejected").map(p => p.id));
+      setItems(xs => xs.map(x => failedIds.has(x.id) ? { ...x, site_published: prevById.get(x.id) } : x));
+      setListErr(`Не удалось изменить Сайт для ${failed.length} из ${editable.length} товаров`);
     }
   };
 
@@ -2436,7 +2438,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     (async () => {
       const keys = new Map(); // key -> {storeId, brand, model, storage}
       for (const p of items) {
-        const k = `${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}`;
+        const k = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}`;
         if (!keys.has(k)) keys.set(k, { storeId: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "" });
       }
       const counts = {};
@@ -2562,7 +2564,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               <tbody>
                 {groups.map(g => {
                   const isOpen = expandedNew[g.key];
-                  const photoKey = `${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}`;
+                  const photoKey = `${g.items[0].store_id}|${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}`;
                   const photoCnt = catalogPhotoCounts[photoKey] || 0;
                   const editableItems = isInfo ? [] : g.items.filter(p => {
                     const row = mapProductRow(p);
@@ -2743,9 +2745,16 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           token={token}
           user={user}
           onClose={() => {
+            const grp = catalogPhotoGroup;
             setCatalogPhotoGroup(null);
-            // Обновляем счётчики фото после закрытия модалки
-            setCatalogPhotoCounts({});
+            // Обновляем счётчик фото для закрытой группы
+            if (grp) {
+              const k = `${grp.storeId}|${(grp.brand||"").toLowerCase()}|${(grp.model||"").toLowerCase()}|${(grp.storage||"").toLowerCase()}`;
+              const params = new URLSearchParams({ store_id: grp.storeId, brand: grp.brand || "", model: grp.model || "", storage: grp.storage || "" });
+              apiFetch(`/catalog-photos/by-key?${params}`, { token }).then(d => {
+                setCatalogPhotoCounts(prev => ({ ...prev, [k]: (d.photos || []).length }));
+              }).catch(() => {});
+            }
           }}
         />
       )}

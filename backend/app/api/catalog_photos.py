@@ -6,6 +6,7 @@ API каталожных фото для новых товаров.
 """
 import asyncio
 import io
+import re
 import uuid
 from pathlib import Path
 
@@ -93,8 +94,10 @@ async def upload_catalog_photo(
     if len(raw) > max_b:
         raise HTTPException(status_code=400, detail=f"Файл больше {settings.MAX_PHOTO_SIZE_MB} МБ")
 
+    if not re.match(r'^[a-f0-9\-]+$', store_id):
+        raise HTTPException(status_code=400, detail="Недопустимый store_id")
     media_root = Path(settings.MEDIA_ROOT).resolve()
-    rel_dir = f"catalog/{store_id.replace('..', '').strip('/\\')}"
+    rel_dir = f"catalog/{store_id}"
     out_dir = (media_root / rel_dir).resolve()
     if not str(out_dir).startswith(str(media_root)):
         raise HTTPException(status_code=400, detail="Недопустимый путь")
@@ -305,6 +308,8 @@ async def rotate_catalog_photo(
     current_user: User = Depends(get_current_user),
 ):
     """Повернуть каталожное фото."""
+    if degrees not in (90, -90, 180, -180, 270, -270):
+        raise HTTPException(status_code=400, detail="Допустимые углы: 90, -90, 180, -180, 270, -270")
     _reject_info(current_user)
 
     photo = await db.get(CatalogPhoto, photo_id)

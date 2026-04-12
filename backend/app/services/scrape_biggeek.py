@@ -8,6 +8,7 @@ import io
 import logging
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from firecrawl import FirecrawlApp
@@ -46,7 +47,7 @@ def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
     app = FirecrawlApp(api_key=api_key)
 
     # Шаг 1: поиск товара на biggeek.ru
-    search_url = f"{BIGGEEK_SEARCH_URL}?q={query}"
+    search_url = f"{BIGGEEK_SEARCH_URL}?q={quote(query)}"
     logger.info("Firecrawl: scraping search page %s", search_url)
 
     search_result = app.scrape_url(
@@ -188,7 +189,7 @@ async def download_and_save_image(
         return None
 
     # Пропускаем слишком мелкие изображения (иконки)
-    if img.width < 200 or img.height < 200:
+    if min(img.width, img.height) < 100:
         return None
 
     media_path = Path(media_root).resolve()

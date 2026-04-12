@@ -182,7 +182,8 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
             skipped += 1
             continue
 
-        # Берём данные из первого товара группы
+        # Берём данные из первого товара группы (стабильная сортировка по id)
+        items.sort(key=lambda p: p.id)
         first = items[0]
         brand = first.brand or ""
         model = first.model or ""

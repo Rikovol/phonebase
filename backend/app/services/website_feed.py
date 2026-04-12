@@ -84,12 +84,6 @@ async def _build_new(db: AsyncSession) -> list[dict]:
     )
     products = result.scalars().all()
 
-    # Фото каталога по product_key — без фильтра по магазину
-    cat_rows = (await db.execute(select(CatalogPhoto))).scalars().all()
-    photos_by_key: dict[str, list[CatalogPhoto]] = {}
-    for cp in cat_rows:
-        photos_by_key.setdefault(cp.product_key, []).append(cp)
-
     # Группировка по (brand, model, storage, color, sim_type)
     groups: dict[tuple, dict] = {}
     for p in products:
@@ -122,6 +116,20 @@ async def _build_new(db: AsyncSession) -> list[dict]:
             g["max_price"] = price if g["max_price"] is None else max(g["max_price"], price)
         if p.site_published:
             g["any_published"] = True
+
+    # Собираем только нужные product_key и загружаем фото с фильтром
+    needed_keys = set()
+    for g in groups.values():
+        if g["any_published"] and g["qty"] > 0:
+            needed_keys.add(make_product_key(g["brand"] or "", g["model"] or "", g["storage"] or ""))
+
+    photos_by_key: dict[str, list[CatalogPhoto]] = {}
+    if needed_keys:
+        cat_rows = (await db.execute(
+            select(CatalogPhoto).where(CatalogPhoto.product_key.in_(list(needed_keys)))
+        )).scalars().all()
+        for cp in cat_rows:
+            photos_by_key.setdefault(cp.product_key, []).append(cp)
 
     items: list[dict] = []
     for g in groups.values():
