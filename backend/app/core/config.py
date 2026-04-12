@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # Интервал автоматического импорта из файлов (в минутах, 0 — отключено)
     IMPORT_INTERVAL_MINUTES: int = 30
 
+    # Firecrawl — парсинг изображений товаров (biggeek.ru)
+    FIRECRAWL_API_KEY: str | None = None
+
     # Avito REST API — интервалы периодических задач (в минутах, 0 — отключено)
     AVITO_STATS_INTERVAL_MINUTES: int = 60
     AVITO_MESSENGER_INTERVAL_MINUTES: int = 5

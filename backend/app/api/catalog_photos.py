@@ -218,6 +218,85 @@ async def delete_catalog_photo(
     return {"status": "deleted", "id": photo_id}
 
 
+@router.post("/scrape-biggeek")
+async def scrape_biggeek_images(
+    store_id: str = Query(...),
+    brand: str = Query(""),
+    model: str = Query(""),
+    storage: str = Query(""),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Парсинг изображений товара с biggeek.ru через Firecrawl (платный API)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Только для администраторов")
+
+    from app.core.config import settings as app_settings
+    if not app_settings.FIRECRAWL_API_KEY:
+        raise HTTPException(status_code=400, detail="FIRECRAWL_API_KEY не настроен в .env")
+
+    store = await db.get(Store, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    from app.services.scrape_biggeek import scrape_product_images, download_and_save_image
+
+    try:
+        image_urls = await asyncio.get_running_loop().run_in_executor(
+            None, scrape_product_images, brand, model, storage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Ошибка Firecrawl: {exc}")
+
+    if not image_urls:
+        return {"saved": 0, "message": "Изображения не найдены на biggeek.ru"}
+
+    key = make_product_key(brand, model, storage)
+
+    existing_count = (
+        await db.execute(
+            select(func.count()).select_from(CatalogPhoto)
+            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key == key)
+        )
+    ).scalar() or 0
+
+    saved = 0
+    for url in image_urls:
+        result = await download_and_save_image(
+            url, store_id, key, app_settings.MEDIA_ROOT,
+        )
+        if not result:
+            continue
+
+        rel_path, file_size = result
+        is_main = existing_count == 0 and saved == 0
+
+        photo = CatalogPhoto(
+            store_id=store_id,
+            product_key=key,
+            uploaded_by=current_user.id,
+            file_path=rel_path,
+            file_size=file_size,
+            is_main=is_main,
+        )
+        db.add(photo)
+        saved += 1
+
+    if saved > 0:
+        db.add(StaffActionLog(
+            user_id=str(current_user.id),
+            action="catalog_photo_scrape_biggeek",
+            target_id=key,
+            details=f"Парсинг biggeek.ru: {model} {storage}, загружено {saved} фото",
+            store_name=store.name,
+        ))
+        await db.commit()
+
+    return {"saved": saved, "found": len(image_urls), "product_key": key}
+
+
 @router.post("/{photo_id}/rotate")
 async def rotate_catalog_photo(
     photo_id: str,

@@ -803,6 +803,8 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
   const [rotating, setRotating] = useState(false);
   const [photoVer, setPhotoVer] = useState(Date.now());
   const fileRef = useRef(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState("");
 
   const loadPhotos = async () => {
     setLoadErr("");
@@ -813,6 +815,23 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
     } catch (e) {
       setLoadErr(e.message || "Ошибка загрузки");
     }
+  };
+
+  const doScrapeBiggeek = async () => {
+    setScraping(true); setScrapeMsg("");
+    try {
+      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+      const r = await apiFetch(`/catalog-photos/scrape-biggeek?${params}`, { token, method: "POST" });
+      if (r.saved > 0) {
+        setScrapeMsg(`Загружено ${r.saved} из ${r.found} фото`);
+        await loadPhotos();
+      } else {
+        setScrapeMsg(r.message || "Изображения не найдены");
+      }
+    } catch (e) {
+      setScrapeMsg(e.message || "Ошибка парсинга");
+    }
+    setScraping(false);
   };
 
   useEffect(() => {
@@ -926,7 +945,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
                 </div>
               )}
               {uploading && <div style={{marginBottom:8,fontSize:12,color:"var(--muted)"}}>Загрузка: {uploadProgress}%</div>}
-              <div style={{display:"inline-flex",gap:6}}>
+              <div style={{display:"inline-flex",gap:6,flexWrap:"wrap"}}>
                 <button type="button" className="btn btn-sm btn-outline" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{display:"inline-flex",alignItems:"center",gap:5}}>
                   <Icon.camera/> {uploadFiles.length > 0 ? "Выбрать другие" : "Выбрать фото"}
                 </button>
@@ -935,7 +954,18 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
                     {uploading?<><span className="spinner"/> Загрузка...</>:`Загрузить (${uploadFiles.length})`}
                   </button>
                 )}
+                {user?.role === "admin" && (
+                  <button type="button" className="btn btn-sm btn-outline" disabled={scraping || uploading} onClick={doScrapeBiggeek} style={{display:"inline-flex",alignItems:"center",gap:5}} title="Парсинг изображений с biggeek.ru (платный API)">
+                    {scraping ? <><span className="spinner"/> Парсинг...</> : "Парсинг BigGeek"}
+                  </button>
+                )}
               </div>
+              {user?.role === "admin" && (
+                <div style={{marginTop:6,fontSize:11,color:"var(--danger)",lineHeight:1.4}}>
+                  Парсинг с BigGeek использует платный API Firecrawl. Каждый запрос расходует кредиты.
+                </div>
+              )}
+              {scrapeMsg && <div style={{marginTop:6,fontSize:12,color: scrapeMsg.includes("Ошибка") || scrapeMsg.includes("не найден") ? "var(--danger)" : "var(--accent)"}}>{scrapeMsg}</div>}
             </div>
           )}
           <div className="mf">
