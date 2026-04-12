@@ -47,7 +47,7 @@ def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
     logger.info("Firecrawl search: site:biggeek.ru %s", query)
 
     search_results = app.search(f"site:biggeek.ru {query}")
-    product_url = _find_product_url(search_results, brand, model)
+    product_url = _find_product_url(search_results, brand, model, storage)
     if not product_url:
         logger.warning("Товар не найден на biggeek.ru: %s", query)
         return []
@@ -68,30 +68,41 @@ def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
     return images
 
 
-def _find_product_url(search_results, brand: str, model: str) -> str | None:
+def _find_product_url(search_results, brand: str, model: str, storage: str = "") -> str | None:
     """Находит URL страницы товара из результатов Firecrawl Search."""
     items = []
     if isinstance(search_results, list):
         items = search_results
     elif isinstance(search_results, dict):
-        items = search_results.get("data", search_results.get("results", []))
+        items = search_results.get("data") or search_results.get("results") or []
 
-    model_lower = model.lower() if model else ""
-    model_slug = model_lower.replace(" ", "-")
+    model_lower = (model or "").lower()
+    model_slug = model_lower.replace(" ", "-") if model_lower else ""
+    storage_slug = (storage or "").lower().replace(" ", "-").replace("gb", "gb")
 
-    # Приоритет: /products/ URL с моделью в названии
-    for item in items:
-        url = item.get("url", "") if isinstance(item, dict) else ""
-        url_lower = url.lower()
-        if "/products/" in url_lower and model_slug and model_slug in url_lower:
-            return url
+    # Приоритет 1: /products/ URL с моделью И storage в названии
+    if model_slug and storage_slug:
+        for item in items:
+            url = item.get("url", "") if isinstance(item, dict) else ""
+            url_lower = url.lower()
+            if "/products/" in url_lower and model_slug in url_lower and storage_slug in url_lower:
+                return url
 
-    # Fallback: /catalog/ URL с моделью
-    for item in items:
-        url = item.get("url", "") if isinstance(item, dict) else ""
-        url_lower = url.lower()
-        if "/catalog/" in url_lower and model_slug and model_slug in url_lower:
-            return url
+    # Приоритет 2: /products/ URL с моделью
+    if model_slug:
+        for item in items:
+            url = item.get("url", "") if isinstance(item, dict) else ""
+            url_lower = url.lower()
+            if "/products/" in url_lower and model_slug in url_lower:
+                return url
+
+    # Приоритет 3: /catalog/ URL с моделью
+    if model_slug:
+        for item in items:
+            url = item.get("url", "") if isinstance(item, dict) else ""
+            url_lower = url.lower()
+            if "/catalog/" in url_lower and model_slug in url_lower:
+                return url
 
     # Последний fallback: первый /products/ URL с biggeek.ru
     for item in items:
@@ -118,9 +129,8 @@ def _extract_gallery_images(result: dict) -> list[str]:
     gallery = soup.find("div", class_="sl-prewiew-thumbs")
     if gallery:
         for img in gallery.find_all("img"):
-            src = img.get("src") or img.get("data-src") or ""
+            src = _normalize_url(img.get("src") or img.get("data-src") or "")
             if src and "images.biggeek.ru" in src:
-                # Берём версию в максимальном разрешении
                 src_full = _to_full_res(src)
                 if src_full not in seen:
                     seen.add(src_full)
@@ -130,22 +140,35 @@ def _extract_gallery_images(result: dict) -> list[str]:
     main_slider = soup.find("div", class_="slider-main")
     if main_slider:
         for img in main_slider.find_all("img"):
-            src = img.get("src") or img.get("data-src") or ""
+            src = _normalize_url(img.get("src") or img.get("data-src") or "")
             if src and "images.biggeek.ru" in src:
                 src_full = _to_full_res(src)
                 if src_full not in seen:
                     seen.add(src_full)
                     images.append(src_full)
 
-    # Если галерея не найдена — fallback: ищем og:image (мета-тег)
+    # Если галерея не найдена — fallback: og:image
     if not images:
         og = soup.find("meta", property="og:image")
         if og and og.get("content"):
-            src = og["content"]
-            if "biggeek.ru" in src and src not in seen:
-                images.append(src)
+            src = _normalize_url(og["content"])
+            if src and "images.biggeek.ru" in src:
+                src_full = _to_full_res(src)
+                if src_full not in seen:
+                    images.append(src_full)
 
     return images
+
+
+def _normalize_url(src: str) -> str:
+    """Приводит относительные URL к абсолютным."""
+    if not src:
+        return ""
+    if src.startswith("//"):
+        return "https:" + src
+    if src.startswith("/"):
+        return "https://biggeek.ru" + src
+    return src
 
 
 def _to_full_res(url: str) -> str:
