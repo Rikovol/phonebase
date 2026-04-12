@@ -319,7 +319,7 @@ async def scrape_biggeek_all(
         raise HTTPException(status_code=404, detail="Магазин не найден")
 
     # Все уникальные наименования новых товаров в этом магазине
-    from sqlalchemy import distinct, and_
+    from sqlalchemy import and_
     rows = (await db.execute(
         select(
             Product.brand,
@@ -337,16 +337,28 @@ async def scrape_biggeek_all(
     if not rows:
         return {"processed": 0, "scraped": 0, "skipped": 0, "message": "Нет новых товаров"}
 
-    # Фильтруем: только те, у кого нет каталожных фото
-    keys_to_scrape = []
+    # Дедупликация по product_key (NULL и "" нормализуются одинаково)
+    unique_keys: dict[str, tuple[str, str, str]] = {}
     for brand, model, storage in rows:
         key = make_product_key(brand or "", model or "", storage or "")
-        count = (await db.execute(
-            select(func.count()).select_from(CatalogPhoto)
-            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key == key)
-        )).scalar() or 0
-        if count == 0:
-            keys_to_scrape.append((brand or "", model or "", storage or "", key))
+        if key not in unique_keys:
+            unique_keys[key] = (brand or "", model or "", storage or "")
+
+    # Один запрос: все существующие ключи с фото
+    existing_keys = set()
+    if unique_keys:
+        existing_rows = (await db.execute(
+            select(CatalogPhoto.product_key)
+            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key.in_(list(unique_keys.keys())))
+            .distinct()
+        )).scalars().all()
+        existing_keys = set(existing_rows)
+
+    keys_to_scrape = [
+        (brand, model, storage, key)
+        for key, (brand, model, storage) in unique_keys.items()
+        if key not in existing_keys
+    ]
 
     if not keys_to_scrape:
         return {"processed": len(rows), "scraped": 0, "skipped": len(rows), "message": "У всех товаров уже есть фото"}
@@ -392,21 +404,20 @@ async def scrape_biggeek_all(
             total_saved += saved
             scraped_count += 1
 
-    if total_saved > 0:
-        db.add(StaffActionLog(
-            user_id=str(current_user.id),
-            action="catalog_photo_scrape_biggeek_all",
-            target_id=store_id,
-            details=f"Массовый парсинг biggeek.ru: {scraped_count} товаров, {total_saved} фото",
-            store_name=store.name,
-        ))
-        await db.commit()
+    db.add(StaffActionLog(
+        user_id=str(current_user.id),
+        action="catalog_photo_scrape_biggeek_all",
+        target_id=store_id,
+        details=f"Массовый парсинг biggeek.ru: {scraped_count}/{len(keys_to_scrape)} товаров, {total_saved} фото, ошибок {len(errors)}",
+        store_name=store.name,
+    ))
+    await db.commit()
 
     return {
-        "processed": len(rows),
+        "processed": len(unique_keys),
         "scraped": scraped_count,
         "total_saved": total_saved,
-        "skipped": len(rows) - len(keys_to_scrape),
+        "skipped": len(existing_keys),
         "errors": errors[:10] if errors else [],
     }
 
