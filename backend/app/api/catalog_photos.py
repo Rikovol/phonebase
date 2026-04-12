@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.business import CatalogPhoto, StaffActionLog, Store, User
+from app.models.business import CatalogPhoto, Product, StaffActionLog, Store, User
 
 router = APIRouter()
 
@@ -298,6 +298,117 @@ async def scrape_biggeek_images(
         await db.commit()
 
     return {"saved": saved, "found": len(image_urls), "product_key": key}
+
+
+@router.post("/scrape-biggeek-all")
+async def scrape_biggeek_all(
+    store_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Массовый парсинг фото с biggeek.ru для всех новых товаров без каталожных фото."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Только для администраторов")
+
+    from app.core.config import settings as app_settings
+    if not app_settings.FIRECRAWL_API_KEY:
+        raise HTTPException(status_code=400, detail="FIRECRAWL_API_KEY не настроен в .env")
+
+    store = await db.get(Store, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    # Все уникальные наименования новых товаров в этом магазине
+    from sqlalchemy import distinct, and_
+    rows = (await db.execute(
+        select(
+            Product.brand,
+            Product.model,
+            Product.storage,
+        )
+        .where(and_(
+            Product.store_id == store_id,
+            Product.is_new == True,  # noqa: E712
+            Product.is_sold == False,  # noqa: E712
+        ))
+        .group_by(Product.brand, Product.model, Product.storage)
+    )).all()
+
+    if not rows:
+        return {"processed": 0, "scraped": 0, "skipped": 0, "message": "Нет новых товаров"}
+
+    # Фильтруем: только те, у кого нет каталожных фото
+    keys_to_scrape = []
+    for brand, model, storage in rows:
+        key = make_product_key(brand or "", model or "", storage or "")
+        count = (await db.execute(
+            select(func.count()).select_from(CatalogPhoto)
+            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key == key)
+        )).scalar() or 0
+        if count == 0:
+            keys_to_scrape.append((brand or "", model or "", storage or "", key))
+
+    if not keys_to_scrape:
+        return {"processed": len(rows), "scraped": 0, "skipped": len(rows), "message": "У всех товаров уже есть фото"}
+
+    from app.services.scrape_biggeek import scrape_product_images, download_and_save_image
+
+    total_saved = 0
+    scraped_count = 0
+    errors = []
+
+    for brand, model, storage, key in keys_to_scrape:
+        try:
+            image_urls = await asyncio.get_running_loop().run_in_executor(
+                None, scrape_product_images, brand, model, storage,
+            )
+        except Exception as exc:
+            errors.append(f"{brand} {model} {storage}: {exc}")
+            continue
+
+        if not image_urls:
+            continue
+
+        saved = 0
+        for url in image_urls:
+            result = await download_and_save_image(
+                url, store_id, key, app_settings.MEDIA_ROOT,
+            )
+            if not result:
+                continue
+            rel_path, file_size = result
+            photo = CatalogPhoto(
+                store_id=store_id,
+                product_key=key,
+                uploaded_by=current_user.id,
+                file_path=rel_path,
+                file_size=file_size,
+                is_main=(saved == 0),
+            )
+            db.add(photo)
+            saved += 1
+
+        if saved > 0:
+            total_saved += saved
+            scraped_count += 1
+
+    if total_saved > 0:
+        db.add(StaffActionLog(
+            user_id=str(current_user.id),
+            action="catalog_photo_scrape_biggeek_all",
+            target_id=store_id,
+            details=f"Массовый парсинг biggeek.ru: {scraped_count} товаров, {total_saved} фото",
+            store_name=store.name,
+        ))
+        await db.commit()
+
+    return {
+        "processed": len(rows),
+        "scraped": scraped_count,
+        "total_saved": total_saved,
+        "skipped": len(rows) - len(keys_to_scrape),
+        "errors": errors[:10] if errors else [],
+    }
 
 
 @router.post("/{photo_id}/rotate")
