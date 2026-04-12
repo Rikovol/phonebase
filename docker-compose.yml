@@ -46,6 +46,7 @@ services:
       IMPORT_1C_HTML_PATH: ${IMPORT_1C_HTML_PATH:-/data/base.html}
       IMPORT_1C_NEW_HTML_PATH: ${IMPORT_1C_NEW_HTML_PATH:-/data/new.html}
       PUBLIC_URL: ${PUBLIC_URL:-https://basestock.ru}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
     volumes:
       - media_files:/app/media
       - pd_documents:/app/pd_docs                 # том для ПД (можно зашифровать отдельно)
