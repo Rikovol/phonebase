@@ -1,14 +1,13 @@
 """
 Парсинг изображений товаров с biggeek.ru через Firecrawl.
 
-Ищет товар по названию (brand + model + storage), скачивает фото товара
-и сохраняет как CatalogPhoto (привязка к product_key).
+Ищет товар по названию (brand + model + storage), скачивает фото
+из галереи товара и сохраняет как CatalogPhoto.
 """
 import io
 import logging
 import uuid
 from pathlib import Path
-from urllib.parse import quote
 
 import httpx
 from firecrawl import FirecrawlApp
@@ -17,8 +16,6 @@ from PIL import Image
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-BIGGEEK_SEARCH_URL = "https://biggeek.ru/search"
 
 
 def _build_query(brand: str, model: str, storage: str) -> str:
@@ -31,10 +28,10 @@ def _build_query(brand: str, model: str, storage: str) -> str:
 
 def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
     """
-    Ищет товар на biggeek.ru и возвращает список URL изображений.
+    Ищет товар на biggeek.ru и возвращает список URL изображений из галереи.
 
     Returns:
-        Список URL изображений товара (без дубликатов, без мелких иконок).
+        Список URL изображений товара (только из галереи, без похожих/аксессуаров).
     """
     api_key = settings.FIRECRAWL_API_KEY
     if not api_key:
@@ -46,25 +43,16 @@ def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
 
     app = FirecrawlApp(api_key=api_key)
 
-    # Шаг 1: поиск товара на biggeek.ru
-    search_url = f"{BIGGEEK_SEARCH_URL}?q={quote(query)}"
-    logger.info("Firecrawl: scraping search page %s", search_url)
+    # Шаг 1: поиск через Firecrawl Search API (Google) — точные результаты
+    logger.info("Firecrawl search: site:biggeek.ru %s", query)
 
-    search_result = app.scrape_url(
-        search_url,
-        params={
-            "formats": ["links"],
-            "onlyMainContent": True,
-        },
-    )
-
-    # Ищем ссылку на страницу товара
-    product_url = _find_product_url(search_result, brand, model)
+    search_results = app.search(f"site:biggeek.ru {query}")
+    product_url = _find_product_url(search_results, brand, model)
     if not product_url:
         logger.warning("Товар не найден на biggeek.ru: %s", query)
         return []
 
-    # Шаг 2: парсим страницу товара для получения изображений
+    # Шаг 2: парсим страницу товара — только галерею
     logger.info("Firecrawl: scraping product page %s", product_url)
 
     product_result = app.scrape_url(
@@ -75,48 +63,47 @@ def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
         },
     )
 
-    images = _extract_images(product_result, product_url)
+    images = _extract_gallery_images(product_result)
     logger.info("Найдено %d изображений для %s", len(images), query)
     return images
 
 
-def _find_product_url(result: dict, brand: str, model: str) -> str | None:
-    """Находит URL страницы товара из результатов поиска."""
-    links = result.get("links", [])
-    brand_lower = brand.lower() if brand else ""
+def _find_product_url(search_results, brand: str, model: str) -> str | None:
+    """Находит URL страницы товара из результатов Firecrawl Search."""
+    items = []
+    if isinstance(search_results, list):
+        items = search_results
+    elif isinstance(search_results, dict):
+        items = search_results.get("data", search_results.get("results", []))
+
     model_lower = model.lower() if model else ""
-    model_slug = model_lower.replace(" ", "-") if model_lower else ""
+    model_slug = model_lower.replace(" ", "-")
 
-    for link in links:
-        url = link if isinstance(link, str) else link.get("url", "")
+    # Приоритет: /products/ URL с моделью в названии
+    for item in items:
+        url = item.get("url", "") if isinstance(item, dict) else ""
         url_lower = url.lower()
-        if "biggeek.ru/" not in url_lower:
-            continue
-        # Пропускаем страницу поиска и главную
-        if "/search" in url_lower or url_lower.rstrip("/") == "https://biggeek.ru":
-            continue
-        # Ищем URL содержащий бренд или модель
-        if brand_lower and brand_lower in url_lower:
-            return url
-        if model_slug and model_slug in url_lower:
+        if "/products/" in url_lower and model_slug and model_slug in url_lower:
             return url
 
-    # Fallback: первая ссылка с biggeek.ru, которая выглядит как страница товара
-    for link in links:
-        url = link if isinstance(link, str) else link.get("url", "")
+    # Fallback: /catalog/ URL с моделью
+    for item in items:
+        url = item.get("url", "") if isinstance(item, dict) else ""
         url_lower = url.lower()
-        if "biggeek.ru/" in url_lower and "/search" not in url_lower:
-            path = url_lower.split("biggeek.ru/")[-1]
-            if path and "/" not in path.strip("/"):
-                continue
-            if path:
-                return url
+        if "/catalog/" in url_lower and model_slug and model_slug in url_lower:
+            return url
+
+    # Последний fallback: первый /products/ URL с biggeek.ru
+    for item in items:
+        url = item.get("url", "") if isinstance(item, dict) else ""
+        if "biggeek.ru/products/" in url.lower():
+            return url
 
     return None
 
 
-def _extract_images(result: dict, product_url: str) -> list[str]:
-    """Извлекает URL изображений товара из HTML."""
+def _extract_gallery_images(result: dict) -> list[str]:
+    """Извлекает URL изображений только из галереи товара (не из похожих/аксессуаров)."""
     from bs4 import BeautifulSoup
 
     html = result.get("html", "")
@@ -127,34 +114,46 @@ def _extract_images(result: dict, product_url: str) -> list[str]:
     seen = set()
     images = []
 
-    # Ищем изображения в галерее товара и основном контенте
-    for img in soup.find_all("img"):
-        src = img.get("src") or img.get("data-src") or ""
-        if not src:
-            continue
+    # Галерея товара: превью-слайдер
+    gallery = soup.find("div", class_="sl-prewiew-thumbs")
+    if gallery:
+        for img in gallery.find_all("img"):
+            src = img.get("src") or img.get("data-src") or ""
+            if src and "images.biggeek.ru" in src:
+                # Берём версию в максимальном разрешении
+                src_full = _to_full_res(src)
+                if src_full not in seen:
+                    seen.add(src_full)
+                    images.append(src_full)
 
-        # Абсолютный URL
-        if src.startswith("//"):
-            src = "https:" + src
-        elif src.startswith("/"):
-            src = "https://biggeek.ru" + src
+    # Основной слайдер (большие фото)
+    main_slider = soup.find("div", class_="slider-main")
+    if main_slider:
+        for img in main_slider.find_all("img"):
+            src = img.get("src") or img.get("data-src") or ""
+            if src and "images.biggeek.ru" in src:
+                src_full = _to_full_res(src)
+                if src_full not in seen:
+                    seen.add(src_full)
+                    images.append(src_full)
 
-        # Фильтруем: только изображения товаров biggeek.ru
-        if "biggeek.ru" not in src and not src.startswith("https://cdn"):
-            continue
-
-        # Пропускаем мелкие иконки, логотипы, баннеры
-        if any(skip in src.lower() for skip in [
-            "logo", "icon", "favicon", "banner", "svg",
-            "thumb", "50x", "30x", "20x", "placeholder",
-        ]):
-            continue
-
-        if src not in seen:
-            seen.add(src)
-            images.append(src)
+    # Если галерея не найдена — fallback: ищем og:image (мета-тег)
+    if not images:
+        og = soup.find("meta", property="og:image")
+        if og and og.get("content"):
+            src = og["content"]
+            if "biggeek.ru" in src and src not in seen:
+                images.append(src)
 
     return images
+
+
+def _to_full_res(url: str) -> str:
+    """Конвертирует URL превью в полноразмерный (biggeek.ru хранит /1/136/ и /1/870/)."""
+    # /1/136/ — превью, /1/870/ — большое фото
+    if "/1/136/" in url:
+        return url.replace("/1/136/", "/1/870/")
+    return url
 
 
 async def download_and_save_image(
@@ -178,7 +177,7 @@ async def download_and_save_image(
         return None
 
     raw = resp.content
-    if len(raw) < 1000:  # слишком мелкий — скорее всего не фото
+    if len(raw) < 1000:
         return None
 
     try:
@@ -188,7 +187,6 @@ async def download_and_save_image(
         logger.warning("Не удалось открыть изображение: %s", url)
         return None
 
-    # Пропускаем слишком мелкие изображения (иконки)
     if min(img.width, img.height) < 100:
         return None
 
