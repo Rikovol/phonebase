@@ -124,7 +124,13 @@ cmd_update() {
 
     # Пересборка и перезапуск контейнеров
     log "Пересборка Docker-контейнеров..."
-    docker compose up -d --build --remove-orphans
+    if [ "${2:-}" = "--no-cache" ]; then
+        log "Полная пересборка (--no-cache)..."
+        docker compose build --no-cache
+    else
+        docker compose build
+    fi
+    docker compose up -d --force-recreate --remove-orphans
 
     log "Ожидание готовности..."
     sleep 10
