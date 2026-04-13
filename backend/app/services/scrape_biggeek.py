@@ -69,7 +69,7 @@ COLOR_MAP: dict[str, list[str]] = {
     "бежевый": ["beige", "bezev"],
     "коралловый": ["coral", "korallov"],
     "титановый": ["titanium", "titanov", "titan"],
-    "натуральный": ["natural", "naturaln"],
+    "натуральный": ["natural", "naturaln", "svetl"],
     "песочный": ["sand", "desert", "pesocn"],
     "ультрамарин": ["ultramarine"],
     "лавандовый": ["lavender", "lavandov"],
