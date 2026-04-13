@@ -121,6 +121,11 @@ def _expand_model_words(model: str) -> set[str]:
     return expanded
 
 
+def _latin_model_words(model: str) -> set[str]:
+    """Только латинские и цифровые слова из модели (для матчинга с biggeek URL)."""
+    return set(re.findall(r'[a-z0-9]+', model.lower()))
+
+
 def _model_to_slug(model: str) -> str:
     """Превращает модель в slug для поиска в URL."""
     return re.sub(r'\s+', '-', model.lower().strip())
@@ -133,11 +138,13 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         return 0
 
     score = 0
-    slug = _model_to_slug(model)
+    # Slug из латинских слов модели (убираем кириллицу типа "Игровая приставка")
+    latin_parts = re.findall(r'[a-z0-9]+', model.lower())
+    if not latin_parts:
+        return 0
+    slug = "-".join(latin_parts)
 
     # Точный матч модели: после slug должна идти цифра, однобуквенный предлог, или конец
-    # "airpods-pro-3-s-zaradnym" → match (s = предлог)
-    # "iphone-16-pro-max" → no match (max = другая модель)
     pattern = re.escape(slug) + r'(?=-\d|-[a-z](?=-)|$)'
     if re.search(pattern, url_lower):
         score += 10
@@ -145,8 +152,12 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         score += 3
     else:
         # Нечёткий матч: считаем совпавшие ключевые слова модели в URL
-        # Для случаев типа "AirPods 4 ANC" → "airpods-with-active-noise-cancellation-4-go-pokolenia"
-        model_words = _expand_model_words(model)
+        # Используем только латинские слова (URL biggeek на латинице)
+        model_words = _latin_model_words(model)
+        # Расширяем аббревиатуры (ANC → active, noise, cancellation)
+        for abbr, full_words in MODEL_SYNONYMS.items():
+            if abbr in model_words:
+                model_words.update(full_words)
         url_words = set(re.findall(r'[a-zа-яё0-9]+', url_lower))
         # Исключаем общие слова (бренд, предлоги)
         stopwords = {"apple", "samsung", "xiaomi", "gb", "с", "и", "для"}
