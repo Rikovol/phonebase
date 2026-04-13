@@ -170,8 +170,9 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         if any(cv in url_lower for cv in color_variants):
             score += 20  # Цвет — высший приоритет
 
-    # Запчасти/аксессуары (левый наушник, правый наушник, зарядный футляр) — пропускаем
-    if re.search(r'levyj|pravyj|zaradn|futlar|oem', url_lower):
+    # Запчасти: URL начинается с /products/levyj- или /products/pravyj- или /products/zaradnyj-
+    product_slug = url_lower.split("/products/")[-1] if "/products/" in url_lower else ""
+    if re.match(r'(levyj|pravyj|zaradnyj|futlyar)(-|$)', product_slug) or product_slug.endswith("-oem"):
         return 0
 
     # "Disk" в модели = с диском → исключаем Digital Edition
@@ -262,7 +263,7 @@ async def _find_product_url(brand: str, model: str, storage: str, color: str) ->
 
         # Если матч слабый — проверяем заголовок h1 лучших кандидатов
         if best_score < 10 and candidates:
-            model_words = set(re.findall(r'[a-zа-яё0-9]+', model.lower()))
+            model_words = _expand_model_words(model)
             model_words -= {"gb", "гб", "с", "и", "для"}
             # Сортируем по score desc, проверяем топ-3
             candidates.sort(key=lambda x: -x[1])
@@ -279,6 +280,11 @@ async def _find_product_url(brand: str, model: str, storage: str, color: str) ->
                     continue
                 title_words = set(re.findall(r'[a-zа-яё0-9]+', h1.get_text().lower()))
                 matched = model_words & title_words
+                # Проверяем что в заголовке нет лишних модификаторов
+                modifiers = {"fe", "ultra", "plus", "max", "pro", "lite", "mini", "se", "edge"}
+                extra_mods = (title_words & modifiers) - model_words
+                if extra_mods:
+                    continue  # S25 FE при поиске S25 — пропускаем
                 if len(matched) >= len(model_words) * 0.7 and len(matched) >= 2:
                     logger.info("Title-match: %s → %s (matched %s)", model, cand_url, matched)
                     return cand_url
