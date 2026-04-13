@@ -53,26 +53,27 @@ BRAND_CATALOG_MAP: dict[str, list[str]] = {
     "nothing": ["/catalog/nothing-phone"],
 }
 
-# Маппинг русских цветов → английские (biggeek использует оба в URL)
+# Маппинг русских цветов → корни для поиска в URL (biggeek склоняет: cernyj/cernogo/cernym)
 COLOR_MAP: dict[str, list[str]] = {
-    "черный": ["black", "cernyj", "chernyj", "midnight"],
-    "белый": ["white", "belyj", "starlight"],
-    "синий": ["blue", "sinij"],
-    "голубой": ["blue", "goluboj", "light-blue"],
-    "красный": ["red", "krasnyj", "product-red"],
-    "зеленый": ["green", "zelenyj"],
-    "фиолетовый": ["purple", "fioletovyj"],
-    "розовый": ["pink", "rozovyj", "rose"],
-    "серый": ["gray", "grey", "seryj", "graphite", "space-gray"],
-    "серебристый": ["silver", "serebristyj"],
-    "золотой": ["gold", "zolotoj"],
-    "бежевый": ["beige", "bezevyj"],
-    "коралловый": ["coral", "korallovyj"],
-    "титановый": ["titanium", "titanovyj", "titan"],
-    "натуральный": ["natural", "naturalnyj"],
-    "песочный": ["sand", "desert", "pesocnyj"],
+    "черный": ["black", "cern", "midnight"],
+    "белый": ["white", "bel", "starlight"],
+    "синий": ["blue", "sini"],
+    "голубой": ["blue", "golubo"],
+    "красный": ["red", "krasn"],
+    "зеленый": ["green", "zelen"],
+    "фиолетовый": ["purple", "fioletov"],
+    "розовый": ["pink", "rozov", "rose"],
+    "серый": ["gray", "grey", "ser", "graphite", "space-gray"],
+    "серебристый": ["silver", "serebrist"],
+    "золотой": ["gold", "zolot"],
+    "бежевый": ["beige", "bezev"],
+    "коралловый": ["coral", "korallov"],
+    "титановый": ["titanium", "titanov", "titan"],
+    "натуральный": ["natural", "naturaln"],
+    "песочный": ["sand", "desert", "pesocn"],
     "ультрамарин": ["ultramarine"],
-    "лавандовый": ["lavender", "lavandovyj"],
+    "лавандовый": ["lavender", "lavandov"],
+    "оранжевый": ["orange", "oranzev"],
 }
 
 BASE_URL = "https://biggeek.ru"
@@ -84,25 +85,25 @@ HEADERS = {
 
 
 def _normalize_color(color: str) -> list[str]:
-    """Возвращает список возможных slug-вариантов цвета для матчинга в URL."""
+    """Возвращает список возможных slug-вариантов цвета для матчинга в URL.
+
+    Маппит в обе стороны: русский → транслит-корни + английский → транслит-корни.
+    """
     c = color.lower().strip()
-    variants = [c]
+    variants = set()
 
-    for ru, en_list in COLOR_MAP.items():
+    # Русский цвет → транслит-корни + английские
+    for ru, slug_list in COLOR_MAP.items():
         if ru in c or c in ru:
-            variants.extend(en_list)
+            variants.update(slug_list)
 
-    # Английские цвета напрямую
-    english_colors = [
-        "black", "white", "blue", "red", "green", "purple", "pink",
-        "gray", "grey", "silver", "gold", "graphite", "titanium",
-        "midnight", "starlight", "natural", "desert", "ultramarine",
-    ]
-    for ec in english_colors:
-        if ec in c:
-            variants.append(ec)
+    # Английский цвет → найти русский → получить транслит-корни
+    for ru, slug_list in COLOR_MAP.items():
+        for slug in slug_list:
+            if slug in c or c == slug:
+                variants.update(slug_list)
 
-    return list(set(variants))
+    return list(variants)
 
 
 # Расшифровка аббревиатур для нечёткого матчинга
@@ -127,9 +128,9 @@ def _latin_model_words(model: str) -> set[str]:
     Фильтрует: однобуквенные слова, годы (2020-2029), техническое мусор (usb, gb).
     """
     words = set(re.findall(r'[a-z0-9]+', model.lower()))
-    # Убираем мусор: однобуквенные, годы, технические суффиксы
+    # Убираем мусор: однобуквенные БУКВЫ (не цифры!), годы, технические суффиксы
     tech_noise = {"usb", "type", "gb", "tb", "mah", "wifi", "lte", "nfc"}
-    noise = {w for w in words if len(w) <= 1 or re.match(r'^20\d\d$', w)}
+    noise = {w for w in words if (len(w) <= 1 and not w.isdigit()) or re.match(r'^20\d\d$', w)}
     return words - noise - tech_noise
 
 
@@ -183,10 +184,25 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         if storage_num and f"{storage_num}-gb" in url_lower.replace(" ", "-"):
             score += 5
 
-    if color:
-        color_variants = _normalize_color(color)
+    # Бонус за цвет: из параметра color ИЛИ из названия модели
+    color_source = color if color else ""
+    if not color_source:
+        model_lower = model.lower()
+        for color_word in COLOR_MAP:
+            if color_word in model_lower:
+                color_source = color_word
+                break
+        if not color_source:
+            for en_color in ["black", "white", "blue", "red", "green", "purple",
+                             "pink", "gray", "silver", "gold", "midnight", "starlight",
+                             "natural", "desert"]:
+                if re.search(r'\b' + en_color + r'\b', model_lower):
+                    color_source = en_color
+                    break
+    if color_source:
+        color_variants = _normalize_color(color_source)
         if any(cv in url_lower for cv in color_variants):
-            score += 20  # Цвет — высший приоритет
+            score += 20
 
     # Запчасти: URL начинается с /products/levyj- или /products/pravyj- или /products/zaradnyj-
     product_slug = url_lower.split("/products/")[-1] if "/products/" in url_lower else ""
