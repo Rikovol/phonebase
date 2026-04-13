@@ -26,6 +26,10 @@ MODEL_CATALOG_MAP: list[tuple[list[str], list[str]]] = [
     (["galaxy tab"], ["/catalog/planshety-samsung"]),
     (["galaxy buds"], ["/catalog/naushniki-samsung"]),
     (["galaxy watch"], ["/catalog/chasy-i-elektronnye-braslety"]),
+    (["playstation", "ps5", "ps4", "dualsense"], ["/catalog/sony-playstation"]),
+    (["nintendo", "switch"], ["/catalog/mediapleery-i-igrovye-konsoli"]),
+    (["dyson"], ["/catalog/dlya-doma"]),
+    (["garmin"], ["/catalog/chasy-i-elektronnye-braslety"]),
 ]
 
 # Маппинг брендов → URL-категории biggeek.ru (fallback)
@@ -43,6 +47,10 @@ BRAND_CATALOG_MAP: dict[str, list[str]] = {
     "realme": ["/catalog/smartfony"],
     "tecno": ["/catalog/smartfony"],
     "infinix": ["/catalog/smartfony"],
+    "sony": ["/catalog/sony-playstation"],
+    "dyson": ["/catalog/dlya-doma"],
+    "garmin": ["/catalog/chasy-i-elektronnye-braslety"],
+    "nothing": ["/catalog/nothing-phone"],
 }
 
 # Маппинг русских цветов → английские (biggeek использует оба в URL)
@@ -141,7 +149,7 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         model_words = _expand_model_words(model)
         url_words = set(re.findall(r'[a-zа-яё0-9]+', url_lower))
         # Исключаем общие слова (бренд, предлоги)
-        stopwords = {"apple", "samsung", "xiaomi", "gb", "s", "с", "и", "для"}
+        stopwords = {"apple", "samsung", "xiaomi", "gb", "с", "и", "для"}
         model_words -= stopwords
         if not model_words:
             return 0
@@ -164,6 +172,10 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
 
     # Запчасти/аксессуары (левый наушник, правый наушник, зарядный футляр) — пропускаем
     if re.search(r'levyj|pravyj|zaradn|futlar|oem', url_lower):
+        return 0
+
+    # "Disk" в модели = с диском → исключаем Digital Edition
+    if re.search(r'\bdisk\b', model.lower()) and "digital" in url_lower:
         return 0
 
     return score
@@ -202,12 +214,18 @@ def _resolve_catalogs(brand: str, model: str) -> list[str]:
 
 
 async def _find_product_url(brand: str, model: str, storage: str, color: str) -> str | None:
-    """Находит URL товара, сканируя каталог biggeek.ru."""
+    """Находит URL товара, сканируя каталог biggeek.ru.
+
+    При слабом матче (score < 10) дополнительно проверяет заголовок <h1>
+    страницы товара на совпадение ключевых слов модели.
+    """
     catalogs = _resolve_catalogs(brand, model)
 
     async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=HEADERS) as client:
         best_url = None
         best_score = 0
+        # Кандидаты со слабым матчем для title-проверки
+        candidates: list[tuple[str, int]] = []
 
         for catalog_path in catalogs:
             for page in range(1, 20):  # До 20 страниц каталога
@@ -231,6 +249,8 @@ async def _find_product_url(brand: str, model: str, storage: str, color: str) ->
                     if score > best_score:
                         best_score = score
                         best_url = href
+                    if 0 < score < 10 and href not in {c[0] for c in candidates}:
+                        candidates.append((href, score))
 
                 # Если нашли точный матч с цветом — не сканируем дальше
                 if best_score >= 30:
@@ -239,6 +259,29 @@ async def _find_product_url(brand: str, model: str, storage: str, color: str) ->
                 # Если на странице нет ссылок на товары — закончились
                 if not links:
                     break
+
+        # Если матч слабый — проверяем заголовок h1 лучших кандидатов
+        if best_score < 10 and candidates:
+            model_words = set(re.findall(r'[a-zа-яё0-9]+', model.lower()))
+            model_words -= {"gb", "гб", "с", "и", "для"}
+            # Сортируем по score desc, проверяем топ-3
+            candidates.sort(key=lambda x: -x[1])
+            for cand_url, cand_score in candidates[:3]:
+                try:
+                    resp = await client.get(cand_url)
+                    if resp.status_code != 200:
+                        continue
+                except httpx.HTTPError:
+                    continue
+                soup = BeautifulSoup(resp.text, "html.parser")
+                h1 = soup.find("h1")
+                if not h1:
+                    continue
+                title_words = set(re.findall(r'[a-zа-яё0-9]+', h1.get_text().lower()))
+                matched = model_words & title_words
+                if len(matched) >= len(model_words) * 0.7 and len(matched) >= 2:
+                    logger.info("Title-match: %s → %s (matched %s)", model, cand_url, matched)
+                    return cand_url
 
         return best_url
 
