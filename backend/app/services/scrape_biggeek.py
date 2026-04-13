@@ -86,13 +86,9 @@ def _normalize_color(color: str) -> list[str]:
     return list(set(variants))
 
 
-def _model_to_slugs(model: str) -> list[str]:
-    """Превращает модель в варианты slug для поиска в URL."""
-    m = model.lower().strip()
-    # "iPhone 16 Pro" → ["iphone-16-pro", "iphone16pro"]
-    slug = re.sub(r'\s+', '-', m)
-    slug_no_dash = re.sub(r'[\s-]+', '', m)
-    return [slug, slug_no_dash]
+def _model_to_slug(model: str) -> str:
+    """Превращает модель в slug для поиска в URL."""
+    return re.sub(r'\s+', '-', model.lower().strip())
 
 
 def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> int:
@@ -102,9 +98,17 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         return 0
 
     score = 0
-    model_slugs = _model_to_slugs(model)
-    if any(s in url_lower for s in model_slugs):
+    slug = _model_to_slug(model)
+
+    # Точный матч модели: после slug должна идти цифра (storage), цвет или конец
+    # "iphone-16-pro" не должен матчиться с "iphone-16-pro-max"
+    # "galaxy-s25" не должен матчиться с "galaxy-s25-fe" или "galaxy-s25-ultra"
+    pattern = re.escape(slug) + r'(?=-\d|$)'
+    if re.search(pattern, url_lower):
         score += 10
+    elif slug in url_lower:
+        # Частичный матч — меньший score
+        score += 3
     else:
         return 0  # Модель обязательна
 
