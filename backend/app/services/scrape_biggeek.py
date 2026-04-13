@@ -100,10 +100,6 @@ def _normalize_color(color: str) -> list[str]:
 # Расшифровка аббревиатур для нечёткого матчинга
 MODEL_SYNONYMS: dict[str, list[str]] = {
     "anc": ["active", "noise", "cancellation"],
-    "pro": ["pro"],
-    "max": ["max"],
-    "se": ["se"],
-    "plus": ["plus"],
 }
 
 
@@ -166,11 +162,11 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         if any(cv in url_lower for cv in color_variants):
             score += 20  # Цвет — высший приоритет
 
-    # Штраф за запчасти/аксессуары (левый наушник, правый наушник, зарядный футляр)
-    if any(w in url_lower for w in ["levyj", "pravyj", "zaradnyj", "futlar", "oem"]):
-        score -= 5
+    # Запчасти/аксессуары (левый наушник, правый наушник, зарядный футляр) — пропускаем
+    if re.search(r'levyj|pravyj|zaradn|futlar|oem', url_lower):
+        return 0
 
-    return max(score, 0)
+    return score
 
 
 async def scrape_product_images(brand: str, model: str, storage: str, color: str = "") -> list[str]:
