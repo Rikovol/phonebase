@@ -204,6 +204,22 @@ async def migrate_seed_competitor_prices() -> None:
         logger.exception("Миграция seed_competitor_prices не выполнена")
 
 
+async def migrate_widen_staff_log_columns() -> None:
+    """Расширить action и target_id в staff_action_log (были слишком короткие)."""
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("ALTER TABLE staff_action_log ALTER COLUMN action TYPE VARCHAR(100)")
+            )
+            await session.execute(
+                text("ALTER TABLE staff_action_log ALTER COLUMN target_id TYPE VARCHAR(500)")
+            )
+            await session.commit()
+            logger.info("Миграция: расширены action/target_id в staff_action_log")
+    except Exception:
+        logger.warning("Миграция widen_staff_log_columns: уже выполнена или ошибка", exc_info=True)
+
+
 async def migrate_add_purchased_at() -> None:
     """Добавить колонку purchased_at (дата покупки из 1С) в products."""
     try:

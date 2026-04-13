@@ -34,16 +34,26 @@ class ParsedNewProduct:
 
     @property
     def brand(self) -> str:
-        first = self.model.split()[0].lower() if self.model else ""
         ALIASES = {
             "apple": "Apple", "iphone": "Apple", "ipad": "Apple",
-            "samsung": "Samsung",
+            "airpods": "Apple", "macbook": "Apple",
+            "samsung": "Samsung", "galaxy": "Samsung",
             "xiaomi": "Xiaomi", "redmi": "Xiaomi", "poco": "Xiaomi",
             "huawei": "Huawei", "honor": "Honor",
             "realme": "Realme", "oppo": "OPPO", "vivo": "Vivo",
             "infinix": "Infinix", "tecno": "TECNO", "nothing": "Nothing",
+            "sony": "Sony", "playstation": "Sony",
+            "google": "Google", "pixel": "Google",
+            "oneplus": "OnePlus",
+            "dyson": "Dyson", "garmin": "Garmin",
+            "nintendo": "Nintendo",
         }
-        return ALIASES.get(first, self.model.split()[0] if self.model else "")
+        # Ищем бренд по любому слову модели, не только первому
+        words = self.model.lower().split() if self.model else []
+        for word in words:
+            if word in ALIASES:
+                return ALIASES[word]
+        return words[0].capitalize() if words else ""
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────

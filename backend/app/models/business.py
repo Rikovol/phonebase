@@ -164,8 +164,8 @@ class StaffActionLog(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    action: Mapped[str] = mapped_column(String(30), nullable=False)
-    target_id: Mapped[str | None] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_id: Mapped[str | None] = mapped_column(String(500))
     details: Mapped[str | None] = mapped_column(Text)
     store_name: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)

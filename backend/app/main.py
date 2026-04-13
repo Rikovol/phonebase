@@ -23,6 +23,7 @@ from app.db_migrations import (
     migrate_info_clear_store,
     migrate_legacy_role_manager_to_staff,
     migrate_seed_competitor_prices,
+    migrate_widen_staff_log_columns,
 )
 from app.seed import seed_if_empty
 
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
     await migrate_admin_clear_store()
     await migrate_info_clear_store()
     await migrate_seed_competitor_prices()
+    await migrate_widen_staff_log_columns()
 
     from app.services.auto_import import auto_import_loop
 
@@ -56,7 +58,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.4.3",
+    version="1.4.4",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
