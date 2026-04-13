@@ -122,8 +122,15 @@ def _expand_model_words(model: str) -> set[str]:
 
 
 def _latin_model_words(model: str) -> set[str]:
-    """Только латинские и цифровые слова из модели (для матчинга с biggeek URL)."""
-    return set(re.findall(r'[a-z0-9]+', model.lower()))
+    """Только латинские и цифровые слова из модели (для матчинга с biggeek URL).
+
+    Фильтрует: однобуквенные слова, годы (2020-2029), техническое мусор (usb, gb).
+    """
+    words = set(re.findall(r'[a-z0-9]+', model.lower()))
+    # Убираем мусор: однобуквенные, годы, технические суффиксы
+    tech_noise = {"usb", "type", "gb", "tb", "mah", "wifi", "lte", "nfc"}
+    noise = {w for w in words if len(w) <= 1 or re.match(r'^20\d\d$', w)}
+    return words - noise - tech_noise
 
 
 def _model_to_slug(model: str) -> str:
