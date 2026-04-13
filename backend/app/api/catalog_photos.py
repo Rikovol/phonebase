@@ -1,8 +1,9 @@
 """
 API каталожных фото для новых товаров.
 
-Фото привязаны к наименованию (product_key = lower(brand|model|storage)),
-а не к конкретному IMEI. Один набор фото на все цвета одной модели.
+Фото привязаны к наименованию (product_key = lower(brand|model|storage|color)),
+а не к конкретному IMEI. Одно фото на конкретный цвет модели.
+При поиске: сначала точный ключ с цветом, fallback — без цвета.
 """
 import asyncio
 import io
@@ -25,8 +26,24 @@ router = APIRouter()
 ALLOWED_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
-def make_product_key(brand: str, model: str, storage: str) -> str:
-    """Нормализованный ключ наименования: lower(brand|model|storage)."""
+def make_product_key(brand: str, model: str, storage: str, color: str = "") -> str:
+    """Нормализованный ключ наименования: lower(brand|model|storage|color).
+
+    Если color пустой — ключ без цвета (обратная совместимость).
+    """
+    parts = [
+        (brand or "").strip(),
+        (model or "").strip(),
+        (storage or "").strip(),
+    ]
+    c = (color or "").strip()
+    if c:
+        parts.append(c)
+    return "|".join(parts).lower()
+
+
+def make_product_key_no_color(brand: str, model: str, storage: str) -> str:
+    """Ключ без цвета — для fallback-поиска и обратной совместимости."""
     return f"{(brand or '').strip()}|{(model or '').strip()}|{(storage or '').strip()}".lower()
 
 
@@ -41,17 +58,34 @@ async def list_catalog_photos(
     brand: str = Query(""),
     model: str = Query(""),
     storage: str = Query(""),
+    color: str = Query(""),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Список каталожных фото по наименованию товара."""
-    key = make_product_key(brand, model, storage)
+    """Список каталожных фото по наименованию товара.
+
+    Поиск: сначала точный ключ с цветом, fallback — без цвета.
+    """
+    key = make_product_key(brand, model, storage, color)
     result = await db.execute(
         select(CatalogPhoto)
         .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key == key)
         .order_by(CatalogPhoto.is_main.desc(), CatalogPhoto.created_at.asc())
     )
     photos = result.scalars().all()
+
+    # Fallback: если с цветом не нашли — ищем без цвета
+    if not photos and color:
+        key_no_color = make_product_key_no_color(brand, model, storage)
+        result = await db.execute(
+            select(CatalogPhoto)
+            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key == key_no_color)
+            .order_by(CatalogPhoto.is_main.desc(), CatalogPhoto.created_at.asc())
+        )
+        photos = result.scalars().all()
+        if photos:
+            key = key_no_color
+
     return {
         "product_key": key,
         "photos": [
@@ -71,6 +105,7 @@ async def upload_catalog_photo(
     brand: str = Query(""),
     model: str = Query(""),
     storage: str = Query(""),
+    color: str = Query(""),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -130,7 +165,7 @@ async def upload_catalog_photo(
         raise HTTPException(status_code=400, detail=str(exc))
 
     rel_path = f"{rel_dir}/{fname}{ext}".replace("\\", "/")
-    key = make_product_key(brand, model, storage)
+    key = make_product_key(brand, model, storage, color)
 
     existing_count = (
         await db.execute(
@@ -227,16 +262,13 @@ async def scrape_biggeek_images(
     brand: str = Query(""),
     model: str = Query(""),
     storage: str = Query(""),
+    color: str = Query(""),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Парсинг изображений товара с biggeek.ru через Firecrawl (платный API)."""
+    """Парсинг изображений товара с biggeek.ru (прямой HTTP)."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Только для администраторов")
-
-    from app.core.config import settings as app_settings
-    if not app_settings.FIRECRAWL_API_KEY:
-        raise HTTPException(status_code=400, detail="FIRECRAWL_API_KEY не настроен в .env")
 
     store = await db.get(Store, store_id)
     if not store:
@@ -245,18 +277,16 @@ async def scrape_biggeek_images(
     from app.services.scrape_biggeek import scrape_product_images, download_and_save_image
 
     try:
-        image_urls = await asyncio.get_running_loop().run_in_executor(
-            None, scrape_product_images, brand, model, storage,
-        )
+        image_urls = await scrape_product_images(brand, model, storage, color)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Ошибка Firecrawl: {exc}")
+        raise HTTPException(status_code=502, detail=f"Ошибка парсинга: {exc}")
 
     if not image_urls:
         return {"saved": 0, "message": "Изображения не найдены на biggeek.ru"}
 
-    key = make_product_key(brand, model, storage)
+    key = make_product_key(brand, model, storage, color)
 
     existing_count = (
         await db.execute(
@@ -268,7 +298,7 @@ async def scrape_biggeek_images(
     saved = 0
     for url in image_urls:
         result = await download_and_save_image(
-            url, store_id, key, app_settings.MEDIA_ROOT,
+            url, store_id, key, settings.MEDIA_ROOT,
         )
         if not result:
             continue
@@ -310,54 +340,56 @@ async def scrape_biggeek_all(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Только для администраторов")
 
-    from app.core.config import settings as app_settings
-    if not app_settings.FIRECRAWL_API_KEY:
-        raise HTTPException(status_code=400, detail="FIRECRAWL_API_KEY не настроен в .env")
-
     store = await db.get(Store, store_id)
     if not store:
         raise HTTPException(status_code=404, detail="Магазин не найден")
 
-    # Все уникальные наименования новых товаров в этом магазине
+    # Все уникальные наименования новых товаров в этом магазине (с цветом)
     from sqlalchemy import and_
     rows = (await db.execute(
         select(
             Product.brand,
             Product.model,
             Product.storage,
+            Product.color,
         )
         .where(and_(
             Product.store_id == store_id,
             Product.is_new == True,  # noqa: E712
             Product.is_sold == False,  # noqa: E712
         ))
-        .group_by(Product.brand, Product.model, Product.storage)
+        .group_by(Product.brand, Product.model, Product.storage, Product.color)
     )).all()
 
     if not rows:
         return {"processed": 0, "scraped": 0, "skipped": 0, "message": "Нет новых товаров"}
 
     # Дедупликация по product_key (NULL и "" нормализуются одинаково)
-    unique_keys: dict[str, tuple[str, str, str]] = {}
-    for brand, model, storage in rows:
-        key = make_product_key(brand or "", model or "", storage or "")
+    unique_keys: dict[str, tuple[str, str, str, str]] = {}
+    for brand, model, storage, color in rows:
+        key = make_product_key(brand or "", model or "", storage or "", color or "")
         if key not in unique_keys:
-            unique_keys[key] = (brand or "", model or "", storage or "")
+            unique_keys[key] = (brand or "", model or "", storage or "", color or "")
 
-    # Один запрос: все существующие ключи с фото
+    # Проверяем существующие фото: color-specific + legacy (без цвета)
+    all_check_keys = set(unique_keys.keys())
+    for brand, model, storage, color in unique_keys.values():
+        all_check_keys.add(make_product_key_no_color(brand, model, storage))
+
     existing_keys = set()
-    if unique_keys:
+    if all_check_keys:
         existing_rows = (await db.execute(
             select(CatalogPhoto.product_key)
-            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key.in_(list(unique_keys.keys())))
+            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key.in_(list(all_check_keys)))
             .distinct()
         )).scalars().all()
         existing_keys = set(existing_rows)
 
     keys_to_scrape = [
-        (brand, model, storage, key)
-        for key, (brand, model, storage) in unique_keys.items()
+        (brand, model, storage, color, key)
+        for key, (brand, model, storage, color) in unique_keys.items()
         if key not in existing_keys
+        and make_product_key_no_color(brand, model, storage) not in existing_keys
     ]
 
     if not keys_to_scrape:
@@ -369,13 +401,13 @@ async def scrape_biggeek_all(
     scraped_count = 0
     errors = []
 
-    for brand, model, storage, key in keys_to_scrape:
+    for i, (brand, model, storage, color, key) in enumerate(keys_to_scrape):
+        if i > 0:
+            await asyncio.sleep(1)  # Rate-limit: 1 сек между товарами
         try:
-            image_urls = await asyncio.get_running_loop().run_in_executor(
-                None, scrape_product_images, brand, model, storage,
-            )
+            image_urls = await scrape_product_images(brand, model, storage, color)
         except Exception as exc:
-            errors.append(f"{brand} {model} {storage}: {exc}")
+            errors.append(f"{brand} {model} {storage} {color}: {exc}")
             continue
 
         if not image_urls:
@@ -384,7 +416,7 @@ async def scrape_biggeek_all(
         saved = 0
         for url in image_urls:
             result = await download_and_save_image(
-                url, store_id, key, app_settings.MEDIA_ROOT,
+                url, store_id, key, settings.MEDIA_ROOT,
             )
             if not result:
                 continue

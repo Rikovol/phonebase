@@ -1,127 +1,203 @@
 """
-Парсинг изображений товаров с biggeek.ru через Firecrawl.
+Парсинг изображений товаров с biggeek.ru (прямой HTTP, без Firecrawl).
 
-Ищет товар по названию (brand + model + storage), скачивает фото
-из галереи товара и сохраняет как CatalogPhoto.
+Ищет товар по каталогу biggeek.ru, матчит по brand + model + storage + color,
+скачивает ВСЕ фото из галереи товара и сохраняет как CatalogPhoto.
 """
 import io
 import logging
+import re
 import uuid
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import httpx
-from firecrawl import FirecrawlApp
+from bs4 import BeautifulSoup
 from PIL import Image
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Маппинг брендов → URL-категории biggeek.ru
+BRAND_CATALOG_MAP: dict[str, list[str]] = {
+    "apple": ["/catalog/apple-iphone"],
+    "samsung": ["/catalog/smartfony-samsung"],
+    "xiaomi": ["/catalog/cmartfony-xiaomi", "/catalog/smartfony-redmi", "/catalog/smartfony-poco"],
+    "poco": ["/catalog/smartfony-poco"],
+    "redmi": ["/catalog/smartfony-redmi"],
+    "honor": ["/catalog/huawei-honor"],
+    "huawei": ["/catalog/kupit-huawei"],
+    "google": ["/catalog/google-pixel"],
+    "oneplus": ["/catalog/kupit-oneplus"],
+    "nothing": ["/catalog/nothing-phone"],
+    "realme": ["/catalog/smartfony"],
+    "tecno": ["/catalog/smartfony"],
+    "infinix": ["/catalog/smartfony"],
+}
 
-def _build_query(brand: str, model: str, storage: str) -> str:
-    """Формирует поисковый запрос для biggeek.ru."""
-    parts = [brand, model]
+# Маппинг русских цветов → английские (biggeek использует оба в URL)
+COLOR_MAP: dict[str, list[str]] = {
+    "черный": ["black", "cernyj", "chernyj", "midnight"],
+    "белый": ["white", "belyj", "starlight"],
+    "синий": ["blue", "sinij"],
+    "голубой": ["blue", "goluboj", "light-blue"],
+    "красный": ["red", "krasnyj", "product-red"],
+    "зеленый": ["green", "zelenyj"],
+    "фиолетовый": ["purple", "fioletovyj"],
+    "розовый": ["pink", "rozovyj", "rose"],
+    "серый": ["gray", "grey", "seryj", "graphite", "space-gray"],
+    "серебристый": ["silver", "serebristyj"],
+    "золотой": ["gold", "zolotoj"],
+    "бежевый": ["beige", "bezevyj"],
+    "коралловый": ["coral", "korallovyj"],
+    "титановый": ["titanium", "titanovyj", "titan"],
+    "натуральный": ["natural", "naturalnyj"],
+    "песочный": ["sand", "desert", "pesocnyj"],
+    "ультрамарин": ["ultramarine"],
+    "лавандовый": ["lavender", "lavandovyj"],
+}
+
+BASE_URL = "https://biggeek.ru"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "ru-RU,ru;q=0.9",
+}
+
+
+def _normalize_color(color: str) -> list[str]:
+    """Возвращает список возможных slug-вариантов цвета для матчинга в URL."""
+    c = color.lower().strip()
+    variants = [c]
+
+    for ru, en_list in COLOR_MAP.items():
+        if ru in c or c in ru:
+            variants.extend(en_list)
+
+    # Английские цвета напрямую
+    english_colors = [
+        "black", "white", "blue", "red", "green", "purple", "pink",
+        "gray", "grey", "silver", "gold", "graphite", "titanium",
+        "midnight", "starlight", "natural", "desert", "ultramarine",
+    ]
+    for ec in english_colors:
+        if ec in c:
+            variants.append(ec)
+
+    return list(set(variants))
+
+
+def _model_to_slugs(model: str) -> list[str]:
+    """Превращает модель в варианты slug для поиска в URL."""
+    m = model.lower().strip()
+    # "iPhone 16 Pro" → ["iphone-16-pro", "iphone16pro"]
+    slug = re.sub(r'\s+', '-', m)
+    slug_no_dash = re.sub(r'[\s-]+', '', m)
+    return [slug, slug_no_dash]
+
+
+def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> int:
+    """Возвращает score матча URL с параметрами товара. 0 = нет матча."""
+    url_lower = url.lower()
+    if "/products/" not in url_lower:
+        return 0
+
+    score = 0
+    model_slugs = _model_to_slugs(model)
+    if any(s in url_lower for s in model_slugs):
+        score += 10
+    else:
+        return 0  # Модель обязательна
+
     if storage:
-        parts.append(storage)
-    return " ".join(p.strip() for p in parts if p and p.strip())
+        storage_num = re.sub(r'[^\d]', '', storage)
+        if storage_num and f"{storage_num}-gb" in url_lower.replace(" ", "-"):
+            score += 5
+
+    if color:
+        color_variants = _normalize_color(color)
+        if any(cv in url_lower for cv in color_variants):
+            score += 20  # Цвет — высший приоритет
+
+    return score
 
 
-def scrape_product_images(brand: str, model: str, storage: str) -> list[str]:
+async def scrape_product_images(brand: str, model: str, storage: str, color: str = "") -> list[str]:
     """
-    Ищет товар на biggeek.ru и возвращает список URL изображений из галереи.
+    Ищет товар на biggeek.ru и возвращает список URL всех изображений из галереи.
 
-    Returns:
-        Список URL изображений товара (только из галереи, без похожих/аксессуаров).
+    Стратегия:
+    1. Определяем каталог по бренду
+    2. ��канируем страницы каталога, ищем URL товара по model+storage+color
+    3. Парсим страницу товара — извле��аем ВСЕ фото из галереи
     """
-    api_key = settings.FIRECRAWL_API_KEY
-    if not api_key:
-        raise ValueError("FIRECRAWL_API_KEY не настроен")
-
-    query = _build_query(brand, model, storage)
+    query = " ".join(p.strip() for p in [brand, model] if p and p.strip())
     if not query:
         raise ValueError("Не указаны brand/model для поиска")
 
-    app = FirecrawlApp(api_key=api_key)
-
-    # Шаг 1: поиск через Firecrawl Search API (Google) — точные результаты
-    logger.info("Firecrawl search: site:biggeek.ru %s", query)
-
-    search_results = app.search(f"site:biggeek.ru {query}")
-    product_url = _find_product_url(search_results, brand, model, storage)
+    product_url = await _find_product_url(brand, model, storage, color)
     if not product_url:
-        logger.warning("Товар не найден на biggeek.ru: %s", query)
+        logger.warning("Товар не найден на biggeek.ru: %s %s %s %s", brand, model, storage, color)
         return []
 
-    # Шаг 2: парсим страницу товара — только галерею
-    logger.info("Firecrawl: scraping product page %s", product_url)
-
-    product_result = app.scrape_url(
-        product_url,
-        params={
-            "formats": ["html"],
-            "onlyMainContent": True,
-        },
-    )
-
-    images = _extract_gallery_images(product_result)
-    logger.info("Найдено %d изображений для %s", len(images), query)
+    images = await _scrape_gallery(product_url)
+    logger.info("Найдено %d фото для %s %s %s %s", len(images), brand, model, storage, color)
     return images
 
 
-def _find_product_url(search_results, brand: str, model: str, storage: str = "") -> str | None:
-    """Находит URL страницы товара из результатов Firecrawl Search."""
-    items = []
-    if isinstance(search_results, list):
-        items = search_results
-    elif isinstance(search_results, dict):
-        items = search_results.get("data") or search_results.get("results") or []
+async def _find_product_url(brand: str, model: str, storage: str, color: str) -> str | None:
+    """Находит URL товара, сканируя каталог biggeek.ru."""
+    brand_lower = brand.lower().strip()
+    catalogs = BRAND_CATALOG_MAP.get(brand_lower, ["/catalog/smartfony"])
 
-    model_lower = (model or "").lower()
-    model_slug = model_lower.replace(" ", "-") if model_lower else ""
-    storage_slug = (storage or "").lower().replace(" ", "-").replace("gb", "gb")
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=HEADERS) as client:
+        best_url = None
+        best_score = 0
 
-    # Приоритет 1: /products/ URL с моделью И storage в названии
-    if model_slug and storage_slug:
-        for item in items:
-            url = item.get("url", "") if isinstance(item, dict) else ""
-            url_lower = url.lower()
-            if "/products/" in url_lower and model_slug in url_lower and storage_slug in url_lower:
-                return url
+        for catalog_path in catalogs:
+            for page in range(1, 20):  # До 20 страниц каталога
+                url = f"{BASE_URL}{catalog_path}" + (f"?page={page}" if page > 1 else "")
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code != 200:
+                        break
+                except httpx.HTTPError:
+                    break
 
-    # Приоритет 2: /products/ URL с моделью
-    if model_slug:
-        for item in items:
-            url = item.get("url", "") if isinstance(item, dict) else ""
-            url_lower = url.lower()
-            if "/products/" in url_lower and model_slug in url_lower:
-                return url
+                soup = BeautifulSoup(resp.text, "html.parser")
+                links = soup.find_all("a", href=re.compile(r"/products/"))
 
-    # Приоритет 3: /catalog/ URL с моделью
-    if model_slug:
-        for item in items:
-            url = item.get("url", "") if isinstance(item, dict) else ""
-            url_lower = url.lower()
-            if "/catalog/" in url_lower and model_slug in url_lower:
-                return url
+                for link in links:
+                    href = link.get("href", "")
+                    if not href.startswith("http"):
+                        href = BASE_URL + href
 
-    # Последний fallback: первый /products/ URL с biggeek.ru
-    for item in items:
-        url = item.get("url", "") if isinstance(item, dict) else ""
-        if "biggeek.ru/products/" in url.lower():
-            return url
+                    score = _match_url(href, brand, model, storage, color)
+                    if score > best_score:
+                        best_score = score
+                        best_url = href
 
-    return None
+                # Если нашли точный матч с цветом — не сканируем дальше
+                if best_score >= 30:
+                    return best_url
+
+                # Если на странице нет ссылок на товары — закончились
+                if not links:
+                    break
+
+        return best_url
 
 
-def _extract_gallery_images(result: dict) -> list[str]:
-    """Извлекает URL изображений только из галереи товара (не из похожих/аксессуаров)."""
-    from bs4 import BeautifulSoup
+async def _scrape_gallery(product_url: str) -> list[str]:
+    """Парсит страницу товара и извлекает ВСЕ URL из галереи."""
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=HEADERS) as client:
+        try:
+            resp = await client.get(product_url)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Не удалось загрузить %s: %s", product_url, exc)
+            return []
 
-    html = result.get("html", "")
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(resp.text, "html.parser")
     seen = set()
     images = []
 
@@ -147,7 +223,7 @@ def _extract_gallery_images(result: dict) -> list[str]:
                     seen.add(src_full)
                     images.append(src_full)
 
-    # Если галерея не найдена — fallback: og:image
+    # Fallback: og:image
     if not images:
         og = soup.find("meta", property="og:image")
         if og and og.get("content"):
@@ -167,13 +243,12 @@ def _normalize_url(src: str) -> str:
     if src.startswith("//"):
         return "https:" + src
     if src.startswith("/"):
-        return "https://biggeek.ru" + src
+        return BASE_URL + src
     return src
 
 
 def _to_full_res(url: str) -> str:
-    """Конвертирует URL превью в полноразмерный (biggeek.ru хранит /1/136/ и /1/870/)."""
-    # /1/136/ — превью, /1/870/ — большое фото
+    """Конвертирует URL превью в полноразмерный (biggeek.ru ��ранит /1/136/ и /1/870/)."""
     if "/1/136/" in url:
         return url.replace("/1/136/", "/1/870/")
     return url
@@ -192,7 +267,7 @@ async def download_and_save_image(
         (relative_path, file_size) или None при ошибке.
     """
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=HEADERS) as client:
             resp = await client.get(url)
             resp.raise_for_status()
     except httpx.HTTPError as exc:

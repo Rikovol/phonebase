@@ -12,7 +12,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.catalog_photos import make_product_key
+from app.api.catalog_photos import make_product_key, make_product_key_no_color
 from app.core.config import settings
 from app.models.business import CatalogPhoto, Product, ProductPhoto, Store
 from app.utils.imei_sn import imei_or_sn_display
@@ -117,11 +117,12 @@ async def _build_new(db: AsyncSession) -> list[dict]:
         if p.site_published:
             g["any_published"] = True
 
-    # Собираем только нужные product_key и загружаем фото с фильтром
+    # Собираем нужные product_key: с цветом + без цвета (fallback)
     needed_keys = set()
     for g in groups.values():
         if g["any_published"] and g["qty"] > 0:
-            needed_keys.add(make_product_key(g["brand"] or "", g["model"] or "", g["storage"] or ""))
+            needed_keys.add(make_product_key(g["brand"] or "", g["model"] or "", g["storage"] or "", g["color"] or ""))
+            needed_keys.add(make_product_key_no_color(g["brand"] or "", g["model"] or "", g["storage"] or ""))
 
     photos_by_key: dict[str, list[CatalogPhoto]] = {}
     if needed_keys:
@@ -137,8 +138,10 @@ async def _build_new(db: AsyncSession) -> list[dict]:
             continue
         if g["qty"] <= 0:
             continue
-        key = make_product_key(g["brand"] or "", g["model"] or "", g["storage"] or "")
-        cat_photos = photos_by_key.get(key, [])
+        # Сначала ищем с цветом, fallback — без цвета
+        key_color = make_product_key(g["brand"] or "", g["model"] or "", g["storage"] or "", g["color"] or "")
+        key_no_color = make_product_key_no_color(g["brand"] or "", g["model"] or "", g["storage"] or "")
+        cat_photos = photos_by_key.get(key_color, []) or photos_by_key.get(key_no_color, [])
         if not cat_photos:
             continue
         cat_photos_sorted = sorted(cat_photos, key=lambda ph: (not ph.is_main, ph.created_at))

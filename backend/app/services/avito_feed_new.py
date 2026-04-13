@@ -13,7 +13,7 @@ from lxml.etree import CDATA, Element, SubElement, tostring
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.catalog_photos import make_product_key
+from app.api.catalog_photos import make_product_key, make_product_key_no_color
 from app.core.config import settings
 from app.models.business import CatalogPhoto, Product, Store
 
@@ -147,19 +147,27 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
         xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
         return b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body
 
-    # Группируем по (brand, model, storage)
+    # Группируем по (brand, model, storage) — одно объявление на группу
     groups: dict[str, list[Product]] = defaultdict(list)
     for p in products:
-        key = make_product_key(p.brand or "", p.model, p.storage or "")
+        key = make_product_key_no_color(p.brand or "", p.model, p.storage or "")
         groups[key].append(p)
 
-    # Загружаем все каталожные фото магазина
-    all_keys = list(groups.keys())
+    # Загружаем каталожные фото: ключи с цветом + без цвета
+    all_keys_with_color = set()
+    all_keys_no_color = set()
+    for key, items in groups.items():
+        all_keys_no_color.add(key)
+        for p in items:
+            if p.color:
+                all_keys_with_color.add(make_product_key(p.brand or "", p.model, p.storage or "", p.color))
+
+    all_search_keys = list(all_keys_with_color | all_keys_no_color)
     photos_result = await db.execute(
         select(CatalogPhoto).where(
             and_(
                 CatalogPhoto.store_id == store_id,
-                CatalogPhoto.product_key.in_(all_keys),
+                CatalogPhoto.product_key.in_(all_search_keys),
             )
         )
     )
@@ -173,10 +181,22 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
     skipped = 0
 
     for key, items in groups.items():
-        catalog_photos = sorted(
-            photos_by_key.get(key, []),
-            key=lambda ph: (not ph.is_main, ph.created_at),
-        )
+        # Ищем фото: пробуем каждый цвет группы, потом fallback без цвета
+        catalog_photos = []
+        for p in items:
+            if p.color:
+                ck = make_product_key(p.brand or "", p.model, p.storage or "", p.color)
+                catalog_photos = sorted(
+                    photos_by_key.get(ck, []),
+                    key=lambda ph: (not ph.is_main, ph.created_at),
+                )
+                if catalog_photos:
+                    break
+        if not catalog_photos:
+            catalog_photos = sorted(
+                photos_by_key.get(key, []),
+                key=lambda ph: (not ph.is_main, ph.created_at),
+            )
         if not catalog_photos:
             log.debug("avito_feed_new: skip %s — нет каталожных фото", key)
             skipped += 1

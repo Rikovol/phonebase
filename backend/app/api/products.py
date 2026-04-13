@@ -440,13 +440,17 @@ async def update_product(
     if body.avito_published is True:
         if product.is_new:
             # Для новых товаров проверяем каталожные фото по наименованию
-            from app.api.catalog_photos import make_product_key
+            from app.api.catalog_photos import make_product_key, make_product_key_no_color
             from app.models.business import CatalogPhoto
-            pkey = make_product_key(product.brand or "", product.model, product.storage or "")
+            pkey = make_product_key(product.brand or "", product.model, product.storage or "", product.color or "")
+            pkey_nc = make_product_key_no_color(product.brand or "", product.model, product.storage or "")
             cnt = (
                 await db.execute(
                     select(func.count()).select_from(CatalogPhoto)
-                    .where(CatalogPhoto.store_id == product.store_id, CatalogPhoto.product_key == pkey)
+                    .where(
+                        CatalogPhoto.store_id == product.store_id,
+                        CatalogPhoto.product_key.in_([pkey, pkey_nc]),
+                    )
                 )
             ).scalar() or 0
         else:
