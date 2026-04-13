@@ -17,7 +17,18 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Маппинг брендов → URL-категории biggeek.ru
+# Маппинг модель-keywords → URL-категории biggeek.ru (приоритет над брендом)
+MODEL_CATALOG_MAP: list[tuple[list[str], list[str]]] = [
+    (["airpods"], ["/catalog/apple-airpods"]),
+    (["ipad"], ["/catalog/apple-ipad"]),
+    (["macbook"], ["/catalog/noutbuki-apple"]),
+    (["apple watch", "watch ultra", "watch se"], ["/catalog/apple-watch"]),
+    (["galaxy tab"], ["/catalog/planshety-samsung"]),
+    (["galaxy buds"], ["/catalog/naushniki-samsung"]),
+    (["galaxy watch"], ["/catalog/chasy-i-elektronnye-braslety"]),
+]
+
+# Маппинг брендов → URL-категории biggeek.ru (fallback)
 BRAND_CATALOG_MAP: dict[str, list[str]] = {
     "apple": ["/catalog/apple-iphone"],
     "samsung": ["/catalog/smartfony-samsung"],
@@ -86,6 +97,26 @@ def _normalize_color(color: str) -> list[str]:
     return list(set(variants))
 
 
+# Расшифровка аббревиатур для нечёткого матчинга
+MODEL_SYNONYMS: dict[str, list[str]] = {
+    "anc": ["active", "noise", "cancellation"],
+    "pro": ["pro"],
+    "max": ["max"],
+    "se": ["se"],
+    "plus": ["plus"],
+}
+
+
+def _expand_model_words(model: str) -> set[str]:
+    """Разбивает модель на слова, расшифровывает аббревиатуры."""
+    words = set(re.findall(r'[a-zа-яё0-9]+', model.lower()))
+    expanded = set(words)
+    for abbr, full_words in MODEL_SYNONYMS.items():
+        if abbr in words:
+            expanded.update(full_words)
+    return expanded
+
+
 def _model_to_slug(model: str) -> str:
     """Превращает модель в slug для поиска в URL."""
     return re.sub(r'\s+', '-', model.lower().strip())
@@ -100,17 +131,30 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
     score = 0
     slug = _model_to_slug(model)
 
-    # Точный матч модели: после slug должна идти цифра (storage), цвет или конец
-    # "iphone-16-pro" не должен матчиться с "iphone-16-pro-max"
-    # "galaxy-s25" не должен матчиться с "galaxy-s25-fe" или "galaxy-s25-ultra"
-    pattern = re.escape(slug) + r'(?=-\d|$)'
+    # Точный матч модели: после slug должна идти цифра, однобуквенный предлог, или конец
+    # "airpods-pro-3-s-zaradnym" → match (s = предлог)
+    # "iphone-16-pro-max" → no match (max = другая модель)
+    pattern = re.escape(slug) + r'(?=-\d|-[a-z](?=-)|$)'
     if re.search(pattern, url_lower):
         score += 10
     elif slug in url_lower:
-        # Частичный матч — меньший score
         score += 3
     else:
-        return 0  # Модель обязательна
+        # Нечёткий матч: считаем совпавшие ключевые слова модели в URL
+        # Для случаев типа "AirPods 4 ANC" → "airpods-with-active-noise-cancellation-4-go-pokolenia"
+        model_words = _expand_model_words(model)
+        url_words = set(re.findall(r'[a-zа-яё0-9]+', url_lower))
+        # Исключаем общие слова (бренд, предлоги)
+        stopwords = {"apple", "samsung", "xiaomi", "gb", "s", "с", "и", "для"}
+        model_words -= stopwords
+        if not model_words:
+            return 0
+        matched = model_words & url_words
+        ratio = len(matched) / len(model_words)
+        if ratio >= 0.5 and len(matched) >= 2:
+            score += round(ratio * 8)  # max 8 за нечёткий матч
+        else:
+            return 0
 
     if storage:
         storage_num = re.sub(r'[^\d]', '', storage)
@@ -122,7 +166,11 @@ def _match_url(url: str, brand: str, model: str, storage: str, color: str) -> in
         if any(cv in url_lower for cv in color_variants):
             score += 20  # Цвет — высший приоритет
 
-    return score
+    # Штраф за запчасти/аксессуары (левый наушник, правый наушник, зарядный футляр)
+    if any(w in url_lower for w in ["levyj", "pravyj", "zaradnyj", "futlar", "oem"]):
+        score -= 5
+
+    return max(score, 0)
 
 
 async def scrape_product_images(brand: str, model: str, storage: str, color: str = "") -> list[str]:
@@ -148,10 +196,18 @@ async def scrape_product_images(brand: str, model: str, storage: str, color: str
     return images
 
 
+def _resolve_catalogs(brand: str, model: str) -> list[str]:
+    """Определяет каталоги для поиска: сначала по модели, потом по бренду."""
+    model_lower = model.lower().strip()
+    for keywords, catalog_paths in MODEL_CATALOG_MAP:
+        if any(kw in model_lower for kw in keywords):
+            return catalog_paths
+    return BRAND_CATALOG_MAP.get(brand.lower().strip(), ["/catalog/smartfony"])
+
+
 async def _find_product_url(brand: str, model: str, storage: str, color: str) -> str | None:
     """Находит URL товара, сканируя каталог biggeek.ru."""
-    brand_lower = brand.lower().strip()
-    catalogs = BRAND_CATALOG_MAP.get(brand_lower, ["/catalog/smartfony"])
+    catalogs = _resolve_catalogs(brand, model)
 
     async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=HEADERS) as client:
         best_url = None
