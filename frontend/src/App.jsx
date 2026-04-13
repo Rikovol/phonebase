@@ -792,7 +792,7 @@ function PhotoModal({ product, productId, token, onClose, onDone }) {
 }
 
 /** Просмотр каталожных фото (новые товары — привязка к наименованию, а не к IMEI) */
-function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user, onClose }) {
+function CatalogPhotoGalleryModal({ storeId, brand, model, storage, color, token, user, onClose }) {
   const [photos, setPhotos] = useState([]);
   const [loadErr, setLoadErr] = useState("");
   const [bigIdx, setBigIdx] = useState(null);
@@ -809,7 +809,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
   const loadPhotos = async () => {
     setLoadErr("");
     try {
-      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "", color: color || "" });
       const d = await apiFetch(`/catalog-photos/by-key?${params}`, { token });
       setPhotos(d.photos || []);
     } catch (e) {
@@ -820,7 +820,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
   const doScrapeBiggeek = async () => {
     setScraping(true); setScrapeMsg("");
     try {
-      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "", color: color || "" });
       const r = await apiFetch(`/catalog-photos/scrape-biggeek?${params}`, { token, method: "POST" });
       if (r.saved > 0) {
         setScrapeMsg(`Загружено ${r.saved} из ${r.found} фото`);
@@ -838,7 +838,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
     let c = true;
     loadPhotos().then(() => { if (!c) setPhotos([]); });
     return () => { c = false; };
-  }, [storeId, brand, model, storage, token]);
+  }, [storeId, brand, model, storage, color, token]);
 
   const doRotate = async (photoId, degrees) => {
     if (rotating) return;
@@ -867,7 +867,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, token, user,
       const errors = [];
       let done = 0;
       const uploadOne = async (file) => {
-        const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "" });
+        const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "", color: color || "" });
         const fd = new FormData();
         fd.append("file", file);
         const res = await fetch(`${API_BASE}/catalog-photos/upload?${params}`, {
@@ -2188,7 +2188,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [brands,setBrands]=useState([]);
   const [conditions,setConditions]=useState([]);
   const [photoGalleryId, setPhotoGalleryId] = useState(null);
-  const [catalogPhotoGroup, setCatalogPhotoGroup] = useState(null); // {storeId, brand, model, storage}
+  const [catalogPhotoGroup, setCatalogPhotoGroup] = useState(null); // {storeId, brand, model, storage, color}
   const [docsModalId, setDocsModalId] = useState(null);
   const [priceStats, setPriceStats] = useState({});
   const [expandedNew, setExpandedNew] = useState({});
@@ -2438,13 +2438,13 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     (async () => {
       const keys = new Map(); // key -> {storeId, brand, model, storage}
       for (const p of items) {
-        const k = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}`;
-        if (!keys.has(k)) keys.set(k, { storeId: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "" });
+        const k = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}|${(p.color||"").toLowerCase()}`;
+        if (!keys.has(k)) keys.set(k, { storeId: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "", color: p.color || "" });
       }
       const counts = {};
       await Promise.all([...keys.entries()].map(async ([k, v]) => {
         try {
-          const params = new URLSearchParams({ store_id: v.storeId, brand: v.brand, model: v.model, storage: v.storage });
+          const params = new URLSearchParams({ store_id: v.storeId, brand: v.brand, model: v.model, storage: v.storage, color: v.color });
           const d = await apiFetch(`/catalog-photos/by-key?${params}`, { token });
           counts[k] = (d.photos || []).length;
         } catch { counts[k] = 0; }
@@ -2564,7 +2564,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
               <tbody>
                 {groups.map(g => {
                   const isOpen = expandedNew[g.key];
-                  const photoKey = `${g.items[0].store_id}|${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}`;
+                  const photoKey = `${g.items[0].store_id}|${(g.brand||"").toLowerCase()}|${(g.model||"").toLowerCase()}|${(g.storage||"").toLowerCase()}|${(g.color||"").toLowerCase()}`;
                   const photoCnt = catalogPhotoCounts[photoKey] || 0;
                   const editableItems = isInfo ? [] : g.items.filter(p => {
                     const row = mapProductRow(p);
@@ -2587,7 +2587,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
                         <td style={{fontSize:13,color:"var(--text)"}}>{g.color || "—"}</td>
                         <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.totalQty}</td>
                         {!isInfo && <td>
-                          <button type="button" className={`act act-photo${photoCnt > 0 ? " has-media" : ""}`} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12}} onClick={(e)=>{e.stopPropagation();setCatalogPhotoGroup({storeId:g.items[0].store_id,brand:g.brand,model:g.model,storage:g.storage});}}>
+                          <button type="button" className={`act act-photo${photoCnt > 0 ? " has-media" : ""}`} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12}} onClick={(e)=>{e.stopPropagation();setCatalogPhotoGroup({storeId:g.items[0].store_id,brand:g.brand,model:g.model,storage:g.storage,color:g.color});}}>
                             <Icon.camera/>{photoCnt}
                           </button>
                         </td>}
@@ -2742,6 +2742,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
           brand={catalogPhotoGroup.brand}
           model={catalogPhotoGroup.model}
           storage={catalogPhotoGroup.storage}
+          color={catalogPhotoGroup.color}
           token={token}
           user={user}
           onClose={() => {
@@ -2749,8 +2750,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
             setCatalogPhotoGroup(null);
             // Обновляем счётчик фото для закрытой группы
             if (grp) {
-              const k = `${grp.storeId}|${(grp.brand||"").toLowerCase()}|${(grp.model||"").toLowerCase()}|${(grp.storage||"").toLowerCase()}`;
-              const params = new URLSearchParams({ store_id: grp.storeId, brand: grp.brand || "", model: grp.model || "", storage: grp.storage || "" });
+              const k = `${grp.storeId}|${(grp.brand||"").toLowerCase()}|${(grp.model||"").toLowerCase()}|${(grp.storage||"").toLowerCase()}|${(grp.color||"").toLowerCase()}`;
+              const params = new URLSearchParams({ store_id: grp.storeId, brand: grp.brand || "", model: grp.model || "", storage: grp.storage || "", color: grp.color || "" });
               apiFetch(`/catalog-photos/by-key?${params}`, { token }).then(d => {
                 setCatalogPhotoCounts(prev => ({ ...prev, [k]: (d.photos || []).length }));
               }).catch(() => {});
