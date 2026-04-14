@@ -2391,6 +2391,9 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   // (сотрудник не имеет прав на чужие — backend вернул бы 403). Сохраняем prev per-item,
   // чтобы при частичной ошибке откатить корректно.
   const bulkPublishNew = async (target, value) => {
+    const label = target === "site" ? "Сайт" : "Авито";
+    const action = value ? `Опубликовать все товары с фото на ${label}?` : `Снять все товары с ${label}?`;
+    if (!window.confirm(action)) return;
     setBulkNewBusy(true); setBulkNewMsg("");
     try {
       const params = new URLSearchParams({ target, value: String(value) });
