@@ -3051,12 +3051,15 @@ function StoreSettingsPage({ token, activeStore }) {
                 setScrapeBusy(true); setScrapeResult("");
                 try {
                   const r = await apiFetch(`/catalog-photos/scrape-biggeek-all?store_id=${current.id}`, { token, method: "POST" });
+                  let msg = "";
                   if (r.scraped > 0) {
-                    setScrapeResult(`Обработано ${r.processed} наименований: загружено ${r.total_saved} фото для ${r.scraped} товаров, пропущено ${r.skipped} (уже есть фото)`);
+                    msg = `Обработано ${r.processed} наименований (${r.stores_count || 1} маг.): загружено ${r.total_saved} фото для ${r.scraped} товаров, пропущено ${r.skipped}`;
                   } else {
-                    setScrapeResult(r.message || "Нет товаров для парсинга");
+                    msg = r.message || "Нет товаров для парсинга";
                   }
-                  if (r.errors?.length) setScrapeResult(prev => prev + `. Ошибки: ${r.errors.join("; ")}`);
+                  if (r.cleaned > 0) msg += `. Удалено ${r.cleaned} записей-призраков (файлы отсутствовали)`;
+                  if (r.errors?.length) msg += `. Ошибки: ${r.errors.join("; ")}`;
+                  setScrapeResult(msg);
                 } catch (e) { setScrapeResult(e.message || "Ошибка парсинга"); }
                 setScrapeBusy(false);
               }}
@@ -3064,7 +3067,7 @@ function StoreSettingsPage({ token, activeStore }) {
               {scrapeBusy ? <><span className="spinner"/> Парсинг каталога…</> : "Парсинг фото каталога"}
             </button>
             <div style={{marginTop:6,fontSize:11,color:"var(--danger)",lineHeight:1.4}}>
-              Прямой парсинг biggeek.ru. Фото подбираются по бренду, модели, памяти и цвету. Пауза 1 сек между товарами.
+              Прямой парсинг biggeek.ru по всем магазинам. Фото подбираются по бренду, модели, памяти и цвету. Пауза 1 сек между товарами.
             </div>
             {scrapeResult && <div style={{marginTop:8,fontSize:12,color: scrapeResult.includes("Ошибка") || scrapeResult.includes("не настроен") ? "var(--danger)" : "var(--accent)"}}>{scrapeResult}</div>}
           </div>}

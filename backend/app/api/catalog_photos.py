@@ -336,7 +336,13 @@ async def scrape_biggeek_all(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Массовый парсинг фото с biggeek.ru для всех новых товаров без каталожных фото."""
+    """Массовый парсинг фото с biggeek.ru для новых товаров без каталожных фото.
+
+    Обрабатывает ВСЕ магазины, не только выбранный (store_id используется
+    только для авторизации и лога).
+    Перед проверкой удаляет «призраков» — записи CatalogPhoto, у которых
+    файл отсутствует на диске.
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Только для администраторов")
 
@@ -344,66 +350,111 @@ async def scrape_biggeek_all(
     if not store:
         raise HTTPException(status_code=404, detail="Магазин не найден")
 
-    # Все уникальные наименования новых товаров в этом магазине (с цветом)
     from sqlalchemy import and_
+
+    # ── 1. Все уникальные наименования новых товаров ПО ВСЕМ магазинам ──
     rows = (await db.execute(
         select(
+            Product.store_id,
             Product.brand,
             Product.model,
             Product.storage,
             Product.color,
         )
         .where(and_(
-            Product.store_id == store_id,
             Product.is_new == True,  # noqa: E712
             Product.is_sold == False,  # noqa: E712
         ))
-        .group_by(Product.brand, Product.model, Product.storage, Product.color)
+        .group_by(Product.store_id, Product.brand, Product.model, Product.storage, Product.color)
     )).all()
 
     if not rows:
-        return {"processed": 0, "scraped": 0, "skipped": 0, "message": "Нет новых товаров"}
+        return {"processed": 0, "scraped": 0, "skipped": 0, "cleaned": 0,
+                "message": "Нет новых товаров ни в одном магазине"}
 
-    # Дедупликация по product_key (NULL и "" нормализуются одинаково)
-    unique_keys: dict[str, tuple[str, str, str, str]] = {}
-    for brand, model, storage, color in rows:
-        key = make_product_key(brand or "", model or "", storage or "", color or "")
-        if key not in unique_keys:
-            unique_keys[key] = (brand or "", model or "", storage or "", color or "")
+    # Группируем по store_id → {product_key: (brand, model, storage, color)}
+    per_store: dict[str, dict[str, tuple[str, str, str, str]]] = {}
+    for sid, brand, model, storage, color in rows:
+        b, m, s, c = brand or "", model or "", storage or "", color or ""
+        key = make_product_key(b, m, s, c)
+        per_store.setdefault(sid, {})[key] = (b, m, s, c)
 
-    # Проверяем существующие фото: color-specific + legacy (без цвета)
-    all_check_keys = set(unique_keys.keys())
-    for brand, model, storage, color in unique_keys.values():
-        all_check_keys.add(make_product_key_no_color(brand, model, storage))
+    # ── 2. Чистка «призраков»: записи без файлов на диске ──────────────
+    media_root = Path(settings.MEDIA_ROOT)
+    all_store_ids = list(per_store.keys())
+    all_product_keys: set[str] = set()
+    for keys_map in per_store.values():
+        all_product_keys.update(keys_map.keys())
+        for b, m, s, c in keys_map.values():
+            all_product_keys.add(make_product_key_no_color(b, m, s))
 
-    existing_keys = set()
-    if all_check_keys:
+    orphan_photos = (await db.execute(
+        select(CatalogPhoto)
+        .where(
+            CatalogPhoto.store_id.in_(all_store_ids),
+            CatalogPhoto.product_key.in_(list(all_product_keys)),
+        )
+    )).scalars().all()
+
+    cleaned = 0
+    for photo in orphan_photos:
+        full_path = media_root / photo.file_path
+        if not full_path.exists():
+            await db.delete(photo)
+            cleaned += 1
+    if cleaned:
+        await db.flush()
+
+    # ── 3. Определяем, что нужно скрейпить (по каждому магазину) ────────
+    keys_to_scrape: list[tuple[str, str, str, str, str, str]] = []  # (store_id, brand, model, storage, color, key)
+    total_unique = 0
+    total_skipped = 0
+
+    for sid, keys_map in per_store.items():
+        total_unique += len(keys_map)
+
+        check_keys = set(keys_map.keys())
+        for b, m, s, c in keys_map.values():
+            check_keys.add(make_product_key_no_color(b, m, s))
+
         existing_rows = (await db.execute(
             select(CatalogPhoto.product_key)
-            .where(CatalogPhoto.store_id == store_id, CatalogPhoto.product_key.in_(list(all_check_keys)))
+            .where(CatalogPhoto.store_id == sid, CatalogPhoto.product_key.in_(list(check_keys)))
             .distinct()
         )).scalars().all()
         existing_keys = set(existing_rows)
 
-    keys_to_scrape = [
-        (brand, model, storage, color, key)
-        for key, (brand, model, storage, color) in unique_keys.items()
-        if key not in existing_keys
-        and make_product_key_no_color(brand, model, storage) not in existing_keys
-    ]
+        for key, (b, m, s, c) in keys_map.items():
+            if key in existing_keys or make_product_key_no_color(b, m, s) in existing_keys:
+                total_skipped += 1
+            else:
+                keys_to_scrape.append((sid, b, m, s, c, key))
 
     if not keys_to_scrape:
-        return {"processed": len(rows), "scraped": 0, "skipped": len(rows), "message": "У всех товаров уже есть фото"}
+        msg = f"У всех товаров уже есть фото ({total_unique} наименований, {len(per_store)} магазинов)"
+        if cleaned:
+            msg += f". Удалено {cleaned} записей с отсутствующими файлами — попробуйте ещё раз"
+        return {"processed": total_unique, "scraped": 0, "skipped": total_skipped,
+                "cleaned": cleaned, "message": msg}
 
+    # ── 4. Скрейпинг (дедупликация: один запрос к biggeek на product_key) ─
     from app.services.scrape_biggeek import scrape_product_images, download_and_save_image
+
+    # Группируем по product_key → список store_id, чтобы не ходить на biggeek дважды
+    key_to_stores: dict[str, list[str]] = {}
+    key_to_params: dict[str, tuple[str, str, str, str]] = {}
+    for sid, brand, model, storage, color, key in keys_to_scrape:
+        key_to_stores.setdefault(key, []).append(sid)
+        if key not in key_to_params:
+            key_to_params[key] = (brand, model, storage, color)
 
     total_saved = 0
     scraped_count = 0
     errors = []
 
-    for i, (brand, model, storage, color, key) in enumerate(keys_to_scrape):
+    for i, (key, (brand, model, storage, color)) in enumerate(key_to_params.items()):
         if i > 0:
-            await asyncio.sleep(1)  # Rate-limit: 1 сек между товарами
+            await asyncio.sleep(1)
         try:
             image_urls = await scrape_product_images(brand, model, storage, color)
         except Exception as exc:
@@ -413,43 +464,53 @@ async def scrape_biggeek_all(
         if not image_urls:
             continue
 
-        saved = 0
+        # Скачиваем файлы один раз (в первый store_id), затем копируем записи
+        first_sid = key_to_stores[key][0]
+        downloaded: list[tuple[str, int]] = []
         for url in image_urls:
             result = await download_and_save_image(
-                url, store_id, key, settings.MEDIA_ROOT,
+                url, first_sid, key, settings.MEDIA_ROOT,
             )
-            if not result:
-                continue
-            rel_path, file_size = result
-            photo = CatalogPhoto(
-                store_id=store_id,
-                product_key=key,
-                uploaded_by=current_user.id,
-                file_path=rel_path,
-                file_size=file_size,
-                is_main=(saved == 0),
-            )
-            db.add(photo)
-            saved += 1
+            if result:
+                downloaded.append(result)
 
-        if saved > 0:
-            total_saved += saved
-            scraped_count += 1
+        if not downloaded:
+            continue
+
+        for sid in key_to_stores[key]:
+            for idx, (rel_path, file_size) in enumerate(downloaded):
+                photo = CatalogPhoto(
+                    store_id=sid,
+                    product_key=key,
+                    uploaded_by=current_user.id,
+                    file_path=rel_path,
+                    file_size=file_size,
+                    is_main=(idx == 0),
+                )
+                db.add(photo)
+            total_saved += len(downloaded)
+        scraped_count += 1
 
     db.add(StaffActionLog(
         user_id=str(current_user.id),
         action="catalog_photo_scrape_biggeek_all",
         target_id=store_id,
-        details=f"Массовый парсинг biggeek.ru: {scraped_count}/{len(keys_to_scrape)} товаров, {total_saved} фото, ошибок {len(errors)}",
+        details=(
+            f"Массовый парсинг biggeek.ru ({len(per_store)} магазинов): "
+            f"{scraped_count}/{len(keys_to_scrape)} товаров, {total_saved} фото, "
+            f"пропущено {total_skipped}, удалено призраков {cleaned}, ошибок {len(errors)}"
+        ),
         store_name=store.name,
     ))
     await db.commit()
 
     return {
-        "processed": len(unique_keys),
+        "processed": total_unique,
         "scraped": scraped_count,
         "total_saved": total_saved,
-        "skipped": len(existing_keys),
+        "skipped": total_skipped,
+        "cleaned": cleaned,
+        "stores_count": len(per_store),
         "errors": errors[:10] if errors else [],
     }
 
