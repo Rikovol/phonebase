@@ -2558,17 +2558,28 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         <span className="fc">{filtered.length} шт.</span>
       </div>
 
-      {isNew && isAdm && (
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
-          <button type="button" className="btn btn-sm btn-primary" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", true)}>Все с фото → Сайт</button>
-          <button type="button" className="btn btn-sm btn-outline" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", false)}>Снять всё с Сайта</button>
-          <span style={{width:1,height:20,background:"var(--border)",margin:"0 4px"}}/>
-          <button type="button" className="btn btn-sm btn-primary" disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", true)}>Все с фото → Авито</button>
-          <button type="button" className="btn btn-sm btn-outline" disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", false)}>Снять всё с Авито</button>
-          {bulkNewBusy && <span className="spinner"/>}
-          {bulkNewMsg && <span style={{fontSize:12,color:bulkNewMsg.includes("Ошибка")?"var(--danger)":"var(--accent)"}}>{bulkNewMsg}</span>}
-        </div>
-      )}
+      {isNew && isAdm && (() => {
+        // Товары с каталожными фото
+        const withPhoto = items.filter(p => {
+          if (p.is_sold) return false;
+          const pk = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}|${(p.color||"").toLowerCase()}`;
+          return (catalogPhotoCounts[pk] || 0) > 0;
+        });
+        const allOnSite = withPhoto.length > 0 && withPhoto.every(p => p.site_published);
+        const allOnAvito = withPhoto.length > 0 && withPhoto.every(p => p.avito_published);
+        return withPhoto.length > 0 ? (
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
+            <button type="button" className={`btn btn-sm ${allOnSite ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", !allOnSite)}>
+              {allOnSite ? "✓ " : ""}Все с фото → Сайт
+            </button>
+            <button type="button" className={`btn btn-sm ${allOnAvito ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", !allOnAvito)}>
+              {allOnAvito ? "✓ " : ""}Все с фото → Авито
+            </button>
+            {bulkNewBusy && <span className="spinner"/>}
+            {bulkNewMsg && <span style={{fontSize:12,color:bulkNewMsg.includes("Ошибка")?"var(--danger)":"var(--accent)"}}>{bulkNewMsg}</span>}
+          </div>
+        ) : null;
+      })()}
 
       {isNew ? (() => {
         const groupMap = {};
