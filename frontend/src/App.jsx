@@ -2558,7 +2558,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         <span className="fc">{filtered.length} шт.</span>
       </div>
 
-      {isNew && !isInfo && (
+      {isNew && isAdm && (
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
           <button type="button" className="btn btn-sm btn-primary" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", true)}>Все с фото → Сайт</button>
           <button type="button" className="btn btn-sm btn-outline" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", false)}>Снять всё с Сайта</button>
