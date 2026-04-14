@@ -12,7 +12,7 @@ from app.api.access import can_modify_product, can_view_product
 from app.api.auth import get_current_user
 from app.api.purchase_docs import DOC_LABELS
 from app.core.database import get_db
-from app.models.business import Product, ProductPhoto, PurchaseDoc, StaffActionLog, Store, User
+from app.models.business import CatalogPhoto, Product, ProductPhoto, PurchaseDoc, StaffActionLog, Store, User
 from app.utils.imei_sn import imei_or_sn_display
 
 router = APIRouter()
@@ -555,3 +555,84 @@ async def bulk_avito_publish(
         p.updated_at = now
     await db.commit()
     return {"published": len(products)}
+
+
+@router.post("/bulk-publish-new")
+async def bulk_publish_new(
+    target: str = Query(..., description="site или avito"),
+    value: bool = Query(True, description="true — включить, false — выключить"),
+    store: Optional[str] = Query(None, description="Название магазина (опционально)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Массовая публикация/снятие новых товаров с фото на Сайт или Авито.
+
+    Обрабатывает только товары, у которых есть каталожные фото (CatalogPhoto).
+    """
+    if current_user.role == "info":
+        raise HTTPException(status_code=403, detail="Недоступно для роли «Инфо»")
+    if target not in ("site", "avito"):
+        raise HTTPException(status_code=400, detail="target должен быть 'site' или 'avito'")
+
+    from app.api.catalog_photos import make_product_key, make_product_key_no_color
+
+    # Все новые непроданные товары
+    query = (
+        select(Product)
+        .join(Store, Product.store_id == Store.id)
+        .where(
+            Product.is_new == True,  # noqa: E712
+            Product.is_sold == False,  # noqa: E712
+        )
+    )
+    if target == "site":
+        query = query.where(Product.site_published == (not value))
+    else:
+        query = query.where(Product.avito_published == (not value))
+    if store:
+        query = query.where(func.lower(func.trim(Store.name)) == func.lower(store.strip()))
+    if current_user.role != "admin":
+        query = query.where(Product.store_id == current_user.store_id)
+
+    products = (await db.execute(query)).scalars().all()
+    if not products:
+        return {"updated": 0}
+
+    # Собираем store_id для запроса CatalogPhoto
+    store_ids = {p.store_id for p in products}
+
+    # Все CatalogPhoto ключи по этим магазинам
+    existing_rows = (await db.execute(
+        select(CatalogPhoto.store_id, CatalogPhoto.product_key)
+        .where(CatalogPhoto.store_id.in_(list(store_ids)))
+        .distinct()
+    )).all()
+    photo_keys: set[tuple[str, str]] = {(sid, pk) for sid, pk in existing_rows}
+
+    now = datetime.now(timezone.utc)
+    updated = 0
+    for p in products:
+        pk = make_product_key(p.brand or "", p.model or "", p.storage or "", p.color or "")
+        pk_nc = make_product_key_no_color(p.brand or "", p.model or "", p.storage or "")
+        has_photo = (p.store_id, pk) in photo_keys or (p.store_id, pk_nc) in photo_keys
+        if not has_photo:
+            continue
+        if target == "site":
+            p.site_published = value
+        else:
+            p.avito_published = value
+        p.updated_at = now
+        updated += 1
+
+    if updated:
+        field = "site_published" if target == "site" else "avito_published"
+        db.add(StaffActionLog(
+            user_id=str(current_user.id),
+            action=f"bulk_publish_new_{target}",
+            target_id="",
+            details=f"Массовая {'публикация' if value else 'снятие'} новых товаров: {target}, {updated} шт.",
+            store_name=store or "все",
+        ))
+        await db.commit()
+
+    return {"updated": updated}

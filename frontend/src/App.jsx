@@ -2194,6 +2194,8 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   const [expandedNew, setExpandedNew] = useState({});
   const [revealedCostId, setRevealedCostId] = useState(null);
   const [catalogPhotoCounts, setCatalogPhotoCounts] = useState({}); // key -> count
+  const [bulkNewBusy, setBulkNewBusy] = useState(false);
+  const [bulkNewMsg, setBulkNewMsg] = useState("");
 
   const isAdm  = Access.isAdmin(user);
   const isInfo = Access.isInfo(user);
@@ -2388,6 +2390,27 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
   // Авито-тоггл для группы новых товаров. Трогаем только товары своих магазинов
   // (сотрудник не имеет прав на чужие — backend вернул бы 403). Сохраняем prev per-item,
   // чтобы при частичной ошибке откатить корректно.
+  const bulkPublishNew = async (target, value) => {
+    setBulkNewBusy(true); setBulkNewMsg("");
+    try {
+      const params = new URLSearchParams({ target, value: String(value) });
+      if (storeFilter) params.set("store", storeFilter);
+      const r = await apiFetch(`/products/bulk-publish-new?${params}`, { token, method: "POST" });
+      setBulkNewMsg(`${value ? "Опубликовано" : "Снято"} ${r.updated} товаров (${target === "site" ? "Сайт" : "Авито"})`);
+      // Обновляем items локально — только товары с каталожными фото
+      if (r.updated > 0) {
+        const field = target === "site" ? "site_published" : "avito_published";
+        setItems(xs => xs.map(x => {
+          if (!x.is_new || x.is_sold) return x;
+          const pk = `${x.store_id}|${(x.brand||"").toLowerCase()}|${(x.model||"").toLowerCase()}|${(x.storage||"").toLowerCase()}|${(x.color||"").toLowerCase()}`;
+          if (!catalogPhotoCounts[pk]) return x;
+          return { ...x, [field]: value };
+        }));
+      }
+    } catch (e) { setBulkNewMsg(e.message || "Ошибка"); }
+    setBulkNewBusy(false);
+  };
+
   const toggleAvitoGroup = async (groupItems, next) => {
     setAvitoListErr("");
     const editable = groupItems.filter(p => {
@@ -2534,6 +2557,18 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         )}
         <span className="fc">{filtered.length} шт.</span>
       </div>
+
+      {isNew && !isInfo && (
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
+          <button type="button" className="btn btn-sm btn-primary" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", true)}>Все с фото → Сайт</button>
+          <button type="button" className="btn btn-sm btn-outline" disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", false)}>Снять всё с Сайта</button>
+          <span style={{width:1,height:20,background:"var(--border)",margin:"0 4px"}}/>
+          <button type="button" className="btn btn-sm btn-primary" disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", true)}>Все с фото → Авито</button>
+          <button type="button" className="btn btn-sm btn-outline" disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", false)}>Снять всё с Авито</button>
+          {bulkNewBusy && <span className="spinner"/>}
+          {bulkNewMsg && <span style={{fontSize:12,color:bulkNewMsg.includes("Ошибка")?"var(--danger)":"var(--accent)"}}>{bulkNewMsg}</span>}
+        </div>
+      )}
 
       {isNew ? (() => {
         const groupMap = {};
