@@ -3112,140 +3112,107 @@ function StoreSettingsPage({ token, activeStore }) {
           </div>}
         </div>
 
-        {/* ── Avito API ─────────────────────────────────── */}
+        {/* ── Интеграции ─────────────────────────────────── */}
         <div className="panel">
-          <SectionHead id="avito-api" title={`Avito API — ${selName || "—"}`}/>
-          {openSections.has("avito-api") && <div className="pb2">
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              Подключение к Avito REST API для управления объявлениями, статистики и мессенджера.<br/>
-              Получите client_id и client_secret в <a href="https://developers.avito.ru" target="_blank" rel="noopener" style={{color:"var(--accent)"}}>developers.avito.ru</a> → Настройки → API ключи.
-            </div>
+          <SectionHead id="integrations" title={`Интеграции — ${selName || "—"}`}/>
+          {openSections.has("integrations") && <div className="pb2">
 
-            {/* Статус подключения */}
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,padding:"10px 14px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
-              <span style={{
-                width:8, height:8, borderRadius:"50%", flexShrink:0,
-                background: current?.avito_configured ? "#4ade80" : "#f87171",
-              }}/>
-              <span style={{fontSize:13}}>
-                {current?.avito_configured
-                  ? "API подключён"
-                  : "API не подключён"}
-              </span>
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
-              <div className="field">
-                <label>Client ID</label>
-                <input
-                  placeholder={current?.avito_configured ? "Введите новый для замены" : "Из личного кабинета Авито"}
-                  value={apiId}
-                  onChange={e => setApiId(e.target.value)}
-                  autoComplete="off"
-                />
+            {/* Avito API */}
+            <div style={{marginBottom:20}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Avito API</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
+                Подключение к Avito REST API. Получите ключи в <a href="https://developers.avito.ru" target="_blank" rel="noopener" style={{color:"var(--accent)"}}>developers.avito.ru</a>.
               </div>
-              <div className="field">
-                <label>Client Secret</label>
-                <input
-                  type="password"
-                  placeholder={current?.avito_configured ? "Введите новый для замены" : "Из личного кабинета Авито"}
-                  value={apiSecret}
-                  onChange={e => setApiSecret(e.target.value)}
-                  autoComplete="off"
-                />
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
+                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:current?.avito_configured?"#4ade80":"#f87171"}}/>
+                <span style={{fontSize:13}}>{current?.avito_configured ? "API подключён" : "API не подключён"}</span>
               </div>
-            </div>
-
-            {apiMsg && apiMsg !== "ok" && (
-              <div className="err" style={{marginTop:8}}>{apiMsg}</div>
-            )}
-            {apiMsg === "ok" && (
-              <div style={{marginTop:8,fontSize:12,color:"#4ade80"}}>API подключён и проверен</div>
-            )}
-
-            <button
-              type="button" className="btn btn-primary" style={{marginTop:10}}
-              onClick={saveApiCredentials}
-              disabled={!current || !apiId.trim() || !apiSecret.trim() || apiSaving}
-            >
-              {apiSaving ? "Проверка..." : "Подключить API"}
-            </button>
-          </div>}
-        </div>
-
-        {/* ── Авито фид (автозагрузка) ─────────────────── */}
-        {current?.id && (
-        <div className="panel" style={{marginTop:16}}>
-          <SectionHead id="avito-feed" title={`Авито фид — ${selName || "—"}`}/>
-          {openSections.has("avito-feed") && <div className="pb2">
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
-              Единый XML-фид для автозагрузки на Авито (б/у + новые товары).<br/>
-              Укажите эту ссылку в личном кабинете Авито → Автозагрузка → URL фида.
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
-              <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+current.id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{current.id}.xml</code>
-              <a href={"/api/avito/feed-all/"+current.id+".xml"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
-            </div>
-          </div>}
-        </div>
-        )}
-
-        {/* ── Контактные данные ──────────────────────────── */}
-        <div className="panel" style={{marginTop:16}}>
-          <SectionHead id="contacts" title={`Контактные данные — ${selName || "—"}`}/>
-          {openSections.has("contacts") && <div className="pb2">
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              Контактная информация для объявлений на Авито. Выберите магазин в верхней панели.
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
-              <div className="field">
-                <label>Контактный телефон</label>
-                <input placeholder="+7 999 123-45-67" value={f.phone} onChange={e=>setF((x)=>({ ...x, phone: e.target.value }))}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
+                <div className="field">
+                  <label>Client ID</label>
+                  <input placeholder={current?.avito_configured ? "Введите новый для замены" : "Из личного кабинета Авито"} value={apiId} onChange={e => setApiId(e.target.value)} autoComplete="off"/>
+                </div>
+                <div className="field">
+                  <label>Client Secret</label>
+                  <input type="password" placeholder={current?.avito_configured ? "Введите новый для замены" : "Из личного кабинета Авито"} value={apiSecret} onChange={e => setApiSecret(e.target.value)} autoComplete="off"/>
+                </div>
               </div>
-              <div className="field">
-                <label>Контактное лицо</label>
-                <input placeholder="Как в объявлении (Avito)" value={f.avitoContact} onChange={e=>setF((x)=>({ ...x, avitoContact: e.target.value }))}/>
-              </div>
-              <div className="field" style={{gridColumn:"1/-1"}}>
-                <label>Адрес магазина (для объявлений)</label>
-                <input placeholder="г. Москва, ул. Примерная, 1" value={f.address} onChange={e=>setF((x)=>({ ...x, address: e.target.value }))}/>
-              </div>
+              {apiMsg && apiMsg !== "ok" && <div className="err" style={{marginTop:8}}>{apiMsg}</div>}
+              {apiMsg === "ok" && <div style={{marginTop:8,fontSize:12,color:"#4ade80"}}>API подключён и проверен</div>}
+              <button type="button" className="btn btn-primary" style={{marginTop:10}} onClick={saveApiCredentials} disabled={!current || !apiId.trim() || !apiSecret.trim() || apiSaving}>
+                {apiSaving ? "Проверка..." : "Подключить API"}
+              </button>
             </div>
-            <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:10}} disabled={!current}>
-              {saved ? "Сохранено" : "Сохранить"}
-            </button>
-          </div>}
-        </div>
 
-        {/* ── Выгрузка на сайт ──────────────────────────── */}
-        <div className="panel" style={{marginTop:16}}>
-          <SectionHead id="website" title={`Выгрузка на сайт — ${selName || "—"}`}/>
-          {openSections.has("website") && <div className="pb2">
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              JSON-фид с б/у товарами для сайта магазина. Содержит модель, цену, состояние, фото. Обновляется автоматически.
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,cursor:"pointer"}}>
-                <input type="checkbox" checked={f.websiteFeedEnabled} onChange={e=>setF(x=>({...x, websiteFeedEnabled: e.target.checked}))} style={{accentColor:"var(--accent)"}}/>
-                Фид включён
-              </label>
-            </div>
-            <div className="field" style={{marginBottom:14}}>
-              <label>URL сайта магазина</label>
-              <input placeholder="https://mobilaks.ru" value={f.websiteUrl} onChange={e=>setF(x=>({...x, websiteUrl: e.target.value}))}/>
-            </div>
-            {current?.id && f.websiteFeedEnabled && (
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)",marginBottom:14}}>
+            <hr style={{border:"none",borderTop:"1px solid var(--border)",margin:"16px 0"}}/>
+
+            {/* Авито фид */}
+            {current?.id && (
+            <div style={{marginBottom:20}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Авито фид</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
+                Единый XML-фид (б/у + новые). Укажите ссылку в Авито → Автозагрузка → URL фида.
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
                 <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
-                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
-                <a href={"/api/avito/website-feed/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
+                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+current.id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{current.id}.xml</code>
+                <a href={"/api/avito/feed-all/"+current.id+".xml"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
               </div>
+            </div>
             )}
-            {!f.websiteFeedEnabled && current?.id && (
-              <div style={{fontSize:12,color:"var(--muted)"}}> Включите фид и сохраните, чтобы получить ссылку.</div>
-            )}
-            <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:4}} disabled={!current}>
+
+            <hr style={{border:"none",borderTop:"1px solid var(--border)",margin:"16px 0"}}/>
+
+            {/* Выгрузка на сайт */}
+            <div style={{marginBottom:20}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Выгрузка на сайт</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
+                JSON-фид с товарами для сайта магазина. Обновляется автоматически.
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,cursor:"pointer"}}>
+                  <input type="checkbox" checked={f.websiteFeedEnabled} onChange={e=>setF(x=>({...x, websiteFeedEnabled: e.target.checked}))} style={{accentColor:"var(--accent)"}}/>
+                  Фид включён
+                </label>
+              </div>
+              <div className="field" style={{marginBottom:10}}>
+                <label>URL сайта магазина</label>
+                <input placeholder="https://mobilaks.ru" value={f.websiteUrl} onChange={e=>setF(x=>({...x, websiteUrl: e.target.value}))}/>
+              </div>
+              {current?.id && f.websiteFeedEnabled && (
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)",marginBottom:10}}>
+                  <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
+                  <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
+                  <a href={"/api/avito/website-feed/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
+                </div>
+              )}
+              {!f.websiteFeedEnabled && current?.id && (
+                <div style={{fontSize:12,color:"var(--muted)"}}>Включите фид и сохраните, чтобы получить ссылку.</div>
+              )}
+            </div>
+
+            <hr style={{border:"none",borderTop:"1px solid var(--border)",margin:"16px 0"}}/>
+
+            {/* Контактные данные */}
+            <div>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Контактные данные</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
+                <div className="field">
+                  <label>Контактный телефон</label>
+                  <input placeholder="+7 999 123-45-67" value={f.phone} onChange={e=>setF((x)=>({ ...x, phone: e.target.value }))}/>
+                </div>
+                <div className="field">
+                  <label>Контактное лицо</label>
+                  <input placeholder="Как в объявлении (Avito)" value={f.avitoContact} onChange={e=>setF((x)=>({ ...x, avitoContact: e.target.value }))}/>
+                </div>
+                <div className="field" style={{gridColumn:"1/-1"}}>
+                  <label>Адрес магазина (для объявлений)</label>
+                  <input placeholder="г. Москва, ул. Примерная, 1" value={f.address} onChange={e=>setF((x)=>({ ...x, address: e.target.value }))}/>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" className="btn btn-primary" onClick={save} style={{marginTop:14}} disabled={!current}>
               {saved ? "Сохранено" : "Сохранить"}
             </button>
           </div>}
