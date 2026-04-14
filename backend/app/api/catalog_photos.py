@@ -11,7 +11,7 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,6 +97,78 @@ async def list_catalog_photos(
             for p in photos
         ],
     }
+
+
+@router.post("/counts")
+async def catalog_photo_counts(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Batch-подсчёт каталожных фото для списка наименований.
+
+    Принимает JSON-массив объектов {store_id, brand, model, storage, color}.
+    Возвращает {counts: {"store|brand|model|storage|color": N, ...}}.
+    Один запрос вместо десятков /by-key — не попадает под rate-limit.
+    """
+    raw = await request.json()
+    if not isinstance(raw, list):
+        return {"counts": {}}
+
+    keys = [item for item in raw if isinstance(item, dict)]
+    if not keys:
+        return {"counts": {}}
+    if len(keys) > 500:
+        raise HTTPException(status_code=400, detail="Максимум 500 ключей за запрос")
+
+    # Строим ключи: color-specific + no-color fallback
+    # front_key -> (product_key, pk_no_color, store_id)
+    lookup: dict[str, tuple[str, str, str]] = {}
+    all_check_keys: set[str] = set()
+    all_store_ids: set[str] = set()
+
+    for item in keys:
+        sid = item.get("store_id", "")
+        b = item.get("brand", "")
+        m = item.get("model", "")
+        s = item.get("storage", "")
+        c = item.get("color", "")
+        if not sid:
+            continue
+        pk = make_product_key(b, m, s, c)
+        pk_nc = make_product_key_no_color(b, m, s)
+        front_key = f"{sid}|{b.lower()}|{m.lower()}|{s.lower()}|{c.lower()}"
+        lookup[front_key] = (pk, pk_nc, sid)
+        all_check_keys.add(pk)
+        if c.strip():
+            all_check_keys.add(pk_nc)
+        all_store_ids.add(sid)
+
+    if not all_store_ids:
+        return {"counts": {}}
+
+    # Один SQL-запрос: count по (store_id, product_key)
+    rows = (await db.execute(
+        select(CatalogPhoto.store_id, CatalogPhoto.product_key, func.count(CatalogPhoto.id))
+        .where(
+            CatalogPhoto.store_id.in_(list(all_store_ids)),
+            CatalogPhoto.product_key.in_(list(all_check_keys)),
+        )
+        .group_by(CatalogPhoto.store_id, CatalogPhoto.product_key)
+    )).all()
+
+    # Индекс: (store_id, product_key) -> count
+    db_counts: dict[tuple[str, str], int] = {(sid, pk): cnt for sid, pk, cnt in rows}
+
+    # Маппинг обратно на frontend-ключи (с fallback на no-color)
+    result: dict[str, int] = {}
+    for front_key, (pk, pk_nc, sid) in lookup.items():
+        cnt = db_counts.get((sid, pk), 0)
+        if cnt == 0 and pk != pk_nc:
+            cnt = db_counts.get((sid, pk_nc), 0)
+        result[front_key] = cnt
+
+    return {"counts": result}
 
 
 @router.post("/upload")

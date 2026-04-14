@@ -2431,25 +2431,24 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
     }
   };
 
-  // Загрузка счётчиков каталожных фото для новых товаров
+  // Загрузка счётчиков каталожных фото для новых товаров (один batch-запрос)
   useEffect(() => {
     if (!isNew || !items.length) return;
     let cancelled = false;
     (async () => {
-      const keys = new Map(); // key -> {storeId, brand, model, storage}
+      const seen = new Set();
+      const keys = [];
       for (const p of items) {
         const k = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}|${(p.color||"").toLowerCase()}`;
-        if (!keys.has(k)) keys.set(k, { storeId: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "", color: p.color || "" });
+        if (!seen.has(k)) {
+          seen.add(k);
+          keys.push({ store_id: p.store_id, brand: p.brand || "", model: p.model || "", storage: p.storage || "", color: p.color || "" });
+        }
       }
-      const counts = {};
-      await Promise.all([...keys.entries()].map(async ([k, v]) => {
-        try {
-          const params = new URLSearchParams({ store_id: v.storeId, brand: v.brand, model: v.model, storage: v.storage, color: v.color });
-          const d = await apiFetch(`/catalog-photos/by-key?${params}`, { token });
-          counts[k] = (d.photos || []).length;
-        } catch { counts[k] = 0; }
-      }));
-      if (!cancelled) setCatalogPhotoCounts(counts);
+      try {
+        const d = await apiFetch("/catalog-photos/counts", { token, method: "POST", json: keys });
+        if (!cancelled) setCatalogPhotoCounts(d.counts || {});
+      } catch { if (!cancelled) setCatalogPhotoCounts({}); }
     })();
     return () => { cancelled = true; };
   }, [isNew, items, token]);
