@@ -2561,29 +2561,6 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         <span className="fc">{filtered.length} шт.</span>
       </div>
 
-      {isNew && isAdm && (() => {
-        // Товары с каталожными фото
-        const withPhoto = items.filter(p => {
-          if (p.is_sold) return false;
-          const pk = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}|${(p.color||"").toLowerCase()}`;
-          return (catalogPhotoCounts[pk] || 0) > 0;
-        });
-        const allOnSite = withPhoto.length > 0 && withPhoto.every(p => p.site_published);
-        const allOnAvito = withPhoto.length > 0 && withPhoto.every(p => p.avito_published);
-        return withPhoto.length > 0 ? (
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
-            <button type="button" className={`btn btn-sm ${allOnSite ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", !allOnSite)}>
-              {allOnSite ? "✓ " : ""}Все с фото → Сайт
-            </button>
-            <button type="button" className={`btn btn-sm ${allOnAvito ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", !allOnAvito)}>
-              {allOnAvito ? "✓ " : ""}Все с фото → Авито
-            </button>
-            {bulkNewBusy && <span className="spinner"/>}
-            {bulkNewMsg && <span style={{fontSize:12,color:bulkNewMsg.includes("Ошибка")?"var(--danger)":"var(--accent)"}}>{bulkNewMsg}</span>}
-          </div>
-        ) : null;
-      })()}
-
       {isNew ? (() => {
         const groupMap = {};
         for (const p of slice) {
@@ -2596,15 +2573,29 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
         }
         const groups = Object.entries(groupMap).map(([key, g]) => ({ key, ...g, avgPrice: g.count ? g.sumPrice / g.count : 0 }));
         groups.sort((a, b) => (a.model || "").localeCompare(b.model || "", "ru") || storageNum(a.storage) - storageNum(b.storage) || (a.sim_type || "").localeCompare(b.sim_type || "", "ru"));
+        // Состояние bulk-кнопок
+        const withPhoto = isAdm ? items.filter(p => {
+          if (p.is_sold) return false;
+          const pk = `${p.store_id}|${(p.brand||"").toLowerCase()}|${(p.model||"").toLowerCase()}|${(p.storage||"").toLowerCase()}|${(p.color||"").toLowerCase()}`;
+          return (catalogPhotoCounts[pk] || 0) > 0;
+        }) : [];
+        const allOnSite = withPhoto.length > 0 && withPhoto.every(p => p.site_published);
+        const allOnAvito = withPhoto.length > 0 && withPhoto.every(p => p.avito_published);
+        const hasBulk = withPhoto.length > 0;
         return (
           <div className="tw">
+            {isAdm && bulkNewMsg && <div style={{marginBottom:6,fontSize:12,color:bulkNewMsg.includes("Ошибка")?"var(--danger)":"var(--accent)"}}>{bulkNewBusy && <span className="spinner" style={{marginRight:6}}/>}{bulkNewMsg}</div>}
             <table className="pt">
               <thead><tr>
                 <th style={{width:210}}>Модель</th><th style={{width:90}}>Память</th><th style={{width:130}}>Цвет</th>
                 <th style={{textAlign:"center",width:62}}>Кол-во</th>
                 {!isInfo && <th style={{width:58}}>Фото</th>}
-                <th style={{textAlign:"center",width:54}}>Сайт</th>
-                <th style={{textAlign:"center",width:54}}>Авито</th>
+                <th style={{textAlign:"center",width:54}}>{hasBulk
+                  ? <button type="button" className={`btn btn-xs ${allOnSite ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("site", !allOnSite)} title={allOnSite ? "Снять все с Сайта" : "Все с фото → Сайт"} style={{fontSize:10,padding:"2px 6px"}}>{allOnSite ? "✓" : ""} Сайт</button>
+                  : "Сайт"}</th>
+                <th style={{textAlign:"center",width:54}}>{hasBulk
+                  ? <button type="button" className={`btn btn-xs ${allOnAvito ? "btn-primary" : "btn-outline"}`} disabled={bulkNewBusy} onClick={() => bulkPublishNew("avito", !allOnAvito)} title={allOnAvito ? "Снять все с Авито" : "Все с фото → Авито"} style={{fontSize:10,padding:"2px 6px"}}>{allOnAvito ? "✓" : ""} Авито</button>
+                  : "Авито"}</th>
                 <th style={{textAlign:"right",width:92}}>Розница</th>
                 {!isInfo && <th style={{textAlign:"right",width:92}}>Учётная</th>}
                 <th style={{width:90}}/>
