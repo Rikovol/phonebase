@@ -73,6 +73,34 @@ async def avito_feed_new(
     return Response(content=xml_bytes, media_type="application/xml")
 
 
+# ── Единый XML-фид (б/у + новые) для Авито ──────────────
+
+@router.get("/feed-all/{store_id}.xml")
+async def avito_feed_all(
+    store_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Единый XML-фид (б/у + новые товары) для автозагрузки Авито. Без авторизации."""
+    from app.services.avito_feed import generate_feed_ads as used_ads
+    from app.services.avito_feed_new import generate_feed_ads_new as new_ads
+
+    store = await db.get(Store, store_id)
+    if not store or not store.is_active:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    from lxml.etree import Element, tostring
+    root = Element("Ads", formatVersion="3", target="Avito.ru")
+
+    for ad in await used_ads(db, store_id):
+        root.append(ad)
+    for ad in await new_ads(db, store_id):
+        root.append(ad)
+
+    xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
+    xml_bytes = b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body
+    return Response(content=xml_bytes, media_type="application/xml")
+
+
 # ── Pydantic-схемы ───────────────────────────────────────
 
 class AvitoCredentialsIn(BaseModel):

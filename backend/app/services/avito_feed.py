@@ -223,10 +223,11 @@ def _avito_brand(brand: str | None) -> str | None:
     return _AVITO_BRANDS.get(brand.lower().strip(), brand)
 
 
-async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
+async def generate_feed_ads(db: AsyncSession, store_id: str) -> list:
+    """Возвращает список Ad-элементов (lxml Element) для б/у товаров."""
     store = await db.get(Store, store_id)
     if not store:
-        return b""
+        return []
 
     result = await db.execute(
         select(Product)
@@ -247,8 +248,7 @@ async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
     )
     products = result.scalars().all()
 
-    root = Element("Ads", formatVersion="3", target="Avito.ru")
-    included = 0
+    ads = []
     skipped = 0
 
     for p in products:
@@ -260,30 +260,30 @@ async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
             skipped += 1
             continue
 
-        ad = SubElement(root, "Ad")
+        # Для Apple — батарея обязательна
+        if p.brand and p.brand.lower() == "apple":
+            pct = _parse_battery_pct(p.battery_pct)
+            if pct is None:
+                log.debug("avito_feed: skip %s — Apple без валидного battery_pct (%s)", p.id, p.battery_pct)
+                skipped += 1
+                continue
+        else:
+            pct = None
+
+        ad = Element("Ad")
         SubElement(ad, "Id").text = p.id
 
-        # ── Обязательные поля Авито ──────────────────────
         SubElement(ad, "Category").text = "Телефоны"
         SubElement(ad, "GoodsType").text = "Смартфон"
         SubElement(ad, "AdType").text = "Товар приобретен на продажу"
         SubElement(ad, "Condition").text = "Б/у"
 
-        # Состояние корпуса и экрана (обязательные для б/у телефонов)
         SubElement(ad, "ScreenCondition").text = _SCREEN_CONDITION[p.condition]
         SubElement(ad, "BodyCondition").text = _BODY_CONDITION[p.condition]
 
-        # Состояние батареи (для Apple iPhone — обязательное)
-        if p.brand and p.brand.lower() == "apple":
-            pct = _parse_battery_pct(p.battery_pct)
-            if pct is None:
-                log.debug("avito_feed: skip %s — Apple без валидного battery_pct (%s)", p.id, p.battery_pct)
-                root.remove(ad)
-                skipped += 1
-                continue
+        if pct is not None:
             SubElement(ad, "BatteryCondition").text = pct
 
-        # Заголовок — всегда обрезаем до 50 символов
         title = (p.avito_title or _default_title(p))[:50]
         SubElement(ad, "Title").text = title
 
@@ -293,19 +293,15 @@ async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
 
         SubElement(ad, "Price").text = str(round(p.price_retail))
 
-        # Кол-во SIM-карт (обязательное для Авито; допустимо 1, 2, 3)
         sim = p.sim_count if p.sim_count in _VALID_SIM_COUNTS else 1
         SubElement(ad, "SimCount").text = str(sim)
 
-        # Комплектация (обязательное для Авито)
         SubElement(ad, "Completeness").text = _norm_completeness(p.completeness)
 
-        # ── Рекомендуемые поля (улучшают видимость) ──────
         avito_brand = _avito_brand(p.brand)
         if avito_brand:
             SubElement(ad, "Brand").text = avito_brand
 
-        # Контактные данные магазина
         if store.avito_address:
             SubElement(ad, "Address").text = store.avito_address
         if store.avito_phone:
@@ -313,17 +309,22 @@ async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
         if store.avito_manager_name:
             SubElement(ad, "ManagerName").text = store.avito_manager_name
 
-        # Предпочтительный способ связи
         SubElement(ad, "ContactMethod").text = "Сообщение и звонок"
 
-        # Фотографии (до 10)
         images_el = SubElement(ad, "Images")
         for photo in product_photos[:10]:
             SubElement(images_el, "Image", url=_photo_url(photo))
 
-        included += 1
+        ads.append(ad)
 
-    log.info("avito_feed: store=%s included=%d skipped=%d", store_id, included, skipped)
+    log.info("avito_feed: store=%s included=%d skipped=%d", store_id, len(ads), skipped)
+    return ads
 
+
+async def generate_feed_xml(db: AsyncSession, store_id: str) -> bytes:
+    """Обратная совместимость: полный XML только б/у."""
+    root = Element("Ads", formatVersion="3", target="Avito.ru")
+    for ad in await generate_feed_ads(db, store_id):
+        root.append(ad)
     xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body

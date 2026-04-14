@@ -122,13 +122,12 @@ def _photo_url(photo: CatalogPhoto) -> str:
     return f"{base}/media/{path}"
 
 
-async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
-    """Генерация XML-фида новых товаров для Авито."""
+async def generate_feed_ads_new(db: AsyncSession, store_id: str) -> list:
+    """Возвращает список Ad-элементов (lxml Element) для новых товаров."""
     store = await db.get(Store, store_id)
     if not store:
-        return b""
+        return []
 
-    # Загружаем все новые товары магазина, не проданные, с ценой
     result = await db.execute(
         select(Product).where(
             and_(
@@ -143,9 +142,7 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
     products = result.scalars().all()
 
     if not products:
-        root = Element("Ads", formatVersion="3", target="Avito.ru")
-        xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
-        return b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body
+        return []
 
     # Группируем по (brand, model, storage) — одно объявление на группу
     groups: dict[str, list[Product]] = defaultdict(list)
@@ -176,12 +173,10 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
     for ph in all_photos:
         photos_by_key[ph.product_key].append(ph)
 
-    root = Element("Ads", formatVersion="3", target="Avito.ru")
-    included = 0
+    ads = []
     skipped = 0
 
     for key, items in groups.items():
-        # Ищем фото: пробуем каждый цвет группы, потом fallback без цвета
         catalog_photos = []
         for p in items:
             if p.color:
@@ -202,33 +197,25 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
             skipped += 1
             continue
 
-        # Берём данные из первого товара группы (стабильная сортировка по id)
         items.sort(key=lambda p: p.id)
         first = items[0]
         brand = first.brand or ""
         model = first.model or ""
         storage = first.storage or ""
 
-        # Собираем доступные цвета и суммарное количество
         colors = sorted({p.color for p in items if p.color})
-        total_qty = sum(p.quantity or 1 for p in items)
 
-        # Минимальная цена группы
         prices = [p.price_retail for p in items if p.price_retail]
         if not prices:
             skipped += 1
             continue
         min_price = min(prices)
 
-        # SIM info из первого товара
         sim_count = first.sim_count
         sim_type = first.sim_type
 
-        # Используем id первого товара как Id объявления (для стабильности)
-        ad_id = first.id
-
-        ad = SubElement(root, "Ad")
-        SubElement(ad, "Id").text = ad_id
+        ad = Element("Ad")
+        SubElement(ad, "Id").text = first.id
 
         SubElement(ad, "Category").text = "Телефоны"
         SubElement(ad, "GoodsType").text = "Смартфон"
@@ -262,14 +249,20 @@ async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
 
         SubElement(ad, "ContactMethod").text = "Сообщение и звонок"
 
-        # Фотографии (до 10)
         images_el = SubElement(ad, "Images")
         for photo in catalog_photos[:10]:
             SubElement(images_el, "Image", url=_photo_url(photo))
 
-        included += 1
+        ads.append(ad)
 
-    log.info("avito_feed_new: store=%s included=%d skipped=%d", store_id, included, skipped)
+    log.info("avito_feed_new: store=%s included=%d skipped=%d", store_id, len(ads), skipped)
+    return ads
 
+
+async def generate_feed_xml_new(db: AsyncSession, store_id: str) -> bytes:
+    """Обратная совместимость: полный XML только новые."""
+    root = Element("Ads", formatVersion="3", target="Avito.ru")
+    for ad in await generate_feed_ads_new(db, store_id):
+        root.append(ad)
     xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body

@@ -1994,7 +1994,7 @@ function ProductCard({ productId, token, user, onBack }) {
               )}
               {product.avito_published && (
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:8}}>
-                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/"+(product.is_new?"feed-new/":"feed/")+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/{product.is_new?"feed-new/":"feed/"}{product.store_id}.xml</code>
+                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{product.store_id}.xml</code>
                 </div>
               )}
             </div>
@@ -3173,6 +3173,24 @@ function StoreSettingsPage({ token, activeStore }) {
           </div>}
         </div>
 
+        {/* ── Авито фид (автозагрузка) ─────────────────── */}
+        {current?.id && (
+        <div className="panel" style={{marginTop:16}}>
+          <SectionHead id="avito-feed" title={`Авито фид — ${selName || "—"}`}/>
+          {openSections.has("avito-feed") && <div className="pb2">
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
+              Единый XML-фид для автозагрузки на Авито (б/у + новые товары).<br/>
+              Укажите эту ссылку в личном кабинете Авито → Автозагрузка → URL фида.
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
+              <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+current.id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{current.id}.xml</code>
+              <a href={"/api/avito/feed-all/"+current.id+".xml"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
+            </div>
+          </div>}
+        </div>
+        )}
+
         {/* ── Контактные данные ──────────────────────────── */}
         <div className="panel" style={{marginTop:16}}>
           <SectionHead id="contacts" title={`Контактные данные — ${selName || "—"}`}/>
@@ -3507,7 +3525,7 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
       {!loading && items.length === 0 && <div style={{color:"var(--muted)",fontSize:13,padding:"20px 0"}}>Нет активных объявлений на Авито. Нажмите «Опубликовать все с фото» или включите товары вручную в каталоге.</div>}
       {Object.entries(byStore).map(([store, prods]) => {
         const si = storeMap[store];
-        const feedUrl = si ? `/api/avito/feed/${si.id}.xml` : null;
+        const feedUrl = si ? `/api/avito/feed-all/${si.id}.xml` : null;
         return (
         <div key={store} style={{marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
