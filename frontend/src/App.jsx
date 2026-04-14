@@ -2817,7 +2817,7 @@ function ProductsPage({ user, token, activeStore, onOpen, onActiveStoreChange, i
 // ─── STORE SETTINGS (admin) ───────────────────────────────────────────────────
 function StoreSettingsPage({ token, activeStore }) {
   const [stores, setStores] = useState([]);
-  const [f, setF] = useState({ phone: "", address: "", avitoContact: "", websiteUrl: "", websiteFeedEnabled: false });
+  const [f, setF] = useState({ phone: "", address: "", avitoContact: "", websiteUrl: "", websiteFeedEnabled: true });
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   // Avito API credentials
@@ -2881,7 +2881,7 @@ function StoreSettingsPage({ token, activeStore }) {
   useEffect(() => {
     const s = stores.find((x) => x.name === selName);
     if (!s) {
-      setF({ phone: "", address: "", avitoContact: "", websiteUrl: "", websiteFeedEnabled: false });
+      setF({ phone: "", address: "", avitoContact: "", websiteUrl: "", websiteFeedEnabled: true });
       return;
     }
     setF({
@@ -3169,25 +3169,16 @@ function StoreSettingsPage({ token, activeStore }) {
               <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>
                 JSON-фид с товарами для сайта магазина. Обновляется автоматически.
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,cursor:"pointer"}}>
-                  <input type="checkbox" checked={f.websiteFeedEnabled} onChange={e=>setF(x=>({...x, websiteFeedEnabled: e.target.checked}))} style={{accentColor:"var(--accent)"}}/>
-                  Фид включён
-                </label>
-              </div>
               <div className="field" style={{marginBottom:10}}>
                 <label>URL сайта магазина</label>
                 <input placeholder="https://mobilaks.ru" value={f.websiteUrl} onChange={e=>setF(x=>({...x, websiteUrl: e.target.value}))}/>
               </div>
-              {current?.id && f.websiteFeedEnabled && (
+              {current?.id && (
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)",marginBottom:10}}>
                   <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
                   <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
                   <a href={"/api/avito/website-feed/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
                 </div>
-              )}
-              {!f.websiteFeedEnabled && current?.id && (
-                <div style={{fontSize:12,color:"var(--muted)"}}>Включите фид и сохраните, чтобы получить ссылку.</div>
               )}
             </div>
 

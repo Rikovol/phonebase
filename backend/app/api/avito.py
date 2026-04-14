@@ -31,9 +31,6 @@ async def website_feed(
     store = await db.get(Store, store_id)
     if not store or not store.is_active:
         raise HTTPException(status_code=404, detail="Магазин не найден")
-    if not store.website_feed_enabled:
-        raise HTTPException(status_code=403, detail="Фид для сайта отключён")
-
     return await generate_website_feed(db, store_id)
 
 
