@@ -337,40 +337,37 @@ async def _scrape_gallery(product_url: str) -> list[str]:
             return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    seen = set()
+    seen_filenames = set()
     images = []
+
+    def _add_image(src_raw: str) -> None:
+        src = _normalize_url(src_raw)
+        if not src or "images.biggeek.ru" not in src:
+            return
+        src_full = _to_full_res(src)
+        # Дедупликация по имени файла (разные размеры = одна картинка)
+        fname = src_full.rstrip("/").rsplit("/", 1)[-1]
+        if fname not in seen_filenames:
+            seen_filenames.add(fname)
+            images.append(src_full)
 
     # Галерея товара: превью-слайдер
     gallery = soup.find("div", class_="sl-prewiew-thumbs")
     if gallery:
         for img in gallery.find_all("img"):
-            src = _normalize_url(img.get("src") or img.get("data-src") or "")
-            if src and "images.biggeek.ru" in src:
-                src_full = _to_full_res(src)
-                if src_full not in seen:
-                    seen.add(src_full)
-                    images.append(src_full)
+            _add_image(img.get("src") or img.get("data-src") or "")
 
     # Основной слайдер (большие фото)
     main_slider = soup.find("div", class_="slider-main")
     if main_slider:
         for img in main_slider.find_all("img"):
-            src = _normalize_url(img.get("src") or img.get("data-src") or "")
-            if src and "images.biggeek.ru" in src:
-                src_full = _to_full_res(src)
-                if src_full not in seen:
-                    seen.add(src_full)
-                    images.append(src_full)
+            _add_image(img.get("src") or img.get("data-src") or "")
 
     # Fallback: og:image
     if not images:
         og = soup.find("meta", property="og:image")
         if og and og.get("content"):
-            src = _normalize_url(og["content"])
-            if src and "images.biggeek.ru" in src:
-                src_full = _to_full_res(src)
-                if src_full not in seen:
-                    images.append(src_full)
+            _add_image(og["content"])
 
     return images
 
@@ -390,6 +387,8 @@ def _to_full_res(url: str) -> str:
     """Конвертирует URL превью в полноразмерный (biggeek.ru ��ранит /1/136/ и /1/870/)."""
     if "/1/136/" in url:
         return url.replace("/1/136/", "/1/870/")
+    if "/1/235/" in url:
+        return url.replace("/1/235/", "/1/870/")
     return url
 
 
