@@ -3861,7 +3861,8 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
   const submitSearch = () => setDebouncedQ(q);
   const [brand,setBrand]=useState("");
   const [cond,setCond]=useState("");
-  const [minUnits,setMinUnits]=useState(1);
+  const [minUnits,setMinUnits]=useState(0);
+  const [showGaps,setShowGaps]=useState(true);
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState("");
@@ -3880,9 +3881,10 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
         if (brand.trim()) params.set("brand", brand.trim());
         if (cond) params.set("condition", cond);
-        if (minUnits > 1) params.set("min_units", String(minUnits));
+        params.set("min_units", String(minUnits));
         if (storeF) params.set("store", storeF);
         params.set("is_new", "false");
+        params.set("include_gaps", showGaps ? "true" : "false");
         const data = await apiFetch(`/analytics/price-aggregates?${params.toString()}`, { token });
         if (!c) return;
         const loaded = data.items || [];
@@ -3894,7 +3896,7 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
       if (c) setLoading(false);
     })();
     return ()=>{ c = false; };
-  }, [token, debouncedQ, brand, cond, minUnits, storeF, user.role]);
+  }, [token, debouncedQ, brand, cond, minUnits, storeF, showGaps, user.role]);
 
   return (
     <>
@@ -3919,7 +3921,11 @@ function AnalyticsPage({ user, token, activeStore, onOpenProduct }) {
         </select>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>
           Мин. шт. в группе
-          <input type="number" min={1} max={100} value={minUnits} onChange={e=>setMinUnits(Math.min(100, Math.max(1, parseInt(e.target.value,10)||1)))} style={{width:52,padding:4,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}/>
+          <input type="number" min={0} max={100} value={minUnits} onChange={e=>setMinUnits(Math.min(100, Math.max(0, parseInt(e.target.value,10)||0)))} style={{width:52,padding:4,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:11}}/>
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"var(--muted)",whiteSpace:"nowrap",cursor:"pointer"}}>
+          <input type="checkbox" checked={showGaps} onChange={e=>setShowGaps(e.target.checked)}/>
+          Показать пробелы
         </label>
         <span className="fc">{items.length} групп</span>
       </div>

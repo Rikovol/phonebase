@@ -38,6 +38,7 @@ class PriceAggRow(BaseModel):
     max_retail: Optional[float] = None
     avg_cost: Optional[float] = None
     competitor: Optional[CompetitorPriceInfo] = None
+    is_gap: bool = False  # true — позиция есть у конкурента, но нет в нашем ассортименте
 
 
 class PriceAggResponse(BaseModel):
@@ -117,8 +118,9 @@ async def price_aggregates(
     window_days: int = Query(120, ge=1, le=730,
                              description="Размер окна аналитики в днях (по умолчанию 120 = 4 месяца)"),
     is_new: Optional[bool] = Query(None, description="Фильтр: новые (true) или б/у (false)"),
-    min_units: int = Query(1, ge=0, le=100, description="Минимум единиц в остатке в группе (0 = без ограничения)"),
-    limit: int = Query(200, ge=1, le=500),
+    min_units: int = Query(0, ge=0, le=100, description="Минимум единиц в остатке в группе (0 = без ограничения)"),
+    include_gaps: bool = Query(True, description="Добавлять позиции конкурентов, которых нет в нашем ассортименте"),
+    limit: int = Query(500, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(get_current_user),
 ):
@@ -219,10 +221,12 @@ async def price_aggregates(
         return None
 
     items = []
+    matched_comp_ids: set[str] = set()
     for r in rows:
         cp = _find_competitor(r.brand, r.model, r.storage)
         comp_info = None
         if cp:
+            matched_comp_ids.add(cp.id)
             comp_info = CompetitorPriceInfo(
                 source=cp.source,
                 price_excellent=cp.price_excellent,
@@ -244,5 +248,62 @@ async def price_aggregates(
             avg_cost=float(r.avg_cost) if r.avg_cost is not None else None,
             competitor=comp_info,
         ))
+
+    # Gap-fill: позиции конкурентов, которых нет в нашем ассортименте.
+    # Каждой ценовой градации (excellent/good/poor/repair) соответствует наш condition.
+    # Фронт склеит строки по (brand, model, storage) в одну группу с раскрытием.
+    # is_new=True означает «хочу только новые» → gap не нужны (они все б/у).
+    if include_gaps and is_new is not True:
+        q_lower = (q or "").strip().lower()
+        brand_lower = (brand or "").strip().lower()
+        # Маппинг: поле цены у конкурента → наш condition
+        gap_condition_map = [
+            ("price_excellent", "Отличное"),
+            ("price_good", "Хорошее"),
+            ("price_poor", "Удовлетворительное"),
+            ("price_repair", "На запчасти"),
+        ]
+        # Дедуп по нормализованному ключу — одна и та же модель может быть
+        # у нескольких источников (goodcom, другие) с uniq по (source,brand,model,memory).
+        seen_gap_keys: set[str] = set()
+        for cp in comp_rows:
+            if cp.id in matched_comp_ids:
+                continue
+            cp_brand = (cp.brand or "").strip()
+            if brand_lower and cp_brand.lower() != brand_lower:
+                continue
+            if q_lower and q_lower not in (cp.model or "").lower() and q_lower not in (cp.full_name or "").lower():
+                continue
+            dedup_key = f"{cp_brand.lower()}|{_normalize_model(cp.model, cp_brand)}|{_normalize_storage(cp.memory)}"
+            if dedup_key in seen_gap_keys:
+                continue
+            seen_gap_keys.add(dedup_key)
+            comp_info = CompetitorPriceInfo(
+                source=cp.source,
+                price_excellent=cp.price_excellent,
+                price_good=cp.price_good,
+                price_poor=cp.price_poor,
+                price_repair=cp.price_repair,
+            )
+            for price_field, cond_name in gap_condition_map:
+                if getattr(cp, price_field) is None:
+                    continue
+                if condition and condition != cond_name:
+                    continue
+                items.append(PriceAggRow(
+                    brand=cp_brand or None,
+                    model=cp.model,
+                    storage=cp.memory or None,
+                    condition=cond_name,
+                    count=0,
+                    in_stock_count=0,
+                    sold_in_window=0,
+                    avg_retail=None,
+                    min_retail=None,
+                    max_retail=None,
+                    avg_cost=None,
+                    competitor=comp_info,
+                    is_gap=True,
+                ))
 
     return PriceAggResponse(items=items, total=len(items))
