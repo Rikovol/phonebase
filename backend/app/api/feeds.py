@@ -161,6 +161,30 @@ async def tradein_prices(
     )
     rows = (await db.execute(stmt)).all()
 
+    # 1b) Реальные цвета товаров за окно — для шага «цвет» в калькуляторе на клиенте
+    colors_stmt = (
+        select(Product.brand, Product.model, Product.storage, Product.color)
+        .where(Product.price_retail.isnot(None))
+        .where(Product.is_new.is_(False))
+        .where(Product.in_repair.is_(False))
+        .where(Product.brand.in_(_WANTED_BRANDS))
+        .where(Product.color.isnot(None))
+        .where(Product.color != "")
+        .where(in_window)
+        .distinct()
+    )
+    color_rows = (await db.execute(colors_stmt)).all()
+    # Индекс по (brand, clean_model, norm_storage) → set цветов
+    color_index: dict[tuple[str, str, str], set] = {}
+    for cr in color_rows:
+        if cr.brand not in _WANTED_BRANDS:
+            continue
+        st = _norm_storage(cr.storage)
+        if not st:
+            continue
+        key = (cr.brand, _clean_model(cr.brand, cr.model), st)
+        color_index.setdefault(key, set()).add(cr.color.strip())
+
     # 2) Цены конкурентов (goodcom) — индекс по (brand_lower, clean_model, norm_storage)
     comps = (await db.execute(select(CompetitorPrice))).scalars().all()
     comp_index: dict[tuple[str, str, str], CompetitorPrice] = {}
@@ -248,6 +272,9 @@ async def tradein_prices(
             if market is not None:
                 has_any = True
         item["our_retail_avg"] = int(g["retail_sum"] / g["retail_n"]) if g["retail_n"] else None
+        # Реальные цвета этой модели+памяти за окно (может быть пустой массив)
+        colors = color_index.get((g["brand"], g["model"], g["storage"]), set())
+        item["colors"] = sorted(colors)
         if has_any:
             items.append(item)
 
