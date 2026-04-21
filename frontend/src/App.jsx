@@ -3649,11 +3649,12 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
 }
 
 // ─── ANALYTICS (свои данные BaseStock; без парсинга Авито) ─────────────────────
-// Порядок состояний для раскрытия и соответствие им цены конкурента
-const CONDITION_ORDER = ["Отличное", "Хорошее", "Удовлетворительное", "На запчасти"];
+// Порядок состояний для раскрытия и соответствие им цены конкурента.
+// «Как новый» — верхний уровень б/у, маппится на price_excellent у конкурента.
+const CONDITION_ORDER = ["Как новый", "Отличное", "Хорошее", "Удовлетворительное", "На запчасти"];
 const COMP_FIELD_BY_CONDITION = (cond) => {
   const c = (cond || "").toLowerCase();
-  if (c.includes("отличн") || c.includes("новый")) return "price_excellent";
+  if (c.includes("как нов") || c.includes("отличн") || c === "новый" || c === "новое") return "price_excellent";
   if (c.includes("хорош")) return "price_good";
   if (c.includes("плох") || c.includes("удовл")) return "price_poor";
   if (c.includes("запчаст") || c.includes("ремонт")) return "price_repair";
@@ -3781,6 +3782,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
   const cols = 8;
 
   const COND_COLOR = {
+    "Как новый": "#14b8a6",
     "Отличное": "#22c55e",
     "Хорошее": "#38bdf8",
     "Удовлетворительное": "#f59e0b",

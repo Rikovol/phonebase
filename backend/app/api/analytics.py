@@ -117,7 +117,7 @@ async def price_aggregates(
     window_days: int = Query(120, ge=1, le=730,
                              description="Размер окна аналитики в днях (по умолчанию 120 = 4 месяца)"),
     is_new: Optional[bool] = Query(None, description="Фильтр: новые (true) или б/у (false)"),
-    min_units: int = Query(1, ge=1, le=100, description="Минимум единиц в группе"),
+    min_units: int = Query(1, ge=0, le=100, description="Минимум единиц в остатке в группе (0 = без ограничения)"),
     limit: int = Query(200, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(get_current_user),

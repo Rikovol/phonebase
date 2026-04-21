@@ -101,23 +101,46 @@ def _clean_model(brand: str, model: str) -> str:
     return re.sub(r"\s+", " ", m)
 
 
+# Маппинг condition из phonebase → стандартные уровни состояния в фиде.
+# «Как новый» — топовое б/у состояние, маппим на excellent (вместе с «Отличное»).
+_COND_MAP = {
+    "Как новый": "excellent",
+    "Отличное": "excellent",
+    "Новое": "excellent",
+    "Хорошее": "good",
+    "Удовлетворительное": "poor",
+    "Плохое": "poor",
+    "На запчасти": "repair",
+    "Ремонт": "repair",
+    "Требуется ремонт": "repair",
+}
+
+
 @router.get("/tradein-prices.json", dependencies=[Depends(_check_tradein_token)])
 async def tradein_prices(
     window_days: int = Query(120, ge=30, le=730),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Агрегированный фид цен для trade-in калькулятора (мобилакс.рф и др.).
-    Возвращает по каждой паре (brand, model, storage) набор цен скупки
-    конкурента (goodcom) для 4 состояний + наша средняя розница за окно.
-    Защищено токеном TRADEIN_FEED_TOKEN.
+    Фид рыночных цен выкупа для trade-in калькулятора.
+    По каждой (brand, model, storage) возвращает 4 готовые цены:
+      excellent, good, poor, repair — «средняя рынок» по состоянию.
+
+    Формула расчёта для каждого состояния:
+      market_X = (наша_средняя_закупка_X + цена_конкурента_X) / 2  — если есть оба
+               | наша_средняя_закупка_X                             — если есть только наша
+               | цена_конкурента_X                                  — если есть только конкурент
+               | null                                               — если нет ни того, ни другого
+
+    Товар включается в фид, если хотя бы одно из 4 состояний != null
+    (даже если мы никогда не закупали эту модель — даём оценку по конкуренту).
+
+    Защищено токеном TRADEIN_FEED_TOKEN (env).
     """
     dt_from = datetime.now(timezone.utc) - timedelta(days=window_days)
     in_window = or_(Product.is_sold == False, Product.sold_at >= dt_from)  # noqa: E712
 
-    # Для каждой (brand, model, storage, condition) — средняя розница за окно и
-    # число товаров в окне. window_cnt используется как вес при усреднении,
-    # т.к. avg_retail посчитан только по товарам в окне (остальные — NULL).
+    # 1) Наши данные: средняя закупка + розница за окно, в разбивке по состоянию
     stmt = (
         select(
             Product.brand,
@@ -133,13 +156,12 @@ async def tradein_prices(
         .where(Product.price_retail.isnot(None))
         .where(Product.is_new.is_(False))
         .where(Product.in_repair.is_(False))
-        .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
         .where(Product.brand.in_(_WANTED_BRANDS))
         .group_by(Product.brand, Product.model, Product.storage, Product.condition)
     )
     rows = (await db.execute(stmt)).all()
 
-    # Competitor prices индекс — (brand_lower, clean_model, norm_storage)
+    # 2) Цены конкурентов (goodcom) — индекс по (brand_lower, clean_model, norm_storage)
     comps = (await db.execute(select(CompetitorPrice))).scalars().all()
     comp_index: dict[tuple[str, str, str], CompetitorPrice] = {}
     for cp in comps:
@@ -150,8 +172,22 @@ async def tradein_prices(
         )
         comp_index.setdefault(key, cp)
 
-    # Группируем по (brand, model, storage) — берём конкурент-цены + нашу среднюю розницу
+    # 3) Собираем все (brand, model, storage), встречавшиеся у нас в аналитике,
+    #    + добавляем те, что есть у конкурента (даже если мы их никогда не закупали)
     groups: dict[tuple[str, str, str], dict] = {}
+
+    def _get_or_make(brand: str, model_clean: str, storage: str) -> dict:
+        k = (brand, model_clean, storage)
+        return groups.setdefault(k, {
+            "brand": brand, "model": model_clean, "storage": storage,
+            # по каждому уровню состояния: взвешенная сумма + вес для нашей avg_cost
+            "our_cost": {"excellent": [0.0, 0], "good": [0.0, 0],
+                         "poor": [0.0, 0], "repair": [0.0, 0]},
+            # общая средняя розница за окно (по всем состояниям)
+            "retail_sum": 0.0, "retail_n": 0,
+        })
+
+    # 3a) Наполняем из наших данных
     for r in rows:
         if r.brand not in _WANTED_BRANDS:
             continue
@@ -159,39 +195,62 @@ async def tradein_prices(
         if not storage:
             continue
         model_clean = _clean_model(r.brand, r.model)
-        key = (r.brand, model_clean, storage)
-        cp = comp_index.get((r.brand.lower(), model_clean.lower(), storage))
-        if not cp or not all([cp.price_excellent, cp.price_good, cp.price_poor, cp.price_repair]):
+        cond_level = _COND_MAP.get(r.condition or "")
+        if not cond_level:
+            # «Залог» и прочее, не вписывающееся в 4 состояния — пропускаем
             continue
-        g = groups.setdefault(key, {
-            "brand": r.brand,
-            "model": model_clean,
-            "storage": storage,
-            "excellent": int(cp.price_excellent),
-            "good": int(cp.price_good),
-            "poor": int(cp.price_poor),
-            "repair": int(cp.price_repair),
-            "our_retail_sum": 0.0,
-            "our_retail_n": 0,
-        })
-        window_cnt = int(r.window_cnt or 0)
-        if r.avg_retail is not None and window_cnt > 0:
-            g["our_retail_sum"] += float(r.avg_retail) * window_cnt
-            g["our_retail_n"] += window_cnt
 
+        g = _get_or_make(r.brand, model_clean, storage)
+        window_cnt = int(r.window_cnt or 0)
+        if r.avg_cost is not None and window_cnt > 0:
+            g["our_cost"][cond_level][0] += float(r.avg_cost) * window_cnt
+            g["our_cost"][cond_level][1] += window_cnt
+        if r.avg_retail is not None and window_cnt > 0:
+            g["retail_sum"] += float(r.avg_retail) * window_cnt
+            g["retail_n"] += window_cnt
+
+    # 3b) Добавляем товары от конкурента, которых нет у нас (мы их не закупаем, но даём оценку)
+    for cp in comps:
+        if (cp.brand or "") not in _WANTED_BRANDS:
+            continue
+        storage = _norm_storage(cp.memory)
+        if not storage:
+            continue
+        model_clean = _clean_model(cp.brand or "", cp.model or "")
+        _get_or_make(cp.brand, model_clean, storage)
+
+    # 4) Формируем items: по каждой (brand, model, storage) — 4 уровня + our_retail_avg
     items = []
     for g in groups.values():
-        retail_avg = int(g["our_retail_sum"] / g["our_retail_n"]) if g["our_retail_n"] else None
-        items.append({
+        cp = comp_index.get((g["brand"].lower(), g["model"].lower(), g["storage"]))
+        item = {
             "brand": g["brand"],
             "model": g["model"],
             "storage": g["storage"],
-            "excellent": g["excellent"],
-            "good": g["good"],
-            "poor": g["poor"],
-            "repair": g["repair"],
-            "our_retail_avg": retail_avg,
-        })
+        }
+        has_any = False
+        for level in ("excellent", "good", "poor", "repair"):
+            sum_, n = g["our_cost"][level]
+            our = (sum_ / n) if n > 0 else None
+            comp = None
+            if cp:
+                comp = getattr(cp, f"price_{level}", None)
+                comp = int(comp) if comp else None
+            if our is not None and comp is not None:
+                market = int((our + comp) / 2)
+            elif comp is not None:
+                market = comp
+            elif our is not None:
+                market = int(our)
+            else:
+                market = None
+            item[level] = market
+            if market is not None:
+                has_any = True
+        item["our_retail_avg"] = int(g["retail_sum"] / g["retail_n"]) if g["retail_n"] else None
+        if has_any:
+            items.append(item)
+
     items.sort(key=lambda x: (x["brand"], x["model"], int(x["storage"])))
 
     return {
