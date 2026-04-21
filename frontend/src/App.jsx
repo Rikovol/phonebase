@@ -1994,7 +1994,7 @@ function ProductCard({ productId, token, user, onBack }) {
               )}
               {product.avito_published && (
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:8}}>
-                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/feeds/avito-all/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/feeds/avito-all/{product.store_id}.xml</code>
+                  Фид: <code style={{fontSize:10,cursor:"pointer",color:"var(--accent)"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+product.store_id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{product.store_id}.xml</code>
                 </div>
               )}
             </div>
@@ -3155,8 +3155,8 @@ function StoreSettingsPage({ token, activeStore }) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)"}}>
                 <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
-                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/feeds/avito-all/"+current.id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/feeds/avito-all/{current.id}.xml</code>
-                <a href={"/api/feeds/avito-all/"+current.id+".xml"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
+                <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/feed-all/"+current.id+".xml")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/feed-all/{current.id}.xml</code>
+                <a href={"/api/avito/feed-all/"+current.id+".xml"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
               </div>
             </div>
             )}
@@ -3176,8 +3176,8 @@ function StoreSettingsPage({ token, activeStore }) {
               {current?.id && (
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg3)",borderRadius:8,border:"1px solid var(--border)",marginBottom:10}}>
                   <span style={{fontSize:12,color:"var(--muted)",flexShrink:0}}>Фид:</span>
-                  <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/feeds/website/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/feeds/website/{current.id}.json</code>
-                  <a href={"/api/feeds/website/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
+                  <code style={{fontSize:11,color:"var(--accent)",flex:1,wordBreak:"break-all",cursor:"pointer"}} onClick={()=>copyText(location.origin+"/api/avito/website-feed/"+current.id+".json")} title="Нажмите, чтобы скопировать">{location.origin}/api/avito/website-feed/{current.id}.json</code>
+                  <a href={"/api/avito/website-feed/"+current.id+".json"} target="_blank" rel="noopener" className="btn btn-sm btn-outline" style={{flexShrink:0}}>Открыть</a>
                 </div>
               )}
             </div>
@@ -3483,7 +3483,7 @@ function AvitoPage({ user, token, activeStore, onOpenProduct }) {
       {!loading && items.length === 0 && <div style={{color:"var(--muted)",fontSize:13,padding:"20px 0"}}>Нет активных объявлений на Авито. Нажмите «Опубликовать все с фото» или включите товары вручную в каталоге.</div>}
       {Object.entries(byStore).map(([store, prods]) => {
         const si = storeMap[store];
-        const feedUrl = si ? `/api/feeds/avito-all/${si.id}.xml` : null;
+        const feedUrl = si ? `/api/avito/feed-all/${si.id}.xml` : null;
         return (
         <div key={store} style={{marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
@@ -3649,110 +3649,61 @@ function PurchaseDocsPage({ token, user, activeStore, onOpenProduct }) {
 }
 
 // ─── ANALYTICS (свои данные BaseStock; без парсинга Авито) ─────────────────────
-// Порядок состояний для раскрытия и соответствие им цены конкурента
-const CONDITION_ORDER = ["Отличное", "Хорошее", "Удовлетворительное", "На запчасти"];
-const COMP_FIELD_BY_CONDITION = (cond) => {
-  const c = (cond || "").toLowerCase();
-  if (c.includes("отличн") || c.includes("новый")) return "price_excellent";
-  if (c.includes("хорош")) return "price_good";
-  if (c.includes("плох") || c.includes("удовл")) return "price_poor";
-  if (c.includes("запчаст") || c.includes("ремонт")) return "price_repair";
-  return "price_good"; // дефолт
-};
-
 function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, setAnSortDir, token, user, onOpenProduct }) {
   const [expanded, setExpanded] = useState({});
+  const [details, setDetails] = useState({});
+  const [detailLoading, setDetailLoading] = useState({});
 
-  const toggle = (key) => {
-    setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggle = async (key, model, storage, brand) => {
+    const isOpen = expanded[key];
+    setExpanded(prev => ({ ...prev, [key]: !isOpen }));
+    if (!isOpen && !details[key]) {
+      setDetailLoading(prev => ({ ...prev, [key]: true }));
+      try {
+        const params = new URLSearchParams();
+        params.set("q", model);
+        if (storage) params.set("storage", storage);
+        params.set("in_stock", "true");
+        params.set("is_new", "false");
+        params.set("limit", "200");
+        const data = await apiFetch(`/products/?${params.toString()}`, { token });
+        const excluded = ["Новый","Требуется ремонт","Ремонт","Залог"];
+        const filtered = (data.items || []).filter(p =>
+          p.model === model && (p.storage || "") === (storage || "")
+          && !p.in_repair
+          && !excluded.includes(p.condition)
+        );
+        setDetails(prev => ({ ...prev, [key]: filtered }));
+      } catch { setDetails(prev => ({ ...prev, [key]: [] })); }
+      setDetailLoading(prev => ({ ...prev, [key]: false }));
+    }
   };
 
-  // Группируем по (brand, model, storage) и оставляем разбивку по condition внутри.
-  // На каждое condition считаем:
-  //   our_retail_avg_4m — средняя наша розница за 4 мес (по проданным + остаткам за окно)
-  //   our_cost_avg_4m   — средняя наша закупка за 4 мес
-  //   competitor_price  — цена конкурента по этому состоянию
-  //   market_avg        — (our_cost_avg_4m + competitor_price) / 2; при отсутствии одной из частей — вторая
   const grouped = useMemo(() => {
     const map = {};
     for (const row of items) {
       const key = `${row.brand||""}|${row.model}|${row.storage||""}`;
-      if (!map[key]) map[key] = {
-        brand: row.brand, model: row.model, storage: row.storage,
-        inStockCount: 0, soldCount: 0, totalCount: 0,
-        // overall по всей группе для шапки-строки (веса — в штуках за окно)
-        sumRetail: 0, retailWeight: 0, sumCost: 0, costCount: 0,
-        competitor: null,
-        byCond: {},
-      };
+      if (!map[key]) map[key] = { brand: row.brand, model: row.model, storage: row.storage, totalCount: 0, inStockCount: 0, sumRetail: 0, sumCost: 0, costCount: 0, competitor: null };
       const g = map[key];
-      const cnt = row.count || 0;
-      const inStock = row.in_stock_count || 0;
-      const soldWin = row.sold_in_window || 0;
-      // В окне 4 мес: остаток сейчас + проданные в окне
-      const windowCount = inStock + soldWin;
-      g.totalCount += cnt;
-      g.inStockCount += inStock;
-      g.soldCount += soldWin;          // продано именно за окно (а не за всю историю)
-      if (row.avg_retail != null) { g.sumRetail += row.avg_retail * windowCount; g.retailWeight += windowCount; }
-      if (row.avg_cost != null)   { g.sumCost   += row.avg_cost   * windowCount; g.costCount    += windowCount; }
+      g.totalCount += row.count;
+      g.inStockCount += (row.in_stock_count || 0);
+      g.sumRetail += (row.avg_retail || 0) * row.count;
+      if (row.avg_cost) { g.sumCost += row.avg_cost * row.count; g.costCount += row.count; }
       if (row.competitor && !g.competitor) g.competitor = row.competitor;
-
-      const cond = row.condition || "—";
-      if (!g.byCond[cond]) g.byCond[cond] = {
-        count: 0, in_stock: 0, sold_in_window: 0,
-        sumRetail: 0, retailWeight: 0, sumCost: 0, costCount: 0,
-      };
-      const b = g.byCond[cond];
-      b.count += cnt;
-      b.in_stock += inStock;
-      b.sold_in_window += soldWin;
-      if (row.avg_retail != null) { b.sumRetail += row.avg_retail * windowCount; b.retailWeight += windowCount; }
-      if (row.avg_cost   != null) { b.sumCost   += row.avg_cost   * windowCount; b.costCount   += windowCount; }
     }
-
     return Object.entries(map).map(([key, g]) => {
-      const avg_retail = g.retailWeight ? g.sumRetail / g.retailWeight : null;
-      const avg_cost   = g.costCount    ? g.sumCost   / g.costCount    : null;
-      const cp = g.competitor || {};
-      const comp_price_overall = cp.price_excellent || null;
-      let market_avg_overall = null;
-      if (avg_cost && comp_price_overall) market_avg_overall = (avg_cost + comp_price_overall) / 2;
-      else if (comp_price_overall) market_avg_overall = comp_price_overall;
-      else if (avg_cost) market_avg_overall = avg_cost;
-
-      // Фиксированный набор состояний в фиксированном порядке; если состояния нет — показываем прочерки
-      const variations = CONDITION_ORDER.map(cond => {
-        const b = g.byCond[cond] || { count: 0, in_stock: 0, sold_in_window: 0,
-                                      sumRetail: 0, retailWeight: 0, sumCost: 0, costCount: 0 };
-        const retailAvg = b.retailWeight ? b.sumRetail / b.retailWeight : null;
-        const costAvg   = b.costCount    ? b.sumCost   / b.costCount    : null;
-        const compField = COMP_FIELD_BY_CONDITION(cond);
-        const compPrice = cp[compField] || null;
-        let mAvg = null;
-        if (costAvg && compPrice) mAvg = (costAvg + compPrice) / 2;
-        else if (compPrice) mAvg = compPrice;
-        else if (costAvg) mAvg = costAvg;
-        return {
-          condition: cond,
-          total: b.count,
-          in_stock: b.in_stock,
-          sold_in_window: b.sold_in_window,
-          our_retail_avg_4m: retailAvg,
-          our_cost_avg_4m: costAvg,
-          competitor_price: compPrice,
-          market_avg: mAvg,
-        };
-      });
-
+      const avg_retail = g.totalCount ? g.sumRetail / g.totalCount : 0;
+      const avg_cost = g.costCount ? g.sumCost / g.costCount : 0;
+      const comp_price = g.competitor?.price_excellent || 0;
+      // Средняя рынок: среднее между нашей закупкой и ценой конкурента
+      let market_avg = 0;
+      if (avg_cost && comp_price) market_avg = (avg_cost + comp_price) / 2;
+      else if (comp_price) market_avg = comp_price;
+      else if (avg_cost) market_avg = avg_cost;
       return {
         key, brand: g.brand, model: g.model, storage: g.storage,
-        avg_retail, avg_cost,
-        count: g.inStockCount,         // на остатке сейчас
-        sold_4m: g.soldCount,          // продано за 4 мес
-        competitor: g.competitor, comp_price: comp_price_overall,
-        market_avg: market_avg_overall,
-        variations,
+        avg_retail, avg_cost, count: g.inStockCount,
+        competitor: g.competitor, comp_price, market_avg,
       };
     });
   }, [items]);
@@ -3777,17 +3728,8 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
   const toggleSort = (col) => { anSortCol === col ? setAnSortDir(d => d === "asc" ? "desc" : "asc") : (setAnSortCol(col), setAnSortDir("asc")); };
   const arrow = (col) => anSortCol === col ? (anSortDir === "asc" ? " ▲" : " ▼") : "";
   const thS = { cursor: "pointer", userSelect: "none" };
-  const subStyle = { background: "rgba(255,255,255,.02)", fontSize: 12 };
+  const subStyle = { background: "rgba(255,255,255,.02)", fontSize: 11 };
   const cols = 8;
-
-  const COND_COLOR = {
-    "Отличное": "#22c55e",
-    "Хорошее": "#38bdf8",
-    "Удовлетворительное": "#f59e0b",
-    "На запчасти": "#ef4444",
-  };
-
-  const n = (v) => (v == null || v === 0) ? "—" : fmt(Math.round(v));
 
   return (
     <div className="tw">
@@ -3796,51 +3738,58 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
           {[["brand","Бренд",150],["model","Модель",320],["storage","Память",100]].map(([k,l,w])=>(
             <th key={k} style={{...thS,width:w}} onClick={()=>toggleSort(k)}>{l}{arrow(k)}</th>
           ))}
-          <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
-          <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
-          <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("comp")}>Конкурент{arrow("comp")}</th>
-          <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("market")}>Средняя рынок{arrow("market")}</th>
-          <th style={{...thS,textAlign:"center",width:140}} onClick={()=>toggleSort("count")}>Остаток / продано{arrow("count")}</th>
+          <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("avg")}>Наша розница{arrow("avg")}</th>
+          <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
+          <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("comp")}>Конкурент{arrow("comp")}</th>
+          <th style={{...thS,textAlign:"right",width:200}} onClick={()=>toggleSort("market")}>Средняя рынок{arrow("market")}</th>
+          <th style={{...thS,textAlign:"center",width:150}} onClick={()=>toggleSort("count")}>Шт.{arrow("count")}</th>
         </tr></thead>
         <tbody>
           {sorted.map(g => {
             const isOpen = expanded[g.key];
+            const rows = details[g.key] || [];
+            const isLoading = detailLoading[g.key];
+            const cp = g.competitor;
+            const compPrice = cp?.price_excellent;
             return (
               <React.Fragment key={g.key}>
-                <tr style={{cursor:"pointer"}} onClick={()=>toggle(g.key)}>
+                <tr style={{cursor:"pointer"}} onClick={()=>toggle(g.key, g.model, g.storage, g.brand)}>
                   <td style={{fontSize:11,color:"var(--muted)"}}>{g.brand || "—"}</td>
                   <td style={{fontWeight:600}}><span style={{marginRight:6,fontSize:10,color:"var(--muted)"}}>{isOpen?"▼":"▶"}</span>{g.model}</td>
                   <td style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:600,color:"var(--cyan)"}}>{g.storage || "—"}</td>
-                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_retail?"var(--success)":"var(--muted)"}}>{n(g.avg_retail)}</td>
-                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_cost?"var(--warn)":"var(--muted)"}}>{n(g.avg_cost)}</td>
-                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.comp_price?"var(--cyan)":"var(--muted)"}}>{n(g.comp_price)}</td>
-                  <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:g.market_avg?"var(--accent2)":"var(--muted)"}}>{n(g.market_avg)}</td>
-                  <td style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:12}}>
-                    <span style={{color:"var(--text)"}}>{g.count}</span>
-                    <span style={{color:"var(--muted)"}}> / {g.sold_4m}</span>
-                  </td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)"}}>{fmt(Math.round(g.avg_retail))}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_cost?"var(--warn)":"var(--muted)"}}>{g.avg_cost?fmt(Math.round(g.avg_cost)):"—"}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compPrice?"var(--cyan)":"var(--muted)"}}>{compPrice?fmt(compPrice):"—"}</td>
+                  <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:g.market_avg?"var(--accent2)":"var(--muted)"}}>{g.market_avg?fmt(Math.round(g.market_avg)):"—"}</td>
+                  <td style={{textAlign:"center",fontFamily:"var(--mono)"}}>{g.count}</td>
                 </tr>
-                {isOpen && g.variations.map((v, vi) => (
-                  <tr key={vi} style={subStyle}>
-                    <td colSpan={2} style={{paddingLeft:32}}>
-                      <span style={{
-                        display:"inline-block", padding:"3px 10px", borderRadius:6,
-                        fontSize:10, fontWeight:600, color:"#fff",
-                        background: COND_COLOR[v.condition] || "var(--bg4)",
-                      }}>{v.condition}</span>
-                    </td>
-                    <td style={{color:"var(--muted)",fontSize:11}}>
-                      {v.sold_in_window > 0 ? `продано: ${v.sold_in_window}` : "нет продаж за период"}
-                    </td>
-                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.our_retail_avg_4m?"var(--success)":"var(--muted)"}}>{n(v.our_retail_avg_4m)}</td>
-                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.our_cost_avg_4m?"var(--warn)":"var(--muted)"}}>{n(v.our_cost_avg_4m)}</td>
-                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.competitor_price?"var(--cyan)":"var(--muted)"}}>{n(v.competitor_price)}</td>
-                    <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:v.market_avg?"var(--accent2)":"var(--muted)"}}>{n(v.market_avg)}</td>
-                    <td style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>
-                      {v.in_stock} / {v.sold_in_window}
-                    </td>
+                {isOpen && isLoading && (
+                  <tr style={subStyle}><td colSpan={cols} style={{paddingLeft:32,color:"var(--muted)"}}><span className="spinner" style={{width:12,height:12}}/> Загрузка…</td></tr>
+                )}
+                {isOpen && !isLoading && rows.map((p, ci) => {
+                  const cond = (p.condition||"").toLowerCase();
+                  const compForCond = cp
+                    ? (cond.includes("отличн") || cond.includes("новый") ? cp.price_excellent
+                      : cond.includes("хорош") ? cp.price_good
+                      : cond.includes("плох") || cond.includes("удовл") ? cp.price_poor
+                      : cp.price_good)
+                    : null;
+                  return (
+                  <tr key={ci} style={{...subStyle,background:`${STORE_COLORS[p.store_name]||"transparent"}08`}}>
+                    <td style={{paddingLeft:24}}><span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:600,color:"#fff",background:STORE_GRADIENTS[p.store_name]||"var(--bg4)",boxShadow:STORE_GRADIENTS[p.store_name]?`0 2px 8px ${STORE_COLORS[p.store_name]||"transparent"}40`:""}}>{p.store_name||"—"}</span></td>
+                    <td style={{color:"var(--muted)"}}>{p.condition || "—"}</td>
+                    <td className="mono">{Access.isAdmin(user) && p.id && onOpenProduct ? <button className="imei-btn" onClick={e=>{e.stopPropagation();onOpenProduct(p.id);}}>{p.imei||"—"}</button> : (p.imei||"—")}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--success)"}}>{fmt(p.price_retail)}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:"var(--warn)"}}>{fmt(p.price_cost)}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compForCond?"var(--cyan)":"var(--muted)"}}>{compForCond?fmt(compForCond):"—"}</td>
+                    <td style={{textAlign:"right",fontFamily:"var(--mono)",color:compForCond&&p.price_cost?"var(--accent2)":"var(--muted)"}}>{compForCond&&p.price_cost?fmt(Math.round((p.price_cost+compForCond)/2)):"—"}</td>
+                    <td/>
                   </tr>
-                ))}
+                  );
+                })}
+                {isOpen && !isLoading && rows.length === 0 && !cp && (
+                  <tr style={subStyle}><td colSpan={cols} style={{paddingLeft:32,color:"var(--muted)"}}>Нет товаров</td></tr>
+                )}
               </React.Fragment>
             );
           })}

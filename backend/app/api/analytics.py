@@ -30,12 +30,11 @@ class PriceAggRow(BaseModel):
     model: str
     storage: Optional[str] = None
     condition: Optional[str] = None
-    count: int = Field(..., ge=0)  # всего за всё время существования в базе
-    in_stock_count: int = Field(0, ge=0)  # в остатке сейчас
-    sold_in_window: int = Field(0, ge=0)  # продано в окне (window_days)
-    avg_retail: Optional[float] = None  # средняя наша розница за окно (None, если нет продаж/остатка в окне)
-    min_retail: Optional[float] = None
-    max_retail: Optional[float] = None
+    count: int = Field(..., ge=0)
+    in_stock_count: int = Field(0, ge=0)
+    avg_retail: float
+    min_retail: float
+    max_retail: float
     avg_cost: Optional[float] = None
     competitor: Optional[CompetitorPriceInfo] = None
 
@@ -114,32 +113,12 @@ async def price_aggregates(
     include_sold: bool = Query(False, description="Включить проданные позиции"),
     sold_from: Optional[str] = Query(None, description="Продано с (YYYY-MM-DD)"),
     sold_to: Optional[str] = Query(None, description="Продано по (YYYY-MM-DD)"),
-    window_days: int = Query(120, ge=1, le=730,
-                             description="Размер окна аналитики в днях (по умолчанию 120 = 4 месяца)"),
     is_new: Optional[bool] = Query(None, description="Фильтр: новые (true) или б/у (false)"),
     min_units: int = Query(1, ge=1, le=100, description="Минимум единиц в группе"),
     limit: int = Query(200, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(get_current_user),
 ):
-    # В таблицу попадают ВСЕ товары, когда-либо бывшие в базе (включая давно проданные и без остатка).
-    # Средние цены считаем ТОЛЬКО за окно window_days (по умолчанию 4 месяца) через CASE WHEN,
-    # чтобы для товаров без продаж в окне avg_retail/avg_cost пришёл null (прочерк во фронте).
-    from datetime import datetime, timezone, timedelta
-    if not sold_from:
-        sold_from = (datetime.now(timezone.utc) - timedelta(days=window_days)).strftime("%Y-%m-%d")
-    dt_from = datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc)
-    dt_to_cap = None
-    if sold_to:
-        dt_to_cap = datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)
-
-    # Условие «товар в окне»: остаток сейчас (is_sold=False) ИЛИ продан в диапазоне [dt_from, dt_to)
-    in_window_cond = or_(
-        Product.is_sold == False,  # noqa: E712
-        (Product.sold_at >= dt_from) if dt_to_cap is None
-            else ((Product.sold_at >= dt_from) & (Product.sold_at < dt_to_cap)),
-    )
-
     base = (
         select(
             Product.brand,
@@ -147,13 +126,10 @@ async def price_aggregates(
             Product.storage,
             Product.condition,
             func.count().label("cnt"),
-            # Средние цены — только по товарам в окне 4 месяца
-            func.avg(case((in_window_cond, Product.price_retail), else_=None)).label("avg_p"),
-            func.min(case((in_window_cond, Product.price_retail), else_=None)).label("min_p"),
-            func.max(case((in_window_cond, Product.price_retail), else_=None)).label("max_p"),
-            func.avg(case((in_window_cond, Product.price_cost), else_=None)).label("avg_cost"),
-            # Количество проданных в окне — пригодится фронту для метрики ликвидности
-            func.sum(case((in_window_cond & (Product.is_sold == True), 1), else_=0)).label("sold_in_window"),  # noqa: E712
+            func.avg(Product.price_retail).label("avg_p"),
+            func.min(Product.price_retail).label("min_p"),
+            func.max(Product.price_retail).label("max_p"),
+            func.avg(Product.price_cost).label("avg_cost"),
             func.sum(case((Product.is_sold == False, 1), else_=0)).label("in_stock_cnt"),  # noqa: E712
         )
         .select_from(Product)
@@ -163,6 +139,8 @@ async def price_aggregates(
         .where(Product.in_repair.is_(False))
         .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
     )
+    # Аналитика всегда включает проданные за последние 2 месяца для расчёта средних цен
+    from datetime import datetime, timezone, timedelta
     base = _apply_product_filters(
         base,
         store=store,
@@ -172,13 +150,18 @@ async def price_aggregates(
         include_sold=True,
         is_new=is_new,
     )
+    # Непроданные всегда в выборке; проданные — только за последние 2 месяца (или пользовательский диапазон)
+    if not sold_from:
+        sold_from = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d")
+    dt_from = datetime.fromisoformat(sold_from).replace(tzinfo=timezone.utc)
+    base = base.where(or_(Product.is_sold == False, Product.sold_at >= dt_from))  # noqa: E712
+    if sold_to:
+        dt_to = datetime.fromisoformat(sold_to).replace(tzinfo=timezone.utc) + timedelta(days=1)
+        base = base.where(or_(Product.is_sold == False, Product.sold_at < dt_to))  # noqa: E712
     base = base.group_by(Product.brand, Product.model, Product.storage, Product.condition)
-    # Сохраняем параметр min_units для обратной совместимости: 0 = показать все (новый дефолт во фронте)
-    if min_units > 0:
-        in_stock_expr = func.sum(case((Product.is_sold == False, 1), else_=0))  # noqa: E712
-        base = base.having(in_stock_expr >= min_units)
-    # Сортировка по алфавиту: бренд + модель + память (по умолчанию все товары с их историей).
-    base = base.order_by(Product.brand.asc(), Product.model.asc(), Product.storage.asc()).limit(limit)
+    in_stock_expr = func.sum(case((Product.is_sold == False, 1), else_=0))  # noqa: E712
+    base = base.having(in_stock_expr >= min_units)
+    base = base.order_by(in_stock_expr.desc(), Product.model.asc()).limit(limit)
 
     rows = (await db.execute(base)).all()
 
@@ -237,11 +220,10 @@ async def price_aggregates(
             condition=r.condition,
             count=int(r.cnt),
             in_stock_count=int(r.in_stock_cnt or 0),
-            sold_in_window=int(r.sold_in_window or 0),
-            avg_retail=float(r.avg_p) if r.avg_p is not None else None,
-            min_retail=float(r.min_p) if r.min_p is not None else None,
-            max_retail=float(r.max_p) if r.max_p is not None else None,
-            avg_cost=float(r.avg_cost) if r.avg_cost is not None else None,
+            avg_retail=float(r.avg_p or 0),
+            min_retail=float(r.min_p or 0),
+            avg_cost=float(r.avg_cost) if r.avg_cost else None,
+            max_retail=float(r.max_p or 0),
             competitor=comp_info,
         ))
 
