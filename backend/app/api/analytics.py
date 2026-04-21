@@ -222,6 +222,10 @@ async def price_aggregates(
 
     items = []
     matched_comp_ids: set[str] = set()
+    # Ключи наших групп в том же пространстве нормализации, что и gap-fill.
+    # Нужно, чтобы не породить gap-дубль к нашей уже-матченной позиции, если у
+    # конкурента несколько записей с разных source под одну модель.
+    matched_norm_keys: set[str] = set()
     for r in rows:
         cp = _find_competitor(r.brand, r.model, r.storage)
         comp_info = None
@@ -248,6 +252,9 @@ async def price_aggregates(
             avg_cost=float(r.avg_cost) if r.avg_cost is not None else None,
             competitor=comp_info,
         ))
+        matched_norm_keys.add(
+            f"{(r.brand or '').strip().lower()}|{_normalize_model(r.model or '', r.brand)}|{_normalize_storage(r.storage)}"
+        )
 
     # Gap-fill: позиции конкурентов, которых нет в нашем ассортименте.
     # Каждой ценовой градации (excellent/good/poor/repair) соответствует наш condition.
@@ -265,7 +272,9 @@ async def price_aggregates(
         ]
         # Дедуп по нормализованному ключу — одна и та же модель может быть
         # у нескольких источников (goodcom, другие) с uniq по (source,brand,model,memory).
-        seen_gap_keys: set[str] = set()
+        # Также исключаем ключи наших matched-позиций, чтобы не получить дубль
+        # к уже существующей строке (разные source у одной модели).
+        seen_gap_keys: set[str] = set(matched_norm_keys)
         for cp in comp_rows:
             if cp.id in matched_comp_ids:
                 continue
@@ -274,7 +283,7 @@ async def price_aggregates(
                 continue
             if q_lower and q_lower not in (cp.model or "").lower() and q_lower not in (cp.full_name or "").lower():
                 continue
-            dedup_key = f"{cp_brand.lower()}|{_normalize_model(cp.model, cp_brand)}|{_normalize_storage(cp.memory)}"
+            dedup_key = f"{cp_brand.lower()}|{_normalize_model(cp.model or '', cp_brand)}|{_normalize_storage(cp.memory or '')}"
             if dedup_key in seen_gap_keys:
                 continue
             seen_gap_keys.add(dedup_key)
@@ -306,4 +315,8 @@ async def price_aggregates(
                     is_gap=True,
                 ))
 
+    # Финальный cap: SQL-limit ограничивает только наш catalog-запрос, gap-строки
+    # добавляются сверху. Обрезаем общий массив, чтобы не отдавать непредсказуемый объём.
+    if len(items) > limit:
+        items = items[:limit]
     return PriceAggResponse(items=items, total=len(items))
