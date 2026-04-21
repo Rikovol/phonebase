@@ -1,5 +1,6 @@
 """
 API-эндпоинты Авито: статистика, мессенджер, синхронизация цен, мониторинг.
+Фиды (XML/JSON) вынесены в app.api.feeds.
 """
 from datetime import date, datetime, timezone
 from typing import Optional
@@ -15,87 +16,35 @@ from app.api.access import can_modify_product
 from app.api.auth import get_current_user, require_admin
 from app.core.database import get_db
 from app.models.business import AvitoMessage, AvitoStats, Product, Store, User
-from app.services.website_feed import generate_website_feed
 
 router = APIRouter()
 
 
-# ── Публичный JSON-фид для сайта ─────────────────────────
+# ── Обратная совместимость: старые URL фидов → редирект на /api/feeds/ ──
 
-@router.get("/website-feed/{store_id}.json")
-async def website_feed(
-    store_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Публичный JSON-фид б/у товаров для сайта магазина. Без авторизации."""
-    store = await db.get(Store, store_id)
-    if not store or not store.is_active:
-        raise HTTPException(status_code=404, detail="Магазин не найден")
-    return await generate_website_feed(db, store_id)
+from fastapi.responses import RedirectResponse
 
 
-# ── Публичный XML-фид б/у товаров для Авито ─────────────
-
-@router.get("/feed/{store_id}.xml")
-async def avito_feed_used(
-    store_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Публичный XML-фид б/у товаров для автозагрузки Авито. Без авторизации."""
-    from app.services.avito_feed import generate_feed_xml
-
-    store = await db.get(Store, store_id)
-    if not store or not store.is_active:
-        raise HTTPException(status_code=404, detail="Магазин не найден")
-
-    xml_bytes = await generate_feed_xml(db, store_id)
-    return Response(content=xml_bytes, media_type="application/xml")
+@router.get("/website-feed/{store_id}.json", include_in_schema=False)
+async def _compat_website_feed(store_id: str):
+    return RedirectResponse(f"/api/feeds/website/{store_id}.json", status_code=301)
 
 
-# ── Публичный XML-фид новых товаров для Авито ────────────
-
-@router.get("/feed-new/{store_id}.xml")
-async def avito_feed_new(
-    store_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Публичный XML-фид новых товаров для автозагрузки Авито. Без авторизации."""
-    from app.services.avito_feed_new import generate_feed_xml_new
-
-    store = await db.get(Store, store_id)
-    if not store or not store.is_active:
-        raise HTTPException(status_code=404, detail="Магазин не найден")
-
-    xml_bytes = await generate_feed_xml_new(db, store_id)
-    return Response(content=xml_bytes, media_type="application/xml")
+@router.get("/feed/{store_id}.xml", include_in_schema=False)
+async def _compat_feed_used(store_id: str):
+    return RedirectResponse(f"/api/feeds/avito/{store_id}.xml", status_code=301)
 
 
-# ── Единый XML-фид (б/у + новые) для Авито ──────────────
+@router.get("/feed-new/{store_id}.xml", include_in_schema=False)
+async def _compat_feed_new(store_id: str):
+    # Новые товары теперь в едином фиде /api/feeds/avito/
+    return RedirectResponse(f"/api/feeds/avito/{store_id}.xml", status_code=301)
 
-@router.get("/feed-all/{store_id}.xml")
-async def avito_feed_all(
-    store_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Единый XML-фид (б/у + новые товары) для автозагрузки Авито. Без авторизации."""
-    from app.services.avito_feed import generate_feed_ads as used_ads
-    from app.services.avito_feed_new import generate_feed_ads_new as new_ads
 
-    store = await db.get(Store, store_id)
-    if not store or not store.is_active:
-        raise HTTPException(status_code=404, detail="Магазин не найден")
-
-    from lxml.etree import Element, tostring
-    root = Element("Ads", formatVersion="3", target="Avito.ru")
-
-    for ad in await used_ads(db, store_id):
-        root.append(ad)
-    for ad in await new_ads(db, store_id):
-        root.append(ad)
-
-    xml_body = tostring(root, encoding="utf-8", xml_declaration=False)
-    xml_bytes = b'<?xml version="1.0" encoding="utf-8"?>\n' + xml_body
-    return Response(content=xml_bytes, media_type="application/xml")
+@router.get("/feed-all/{store_id}.xml", include_in_schema=False)
+async def _compat_feed_all(store_id: str):
+    # Склейка переехала из /avito-all/ в единый /avito/
+    return RedirectResponse(f"/api/feeds/avito/{store_id}.xml", status_code=301)
 
 
 # ── Pydantic-схемы ───────────────────────────────────────
