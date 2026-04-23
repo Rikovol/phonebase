@@ -199,6 +199,35 @@ async def price_aggregates(
             comp_clean[key] = cp
         comp_by_brand.setdefault(b, []).append((m_clean, mem_norm, cp))
 
+    # Существенные модификаторы линейки — их наличие делает модели РАЗНЫМИ.
+    # Пример: "galaxy s26" vs "galaxy s26 ultra" — substring совпал бы, но это
+    # разные товары. Нельзя поглощать Ultra/Pro как competitor для базовой модели.
+    ESSENTIAL_MODIFIERS = {
+        # Apple / Samsung / Xiaomi / Google — верхние линейки
+        "ultra", "pro", "plus", "+", "max", "mini",
+        # Бюджетные / производные варианты
+        "lite", "se", "fe", "edge", "air", "prime", "active",
+        # Samsung Galaxy Note / Fold / Flip
+        "note", "fold", "flip",
+        # Google Pixel XL / Pro XL
+        "xl",
+        # Xiaomi / OnePlus суб-варианты
+        "turbo", "neo", "gt",
+    }
+
+    def _substring_safe(a: str, b: str) -> bool:
+        """a — строгая подстрока b, но «лишние» слова в b не являются
+        существенным модификатором линейки. Токенизация устойчива к
+        приклеенному "+" и дефисам ("s26-ultra" → ["s26","ultra"])."""
+        if a not in b:
+            return False
+        extra = b.replace(a, "", 1).strip().lower()
+        if not extra:
+            return True  # полное совпадение
+        # Вынимаем «слова» алфанум + отдельно символ "+" (он тоже в модификаторах).
+        extra_words = set(re.findall(r"[a-zа-я0-9]+|\+", extra))
+        return not (extra_words & ESSENTIAL_MODIFIERS)
+
     def _find_competitor(brand_val: str | None, model_val: str | None, storage_val: str | None):
         if not brand_val or not model_val:
             return None
@@ -211,11 +240,12 @@ async def price_aggregates(
         if hit:
             return hit
 
-        # 2. Подстрока в обе стороны (только по тому же бренду и памяти)
+        # 2. Безопасная подстрока (без поглощения Ultra/Pro/Plus и прочих
+        #    существенных модификаторов) — только при совпадении памяти.
         for cm, cs, cp in comp_by_brand.get(b, []):
             if cs != s:
                 continue
-            if cm in m_norm or m_norm in cm:
+            if _substring_safe(cm, m_norm) or _substring_safe(m_norm, cm):
                 return cp
 
         return None
