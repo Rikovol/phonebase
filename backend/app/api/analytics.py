@@ -380,6 +380,22 @@ async def price_aggregates(
                     is_gap=True,
                 ))
 
+    # Общая сортировка по нормализованным ключам: catalog и gap-строки
+    # смешиваются в один алфавитный список, память сравнивается числом,
+    # состояния по фикс-порядку (Как новый → На запчасти).
+    CONDITION_ORDER = {
+        "Как новый": 0, "Отличное": 1, "Хорошее": 2,
+        "Удовлетворительное": 3, "На запчасти": 4,
+    }
+    def _sort_key(r: PriceAggRow):
+        brand = (r.brand or "").strip().lower()
+        model_clean = _normalize_model(r.model or "", r.brand)
+        storage_raw = _normalize_storage(r.storage)
+        storage_num = int(storage_raw) if storage_raw.isdigit() else 0
+        cond_rank = CONDITION_ORDER.get(r.condition or "", 99)
+        return (brand, model_clean, storage_num, cond_rank)
+    items.sort(key=_sort_key)
+
     # Финальный cap: SQL-limit ограничивает только наш catalog-запрос, gap-строки
     # добавляются сверху. Обрезаем общий массив, чтобы не отдавать непредсказуемый объём.
     if len(items) > limit:
