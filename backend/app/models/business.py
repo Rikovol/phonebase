@@ -248,6 +248,53 @@ class AvitoMessage(Base):
 # публичный API /api/sites/{store_id}/*.
 
 
+class SiteVisitor(Base):
+    """Клиент сайта магазина. Агрегирует все обращения одного человека.
+
+    Идентификация:
+    - Авторизованные через OAuth (VK/Telegram/MAX) — UNIQUE по (store_id, auth_provider, auth_provider_user_id).
+    - Анонимные (rate-limit + honeypot) — отдельная запись на каждое обращение,
+      последующая мерж-логика по phone/email — в админке вручную.
+
+    Продавец видит в карточке заявки: "клиент с января, 5 обращений, VK ID 123".
+    """
+    __tablename__ = "site_visitors"
+    __table_args__ = (
+        # PostgreSQL: NULL != NULL в UNIQUE, поэтому анонимные (auth_provider=NULL)
+        # НЕ дедуплицируются — каждое анонимное обращение создаёт нового visitor.
+        # Это by design: без идентификатора мы не можем сопоставить. Ручное слияние
+        # в админке продавца по phone/email.
+        UniqueConstraint("store_id", "auth_provider", "auth_provider_user_id",
+                         name="uq_site_visitors_auth"),
+        Index("idx_site_visitors_store_phone", "store_id", "contact_phone"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+
+    # OAuth-идентификация (nullable — анонимы без auth)
+    auth_provider: Mapped[str | None] = mapped_column(String(20))  # vk | telegram | max | null=anonymous
+    auth_provider_user_id: Mapped[str | None] = mapped_column(String(100))  # VK user_id, Telegram chat_id и т.п.
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+
+    # Контакт
+    display_name: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(30), index=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255))
+    preferred_channel: Mapped[str | None] = mapped_column(String(20))  # telegram | max | vk | phone | email
+
+    # Заметки продавца об этом клиенте
+    notes: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[str | None] = mapped_column(Text)  # JSON массив тэгов для сегментации
+
+    # Счётчики (денормализация для быстрого UI)
+    total_messages_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # бан за спам
+
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+
+
 class SiteMessage(Base):
     """Заявки с сайта магазина: Trade-in оценка + контакт-формы + обратная связь.
 
@@ -264,18 +311,25 @@ class SiteMessage(Base):
         Index("idx_site_messages_store_status_created", "store_id", "status", "created_at"),
         # Быстрый счётчик непрочитанных (без ответа) по магазину
         Index("idx_site_messages_store_unread", "store_id", "created_at", postgresql_where="answered_at IS NULL"),
+        # История обращений одного клиента
+        Index("idx_site_messages_visitor_created", "visitor_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
-    message_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # tradein | contact | feedback
+    visitor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("site_visitors.id", ondelete="SET NULL"), index=True)
+    message_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # tradein | contact | feedback | order
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new", index=True)  # new | in_progress | answered | closed | spam
 
-    # Контакт клиента
+    # OAuth-верификация (денормализация из SiteVisitor для быстрых фильтров в админке)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    auth_provider: Mapped[str | None] = mapped_column(String(20))  # vk | telegram | max | null=anonymous
+
+    # Контакт клиента (либо из OAuth-профиля, либо заполнен вручную)
     contact_name: Mapped[str | None] = mapped_column(String(200))
     contact_phone: Mapped[str | None] = mapped_column(String(30), index=True)
     contact_email: Mapped[str | None] = mapped_column(String(255))
-    preferred_channel: Mapped[str | None] = mapped_column(String(20))  # telegram | max | phone | email | whatsapp
+    preferred_channel: Mapped[str | None] = mapped_column(String(20))  # telegram | max | vk | phone | email | whatsapp
 
     # Trade-in специфичное (когда message_type='tradein')
     tradein_brand: Mapped[str | None] = mapped_column(String(100))
