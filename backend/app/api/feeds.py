@@ -12,6 +12,13 @@ from fastapi.responses import Response
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api._analytics_core import (
+    COND_MAP,
+    clean_model,
+    market_avg,
+    normalize_storage,
+)
+from app.api._phone_filters import NON_PHONE_PATTERNS, is_non_phone_model
 from app.core.database import get_db
 from app.models.business import CompetitorPrice, Product, Store
 
@@ -83,37 +90,8 @@ def _check_tradein_token(
 
 
 _WANTED_BRANDS = ("Apple", "Samsung", "Xiaomi")
-
-
-def _norm_storage(s: Optional[str]) -> str:
-    if not s:
-        return ""
-    s = s.strip()
-    if m := re.search(r"(\d+)\s*[tT]", s):
-        return str(int(m.group(1)) * 1024)
-    if m := re.search(r"(\d+)", s):
-        return m.group(1)
-    return ""
-
-
-def _clean_model(brand: str, model: str) -> str:
-    m = re.sub(rf"^{re.escape(brand)}\s+", "", model, flags=re.I).strip()
-    return re.sub(r"\s+", " ", m)
-
-
-# Маппинг condition из phonebase → стандартные уровни состояния в фиде.
-# «Как новый» — топовое б/у состояние, маппим на excellent (вместе с «Отличное»).
-_COND_MAP = {
-    "Как новый": "excellent",
-    "Отличное": "excellent",
-    "Новое": "excellent",
-    "Хорошее": "good",
-    "Удовлетворительное": "poor",
-    "Плохое": "poor",
-    "На запчасти": "repair",
-    "Ремонт": "repair",
-    "Требуется ремонт": "repair",
-}
+# normalize_storage / clean_model / COND_MAP / market_avg импортированы из
+# _analytics_core.py — общий источник для Аналитики и trade-in фида.
 
 
 @router.get("/tradein-prices.json", dependencies=[Depends(_check_tradein_token)])
@@ -159,6 +137,12 @@ async def tradein_prices(
         .where(Product.brand.in_(_WANTED_BRANDS))
         .group_by(Product.brand, Product.model, Product.storage, Product.condition)
     )
+    # Отсекаем iPad/Watch/Buds/Galaxy Book/Galaxy Tab/Xiaomi Pad и т.п.
+    # Mac-семейство (MacBook/iMac/Mac mini/Pro/Studio) остаётся — его принимаем в trade-in.
+    for _pat in NON_PHONE_PATTERNS:
+        stmt = stmt.where(~Product.model.ilike(f"%{_pat}%"))
+    # Generic "book" catch-all: Surface Book / Realme Book / etc., кроме MacBook.
+    stmt = stmt.where(or_(~Product.model.ilike("%book%"), Product.model.ilike("%macbook%")))
     rows = (await db.execute(stmt)).all()
 
     # 1b) Реальные цвета товаров за окно — для шага «цвет» в калькуляторе на клиенте
@@ -173,26 +157,34 @@ async def tradein_prices(
         .where(in_window)
         .distinct()
     )
+    for _pat in NON_PHONE_PATTERNS:
+        colors_stmt = colors_stmt.where(~Product.model.ilike(f"%{_pat}%"))
+    colors_stmt = colors_stmt.where(
+        or_(~Product.model.ilike("%book%"), Product.model.ilike("%macbook%"))
+    )
     color_rows = (await db.execute(colors_stmt)).all()
     # Индекс по (brand, clean_model, norm_storage) → set цветов
     color_index: dict[tuple[str, str, str], set] = {}
     for cr in color_rows:
         if cr.brand not in _WANTED_BRANDS:
             continue
-        st = _norm_storage(cr.storage)
+        st = normalize_storage(cr.storage)
         if not st:
             continue
-        key = (cr.brand, _clean_model(cr.brand, cr.model), st)
+        key = (cr.brand, clean_model(cr.brand, cr.model), st)
         color_index.setdefault(key, set()).add(cr.color.strip())
 
-    # 2) Цены конкурентов (goodcom) — индекс по (brand_lower, clean_model, norm_storage)
-    comps = (await db.execute(select(CompetitorPrice))).scalars().all()
+    # 2) Цены конкурентов (goodcom) — индекс по (brand_lower, clean_model, norm_storage).
+    # Non-phone отфильтруем через is_non_phone_model (iPad/Watch/Buds/Book и т.п. не для
+    # trade-in калькулятора смартфонов).
+    comps_all = (await db.execute(select(CompetitorPrice))).scalars().all()
+    comps = [cp for cp in comps_all if not is_non_phone_model(cp.model)]
     comp_index: dict[tuple[str, str, str], CompetitorPrice] = {}
     for cp in comps:
         key = (
             (cp.brand or "").strip().lower(),
-            _clean_model(cp.brand or "", cp.model or "").lower(),
-            _norm_storage(cp.memory),
+            clean_model(cp.brand or "", cp.model or "").lower(),
+            normalize_storage(cp.memory),
         )
         comp_index.setdefault(key, cp)
 
@@ -215,11 +207,11 @@ async def tradein_prices(
     for r in rows:
         if r.brand not in _WANTED_BRANDS:
             continue
-        storage = _norm_storage(r.storage)
+        storage = normalize_storage(r.storage)
         if not storage:
             continue
-        model_clean = _clean_model(r.brand, r.model)
-        cond_level = _COND_MAP.get(r.condition or "")
+        model_clean = clean_model(r.brand, r.model)
+        cond_level = COND_MAP.get(r.condition or "")
         if not cond_level:
             # «Залог» и прочее, не вписывающееся в 4 состояния — пропускаем
             continue
@@ -237,10 +229,10 @@ async def tradein_prices(
     for cp in comps:
         if (cp.brand or "") not in _WANTED_BRANDS:
             continue
-        storage = _norm_storage(cp.memory)
+        storage = normalize_storage(cp.memory)
         if not storage:
             continue
-        model_clean = _clean_model(cp.brand or "", cp.model or "")
+        model_clean = clean_model(cp.brand or "", cp.model or "")
         _get_or_make(cp.brand, model_clean, storage)
 
     # 4) Формируем items: по каждой (brand, model, storage) — 4 уровня + our_retail_avg
@@ -260,15 +252,8 @@ async def tradein_prices(
             if cp:
                 comp = getattr(cp, f"price_{level}", None)
                 comp = int(comp) if comp else None
-            if our is not None and comp is not None:
-                market = int((our + comp) / 2)
-            elif comp is not None:
-                market = comp
-            elif our is not None:
-                market = int(our)
-            else:
-                market = None
-            item[level] = market
+            market = market_avg(our, comp)
+            item[level] = int(market) if market is not None else None
             if market is not None:
                 has_any = True
         item["our_retail_avg"] = int(g["retail_sum"] / g["retail_n"]) if g["retail_n"] else None

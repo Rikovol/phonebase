@@ -10,6 +10,13 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
+from app.api._analytics_core import (
+    CONDITION_ORDER,
+    GAP_CONDITION_MAP,
+    normalize_model,
+    normalize_storage,
+)
+from app.api._phone_filters import NON_PHONE_BRANDS, NON_PHONE_PATTERNS
 from app.api.products import _apply_product_filters
 from app.core.database import get_db
 from app.models.business import CompetitorPrice, Product, Store, User
@@ -48,63 +55,6 @@ class PriceAggResponse(BaseModel):
 
 import re
 
-_RE_STORAGE_SLASH = re.compile(r"(\d+)/(\d+)\s*[gGгГtTтТ]")  # 8/256Gb → 256
-_RE_STORAGE_NUM = re.compile(r"(\d+)")
-
-
-def _normalize_storage(s: str | None) -> str:
-    """'8/256Gb' → '256', '256 ГБ' → '256', '1Tb' → '1024'."""
-    if not s:
-        return ""
-    s = s.strip()
-    # Формат RAM/Storage: берём последнее число (storage)
-    m = _RE_STORAGE_SLASH.search(s)
-    if m:
-        val = m.group(2)
-    else:
-        nums = _RE_STORAGE_NUM.findall(s)
-        val = nums[-1] if nums else ""
-    # Tb → GB
-    if val and re.search(r"[tTтТ]", s):
-        try:
-            val = str(int(val) * 1024)
-        except ValueError:
-            pass
-    return val
-
-
-_RE_ARTCODE = re.compile(r"\b[a-z]\d{3}[a-z]?(/[a-z]{2,3})?\b", re.I)  # S921B/DS, A135F/DS
-_RE_RAM = re.compile(r"\bram\s*\d+\s*(gb|гб)?\b", re.I)  # Ram 8Gb
-_RE_PAREN = re.compile(r"\([^)]*\)")  # (Новый), (Dual SIM), (Lightning)
-_RE_EXTRA = re.compile(r"\b(5g|4g|lte|nfc|ds)\b", re.I)
-_RE_MULTI_SPACE = re.compile(r"\s{2,}")
-_RE_COLOR_TAIL = re.compile(r"[,;]\s*(black|white|grey|gray|blue|green|red|gold|silver|violet|yellow|pink|marble|cobalt|titanium|starlight|midnight|jet|хорош\S*|отличн\S*|средн\S*|плох\S*).*$", re.I)
-_RE_COLORS = re.compile(r"\b(black|white|grey|gray|blue|green|red|gold|silver|violet|yellow|pink|marble|cobalt|titanium|starlight|midnight|jet|onyx|cream|lavender|phantom|graphite|amber|coral|bronze|ivory|lime|orange|purple|sapphire|teal)\b", re.I)
-
-
-def _normalize_model(model: str | None, brand: str | None) -> str:
-    """Привести модель к ядру для сравнения.
-    'Samsung Galaxy S24 Ultra , Black, Хорошее,' → 'galaxy s24 ultra'
-    'Galaxy S24 S921B/DS Ram 8Gb' → 'galaxy s24'
-    'Apple iPhone 14 Pro Max' + brand='Apple' → 'iphone 14 pro max'
-    """
-    if not model:
-        return ""
-    m = model.strip().lower()
-    if brand:
-        b = brand.strip().lower()
-        if m.startswith(b + " "):
-            m = m[len(b) + 1:]
-    # Убираем скобки, артикулы, RAM, цвета, суффиксы
-    m = _RE_PAREN.sub(" ", m)
-    m = _RE_ARTCODE.sub(" ", m)
-    m = _RE_RAM.sub(" ", m)
-    m = _RE_COLOR_TAIL.sub("", m)
-    m = _RE_COLORS.sub(" ", m)
-    m = _RE_EXTRA.sub(" ", m)
-    m = _RE_MULTI_SPACE.sub(" ", m).strip(" ,.")
-    return m
-
 
 @router.get("/price-aggregates", response_model=PriceAggResponse)
 async def price_aggregates(
@@ -142,34 +92,8 @@ async def price_aggregates(
             else ((Product.sold_at >= dt_from) & (Product.sold_at < dt_to_cap)),
     )
 
-    # Бренды, которые делают ТОЛЬКО не-смартфоны — целиком в blacklist.
-    # ВАЖНО: ASUS, Honor, Nothing, Huawei, TECNO, Samsung, Xiaomi и др. сюда НЕ
-    # добавлять — они производят и смартфоны, и ноутбуки/часы/наушники. Их
-    # ноутбуки ловим model-pattern'ом ниже.
-    NON_PHONE_BRANDS = [
-        "Ноутбук", "Ноутбуки", "Наушники", "Планшет", "Планшеты",
-        "Часы", "Аксессуары", "Гарнитура",
-        "Acer", "Lenovo", "MSI", "HP", "Dell",
-        "Packard Bell", "Toshiba", "Fujitsu",
-        "Aquarius", "ARDOR", "ARDOR GAMING",
-    ]
-
-    # Маркеры не-смартфонов в model — ловят ноутбуки/часы/наушники от тех брендов,
-    # которые делают и смартфоны (Asus VivoBook, Honor MagicBook, Galaxy Watch и т.п.).
-    # MacBook — ИСКЛЮЧЕНИЕ из 'book' (обрабатывается отдельно ниже).
-    NON_PHONE_MODEL_PATTERNS = [
-        "watch", "buds", "airpods", "headphone", "наушник", "гарнитура",
-        "ноутбук", "лэптоп", "laptop", "notebook",
-        "планшет", "tablet", "ipad", "tab ",
-        # Ноутбучные линейки разных брендов:
-        "vivobook", "zenbook", "tuf gaming", "rog strix", "rog zephyrus",
-        "thinkpad", "ideapad", "yoga ", "legion",
-        "pavilion", "elitebook", "probook", "omen ", "envy ",
-        "aspire", "predator", "nitro ", "swift ",
-        "katana", "stealth", "raider ", "sword ", "prestige", "bravo ", "pulse",
-        "megabook", "magicbook", "matebook",
-    ]
-
+    # NON_PHONE_BRANDS и NON_PHONE_PATTERNS импортированы из _phone_filters.py
+    # (общий источник для Аналитики и trade-in фида).
     base = (
         select(
             Product.brand,
@@ -193,12 +117,13 @@ async def price_aggregates(
         .where(Product.in_repair.is_(False))
         .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
         # Отсекаем не-смартфонные товары (ноутбуки/наушники/планшеты/часы).
+        # Mac-семейство (MacBook/iMac/Mac mini/Pro/Studio) остаётся.
         .where(Product.brand.notin_(NON_PHONE_BRANDS))
-        # MacBook — исключение из паттерна 'book'.
+        # Generic "book" catch-all — любое book в модели = ноутбук, кроме MacBook.
+        # Покрывает будущие бренды (Surface Book, Realme Book и пр.), не в patterns.
         .where(or_(~Product.model.ilike("%book%"), Product.model.ilike("%macbook%")))
     )
-    # Остальные model-pattern'ы применяем циклом для компактности.
-    for _pat in NON_PHONE_MODEL_PATTERNS:
+    for _pat in NON_PHONE_PATTERNS:
         base = base.where(~Product.model.ilike(f"%{_pat}%"))
     base = _apply_product_filters(
         base,
@@ -226,9 +151,9 @@ async def price_aggregates(
     # Сгруппировать по бренду для O(k) поиска вместо O(n)
     comp_by_brand: dict[str, list[tuple[str, str, CompetitorPrice]]] = {}
     for cp in comp_rows:
-        mem_norm = _normalize_storage(cp.memory)
+        mem_norm = normalize_storage(cp.memory)
         b = (cp.brand or "").strip().lower()
-        m_clean = _normalize_model(cp.model, cp.brand)
+        m_clean = normalize_model(cp.model, cp.brand)
         key = f"{b}|{m_clean}|{mem_norm}"
         if key not in comp_clean:
             comp_clean[key] = cp
@@ -267,8 +192,8 @@ async def price_aggregates(
         if not brand_val or not model_val:
             return None
         b = brand_val.strip().lower()
-        m_norm = _normalize_model(model_val, brand_val)
-        s = _normalize_storage(storage_val)
+        m_norm = normalize_model(model_val, brand_val)
+        s = normalize_storage(storage_val)
 
         # 1. Точное совпадение по очищенным моделям
         hit = comp_clean.get(f"{b}|{m_norm}|{s}")
@@ -318,7 +243,7 @@ async def price_aggregates(
             competitor=comp_info,
         ))
         matched_norm_keys.add(
-            f"{(r.brand or '').strip().lower()}|{_normalize_model(r.model or '', r.brand)}|{_normalize_storage(r.storage)}"
+            f"{(r.brand or '').strip().lower()}|{normalize_model(r.model or '', r.brand)}|{normalize_storage(r.storage)}"
         )
 
     # Gap-fill: позиции конкурентов, которых нет в нашем ассортименте.
@@ -328,13 +253,6 @@ async def price_aggregates(
     if include_gaps and is_new is not True:
         q_lower = (q or "").strip().lower()
         brand_lower = (brand or "").strip().lower()
-        # Маппинг: поле цены у конкурента → наш condition
-        gap_condition_map = [
-            ("price_excellent", "Отличное"),
-            ("price_good", "Хорошее"),
-            ("price_poor", "Удовлетворительное"),
-            ("price_repair", "На запчасти"),
-        ]
         # Дедуп по нормализованному ключу — одна и та же модель может быть
         # у нескольких источников (goodcom, другие) с uniq по (source,brand,model,memory).
         # Также исключаем ключи наших matched-позиций, чтобы не получить дубль
@@ -348,7 +266,7 @@ async def price_aggregates(
                 continue
             if q_lower and q_lower not in (cp.model or "").lower() and q_lower not in (cp.full_name or "").lower():
                 continue
-            dedup_key = f"{cp_brand.lower()}|{_normalize_model(cp.model or '', cp_brand)}|{_normalize_storage(cp.memory or '')}"
+            dedup_key = f"{cp_brand.lower()}|{normalize_model(cp.model or '', cp_brand)}|{normalize_storage(cp.memory or '')}"
             if dedup_key in seen_gap_keys:
                 continue
             seen_gap_keys.add(dedup_key)
@@ -359,7 +277,7 @@ async def price_aggregates(
                 price_poor=cp.price_poor,
                 price_repair=cp.price_repair,
             )
-            for price_field, cond_name in gap_condition_map:
+            for price_field, cond_name in GAP_CONDITION_MAP:
                 if getattr(cp, price_field) is None:
                     continue
                 if condition and condition != cond_name:
@@ -382,15 +300,11 @@ async def price_aggregates(
 
     # Общая сортировка по нормализованным ключам: catalog и gap-строки
     # смешиваются в один алфавитный список, память сравнивается числом,
-    # состояния по фикс-порядку (Как новый → На запчасти).
-    CONDITION_ORDER = {
-        "Как новый": 0, "Отличное": 1, "Хорошее": 2,
-        "Удовлетворительное": 3, "На запчасти": 4,
-    }
+    # состояния по CONDITION_ORDER (Как новый → На запчасти).
     def _sort_key(r: PriceAggRow):
         brand = (r.brand or "").strip().lower()
-        model_clean = _normalize_model(r.model or "", r.brand)
-        storage_raw = _normalize_storage(r.storage)
+        model_clean = normalize_model(r.model or "", r.brand)
+        storage_raw = normalize_storage(r.storage)
         storage_num = int(storage_raw) if storage_raw.isdigit() else 0
         cond_rank = CONDITION_ORDER.get(r.condition or "", 99)
         return (brand, model_clean, storage_num, cond_rank)
