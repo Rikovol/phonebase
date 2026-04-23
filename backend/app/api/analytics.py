@@ -142,14 +142,32 @@ async def price_aggregates(
             else ((Product.sold_at >= dt_from) & (Product.sold_at < dt_to_cap)),
     )
 
-    # Бренды/категории не-смартфонного ассортимента — в нашей Product-базе есть
-    # ноутбуки, наушники, планшеты. В Аналитике цен показываем только смартфоны.
-    # MacBook остаётся (brand=Apple + model начинается с MacBook — blacklist его не ловит).
+    # Бренды, которые делают ТОЛЬКО не-смартфоны — целиком в blacklist.
+    # ВАЖНО: ASUS, Honor, Nothing, Huawei, TECNO, Samsung, Xiaomi и др. сюда НЕ
+    # добавлять — они производят и смартфоны, и ноутбуки/часы/наушники. Их
+    # ноутбуки ловим model-pattern'ом ниже.
     NON_PHONE_BRANDS = [
         "Ноутбук", "Ноутбуки", "Наушники", "Планшет", "Планшеты",
         "Часы", "Аксессуары", "Гарнитура",
-        "Acer", "Lenovo", "MSI", "HP", "Dell", "ASUS",
+        "Acer", "Lenovo", "MSI", "HP", "Dell",
         "Packard Bell", "Toshiba", "Fujitsu",
+        "Aquarius", "ARDOR", "ARDOR GAMING",
+    ]
+
+    # Маркеры не-смартфонов в model — ловят ноутбуки/часы/наушники от тех брендов,
+    # которые делают и смартфоны (Asus VivoBook, Honor MagicBook, Galaxy Watch и т.п.).
+    # MacBook — ИСКЛЮЧЕНИЕ из 'book' (обрабатывается отдельно ниже).
+    NON_PHONE_MODEL_PATTERNS = [
+        "watch", "buds", "airpods", "headphone", "наушник", "гарнитура",
+        "ноутбук", "лэптоп", "laptop", "notebook",
+        "планшет", "tablet", "ipad", "tab ",
+        # Ноутбучные линейки разных брендов:
+        "vivobook", "zenbook", "tuf gaming", "rog strix", "rog zephyrus",
+        "thinkpad", "ideapad", "yoga ", "legion",
+        "pavilion", "elitebook", "probook", "omen ", "envy ",
+        "aspire", "predator", "nitro ", "swift ",
+        "katana", "stealth", "raider ", "sword ", "prestige", "bravo ", "pulse",
+        "megabook", "magicbook", "matebook",
     ]
 
     base = (
@@ -176,10 +194,12 @@ async def price_aggregates(
         .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
         # Отсекаем не-смартфонные товары (ноутбуки/наушники/планшеты/часы).
         .where(Product.brand.notin_(NON_PHONE_BRANDS))
-        .where(~Product.model.ilike("%ноутбук%"))
-        .where(~Product.model.ilike("%наушник%"))
-        .where(~Product.model.ilike("%планшет%"))
+        # MacBook — исключение из паттерна 'book'.
+        .where(or_(~Product.model.ilike("%book%"), Product.model.ilike("%macbook%")))
     )
+    # Остальные model-pattern'ы применяем циклом для компактности.
+    for _pat in NON_PHONE_MODEL_PATTERNS:
+        base = base.where(~Product.model.ilike(f"%{_pat}%"))
     base = _apply_product_filters(
         base,
         store=store,
