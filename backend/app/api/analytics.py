@@ -142,6 +142,16 @@ async def price_aggregates(
             else ((Product.sold_at >= dt_from) & (Product.sold_at < dt_to_cap)),
     )
 
+    # Бренды/категории не-смартфонного ассортимента — в нашей Product-базе есть
+    # ноутбуки, наушники, планшеты. В Аналитике цен показываем только смартфоны.
+    # MacBook остаётся (brand=Apple + model начинается с MacBook — blacklist его не ловит).
+    NON_PHONE_BRANDS = [
+        "Ноутбук", "Ноутбуки", "Наушники", "Планшет", "Планшеты",
+        "Часы", "Аксессуары", "Гарнитура",
+        "Acer", "Lenovo", "MSI", "HP", "Dell", "ASUS",
+        "Packard Bell", "Toshiba", "Fujitsu",
+    ]
+
     base = (
         select(
             Product.brand,
@@ -164,6 +174,11 @@ async def price_aggregates(
         .where(Product.is_new.is_(False))
         .where(Product.in_repair.is_(False))
         .where(Product.condition.notin_(["Новый", "Требуется ремонт", "Ремонт", "Залог"]))
+        # Отсекаем не-смартфонные товары (ноутбуки/наушники/планшеты/часы).
+        .where(Product.brand.notin_(NON_PHONE_BRANDS))
+        .where(~Product.model.ilike("%ноутбук%"))
+        .where(~Product.model.ilike("%наушник%"))
+        .where(~Product.model.ilike("%планшет%"))
     )
     base = _apply_product_filters(
         base,
