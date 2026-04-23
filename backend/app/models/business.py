@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -240,3 +240,193 @@ class AvitoMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+# ── Site-witnessed объекты (заявки, акции, бонусы, корректировки цен) ──────
+# Добавлено 2026-04-24: phonebase становится multi-tenant CRM для 3 магазинов
+# (мобилакс/айпрас/ремгсм). Сайты-витрины питаются из этих таблиц через
+# публичный API /api/sites/{store_id}/*.
+
+
+class SiteMessage(Base):
+    """Заявки с сайта магазина: Trade-in оценка + контакт-формы + обратная связь.
+
+    Бизнес-правила (2026-04-24):
+    - Сообщение считается **прочитанным** ТОЛЬКО после того, как продавец дал ответ
+      (answered_at IS NOT NULL). Просто открытие карточки в админке прочитанным не делает.
+    - Счётчик непрочитанных в UI = COUNT(WHERE answered_at IS NULL AND status NOT IN ('closed','spam')).
+    - Жизненный цикл: new → in_progress (взял в работу) → answered (дал ответ) → closed (вопрос решён).
+      Статус spam — отдельно, для удаляемых заявок.
+    """
+    __tablename__ = "site_messages"
+    __table_args__ = (
+        # Типовой запрос админки: новые заявки магазина за период
+        Index("idx_site_messages_store_status_created", "store_id", "status", "created_at"),
+        # Быстрый счётчик непрочитанных (без ответа) по магазину
+        Index("idx_site_messages_store_unread", "store_id", "created_at", postgresql_where="answered_at IS NULL"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+    message_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # tradein | contact | feedback
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new", index=True)  # new | in_progress | answered | closed | spam
+
+    # Контакт клиента
+    contact_name: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(30), index=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255))
+    preferred_channel: Mapped[str | None] = mapped_column(String(20))  # telegram | max | phone | email | whatsapp
+
+    # Trade-in специфичное (когда message_type='tradein')
+    tradein_brand: Mapped[str | None] = mapped_column(String(100))
+    tradein_model: Mapped[str | None] = mapped_column(String(255))
+    tradein_storage: Mapped[str | None] = mapped_column(String(30))
+    tradein_color: Mapped[str | None] = mapped_column(String(100))
+    tradein_condition: Mapped[str | None] = mapped_column(Text)          # JSON список проблем / оценка состояния
+    tradein_battery_pct: Mapped[int | None] = mapped_column(Integer)
+    tradein_completeness: Mapped[str | None] = mapped_column(String(255))  # что в комплекте
+    tradein_estimated_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # цена, которую показал виджет
+
+    # Контакт-форма / обратная связь (когда message_type='contact' | 'feedback')
+    subject: Mapped[str | None] = mapped_column(String(255))
+    body: Mapped[str | None] = mapped_column(Text)
+
+    # Технические метаданные
+    user_agent: Mapped[str | None] = mapped_column(String(500))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    referer: Mapped[str | None] = mapped_column(String(500))
+    raw_payload: Mapped[str | None] = mapped_column(Text)  # JSON исходного запроса
+
+    # Процесс обработки
+    assigned_to: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    notes: Mapped[str | None] = mapped_column(Text)  # внутренние заметки продавца
+
+    # Ответ клиенту (прочитанным заявка становится только после ответа — answered_at IS NOT NULL)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    answered_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    last_reply_text: Mapped[str | None] = mapped_column(Text)  # последний ответ продавца (для превью в админке)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SitePromotion(Base):
+    """Акции магазина (скидки, спецпредложения). store_id=NULL → глобальная акция всех магазинов."""
+    __tablename__ = "site_promotions"
+    __table_args__ = (
+        # Частичный индекс для быстрого поиска глобальных акций
+        Index("idx_promotions_global", "priority", postgresql_where="store_id IS NULL"),
+        # Составной индекс: активные акции магазина по приоритету
+        Index("idx_promotions_store_active", "store_id", "is_active", "priority"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("stores.id"))  # NULL = global
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text)  # описание / HTML / markdown
+    code: Mapped[str | None] = mapped_column(String(64), index=True)  # промокод, если есть
+
+    discount_type: Mapped[str] = mapped_column(String(20), nullable=False, default="info_only")  # percent | fixed | info_only
+    discount_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+    # Условия применения (опционально)
+    applies_to_brand: Mapped[str | None] = mapped_column(String(100))
+    applies_to_category: Mapped[str | None] = mapped_column(String(100))
+    applies_to_products: Mapped[str | None] = mapped_column(Text)  # JSON массив product_ids
+    min_order_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+    # Период
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # для сортировки
+
+    # UI
+    banner_image: Mapped[str | None] = mapped_column(String(500))
+    landing_url: Mapped[str | None] = mapped_column(String(500))
+
+    created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class SiteBonus(Base):
+    """Бонусные программы магазина (кэшбэк, баллы за покупку и т.п.)."""
+    __tablename__ = "site_bonuses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    rule_type: Mapped[str] = mapped_column(String(30), nullable=False)  # cashback | accrual | signup | referral
+
+    accrual_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))   # % от суммы заказа
+    accrual_fixed: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))    # фиксированные баллы
+    redemption_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))  # 1 балл = X рублей
+
+    min_balance_to_use: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    max_percent_of_order: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))  # макс % оплаты бонусами
+
+    expires_days: Mapped[int | None] = mapped_column(Integer)  # срок жизни баллов
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class PriceOverride(Base):
+    """Скидка на товар от магазина, привязанная к акции (SitePromotion).
+
+    Бизнес-правила (2026-04-24):
+    - Истинная цена товара — products.price_retail (CRM).
+    - Магазин может применить скидку ТОЛЬКО через существующую акцию (SitePromotion).
+    - У одного товара в одном магазине — только ОДНА активная скидка
+      (unique на пару (product_id, store_id) WHERE is_active=true).
+    - В разных магазинах скидки на тот же товар — независимы: мобилакс может
+      выставить свою скидку, айпрас свою. Это отдельные записи PriceOverride.
+    - На сайте отображается: перечёркнутая price_retail, override_price, название акции.
+    - Неактивные записи остаются в истории (для аналитики промо-кампаний).
+    """
+    __tablename__ = "price_overrides"
+    __table_args__ = (
+        # Одна активная скидка на товар в магазине (история через is_active=false сохраняется)
+        Index(
+            "uq_price_overrides_active",
+            "product_id", "store_id",
+            unique=True,
+            postgresql_where="is_active",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    product_id: Mapped[str] = mapped_column(String(36), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+    promotion_id: Mapped[str] = mapped_column(String(36), ForeignKey("site_promotions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    override_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # финальная цена (после скидки)
+
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+
+    created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class HiddenCatalogPhoto(Base):
+    """Общие фото из catalog_photos, которые магазин скрыл у себя (но не удалил)."""
+    __tablename__ = "hidden_catalog_photos"
+    __table_args__ = (
+        UniqueConstraint("store_id", "catalog_photo_id", name="uq_hidden_catalog_photos_store_photo"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+    catalog_photo_id: Mapped[str] = mapped_column(String(36), ForeignKey("catalog_photos.id", ondelete="CASCADE"), nullable=False, index=True)
+    hidden_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    hidden_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
