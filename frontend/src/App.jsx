@@ -3779,7 +3779,7 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
   const arrow = (col) => anSortCol === col ? (anSortDir === "asc" ? " ▲" : " ▼") : "";
   const thS = { cursor: "pointer", userSelect: "none" };
   const subStyle = { background: "rgba(255,255,255,.02)", fontSize: 12 };
-  const cols = 8;
+  const cols = 7;
 
   const COND_COLOR = {
     "Как новый": "#14b8a6",
@@ -3802,7 +3802,6 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
           <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("cost")}>Наша закупка{arrow("cost")}</th>
           <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("comp")}>Конкурент{arrow("comp")}</th>
           <th style={{...thS,textAlign:"right",width:180}} onClick={()=>toggleSort("market")}>Средняя рынок{arrow("market")}</th>
-          <th style={{...thS,textAlign:"center",width:140}} onClick={()=>toggleSort("count")}>Остаток / продано{arrow("count")}</th>
         </tr></thead>
         <tbody>
           {sorted.map(g => {
@@ -3817,30 +3816,20 @@ function AnalyticsTable({ items, loading, anSortCol, anSortDir, setAnSortCol, se
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.avg_cost?"var(--warn)":"var(--muted)"}}>{n(g.avg_cost)}</td>
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",color:g.comp_price?"var(--cyan)":"var(--muted)"}}>{n(g.comp_price)}</td>
                   <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:g.market_avg?"var(--accent2)":"var(--muted)"}}>{n(g.market_avg)}</td>
-                  <td style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:12}}>
-                    <span style={{color:"var(--text)"}}>{g.count}</span>
-                    <span style={{color:"var(--muted)"}}> / {g.sold_4m}</span>
-                  </td>
                 </tr>
                 {isOpen && g.variations.map((v, vi) => (
                   <tr key={vi} style={subStyle}>
-                    <td colSpan={2} style={{paddingLeft:32}}>
+                    <td colSpan={3} style={{paddingLeft:32}}>
                       <span style={{
                         display:"inline-block", padding:"3px 10px", borderRadius:6,
                         fontSize:10, fontWeight:600, color:"#fff",
                         background: COND_COLOR[v.condition] || "var(--bg4)",
                       }}>{v.condition}</span>
                     </td>
-                    <td style={{color:"var(--muted)",fontSize:11}}>
-                      {v.sold_in_window > 0 ? `продано: ${v.sold_in_window}` : "нет продаж за период"}
-                    </td>
                     <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.our_retail_avg_4m?"var(--success)":"var(--muted)"}}>{n(v.our_retail_avg_4m)}</td>
                     <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.our_cost_avg_4m?"var(--warn)":"var(--muted)"}}>{n(v.our_cost_avg_4m)}</td>
                     <td style={{textAlign:"right",fontFamily:"var(--mono)",color:v.competitor_price?"var(--cyan)":"var(--muted)"}}>{n(v.competitor_price)}</td>
                     <td style={{textAlign:"right",fontFamily:"var(--mono)",fontWeight:600,color:v.market_avg?"var(--accent2)":"var(--muted)"}}>{n(v.market_avg)}</td>
-                    <td style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>
-                      {v.in_stock} / {v.sold_in_window}
-                    </td>
                   </tr>
                 ))}
               </React.Fragment>
