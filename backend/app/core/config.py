@@ -72,5 +72,19 @@ class Settings(BaseSettings):
     AVITO_MESSENGER_INTERVAL_MINUTES: int = 5
     AVITO_FEED_CHECK_INTERVAL_MINUTES: int = 120
 
+    # Сайты-витрины (multi-tenant)
+    SITE_ORIGINS: str = Field(default="http://localhost:5174")  # comma-separated CORS origins
+    SITE_RETURN_URL: str = Field(default="http://localhost:5174")  # куда редиректит OAuth после успеха
+    SITE_SESSION_COOKIE_DOMAIN: str | None = None  # для кросс-субдомена (пустое = текущий хост)
+    SITE_SESSION_DAYS: int = 30
+
+    # OAuth — VK ID
+    VK_APP_ID: str | None = None
+    VK_APP_SECRET: str | None = None
+    VK_REDIRECT_URI: str | None = None  # https://shop.basestock.ru/api/sites/{store_id}/auth/vk/callback
+
+    # OAuth — Telegram Login Widget
+    TELEGRAM_BOT_TOKEN: str | None = None
+
 
 settings = Settings()

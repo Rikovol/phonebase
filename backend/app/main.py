@@ -7,10 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-from app.api import analytics, auth, avito, catalog_photos, competitor_prices, feeds, imports, logs, personal_data, photos, products, purchase_docs, stores, users
+from app.api import analytics, auth, avito, catalog_photos, competitor_prices, feeds, imports, logs, personal_data, photos, products, purchase_docs, sites, sites_oauth, stores, users
 from app.api import settings as settings_api
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.database import Base, engine
 from app.db_migrations import (
     migrate_add_avito_api_columns,
@@ -58,20 +61,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.4.28",
+    version="1.4.29",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
 )
+
+# Rate-limiting для публичных endpoints сайтов-витрин (slowapi + Redis)
+# limiter определён в app.core.limiter — импортируется там же в sites.py для @limiter.limit(...)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 if settings.ENVIRONMENT == "development":
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 else:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_csv(settings.ALLOWED_HOSTS))
 
+_cors_origins = _csv(settings.CORS_ORIGINS) + _csv(settings.SITE_ORIGINS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_csv(settings.CORS_ORIGINS),
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],
@@ -92,6 +101,8 @@ app.include_router(avito.router, prefix="/api/avito", tags=["avito"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
 app.include_router(competitor_prices.router, prefix="/api/competitor-prices", tags=["competitor_prices"])
+app.include_router(sites.router, prefix="/api/sites", tags=["sites"])
+app.include_router(sites_oauth.router, prefix="/api/sites", tags=["sites-auth"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)
