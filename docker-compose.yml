@@ -113,6 +113,10 @@ services:
       - ./frontend/dist:/usr/share/nginx/html:ro
       - media_files:/app/media:ro
       - ./ssl:/etc/ssl/certs:ro
+      # shop.basestock.ru (Next.js сайт mobileax) — nginx-конфиг и SSL
+      - /opt/mobileax/docker/nginx-shop.conf:/etc/nginx/conf.d/shop.basestock.ru.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - backend
 
