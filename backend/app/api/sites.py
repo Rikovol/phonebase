@@ -19,6 +19,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.catalog_photos import make_product_key, make_product_key_no_color
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
@@ -50,20 +51,6 @@ def _media_url(file_path: str | None) -> str | None:
     path = file_path.lstrip("/").replace("\\", "/")
     return f"/media/{path}"
 
-
-def _product_key(brand: str | None, model: str, storage: str | None, color: str | None) -> str:
-    """
-    Агрегационный ключ для новых товаров.
-    Формат: lower(brand|model|storage|color), NULL-поля — пустая строка.
-    Совпадает с логикой catalog_photos.make_product_key.
-    """
-    parts = [
-        (brand or "").strip(),
-        model.strip(),
-        (storage or "").strip(),
-        (color or "").strip(),
-    ]
-    return "|".join(p.lower() for p in parts)
 
 
 def _slug_from_product_key(key: str) -> str:
@@ -678,7 +665,7 @@ async def _catalog_new(
         promo_title = row[3]
         promo_code = row[4]
 
-        key = _product_key(product.brand, product.model, product.storage, product.color)
+        key = make_product_key(product.brand or "", product.model or "", product.storage or "", product.color or "")
         if key not in groups:
             groups[key] = {
                 "key": key,
@@ -766,16 +753,36 @@ async def _catalog_new(
             .where(HiddenCatalogPhoto.store_id == store.id)
         ).subquery()
 
+        # Для каждого ключа с цветом добавляем запасной ключ без цвета
+        # (некоторые фото сохранены без color-компонента)
+        key_to_nc: dict[str, str] = {}
+        all_lookup_keys: list[str] = []
+        for g in paginated:
+            key = g["key"]
+            nc_key = make_product_key_no_color(
+                g["brand"] or "", g["model"] or "", g["storage"] or ""
+            )
+            key_to_nc[key] = nc_key
+            all_lookup_keys.append(key)
+            if nc_key != key:
+                all_lookup_keys.append(nc_key)
+
         cp_rows = (await db.execute(
             select(CatalogPhoto.product_key, CatalogPhoto.file_path, CatalogPhoto.is_main, CatalogPhoto.id)
             .where(
-                CatalogPhoto.product_key.in_(keys_on_page),
+                CatalogPhoto.product_key.in_(all_lookup_keys),
                 CatalogPhoto.id.notin_(select(hidden_subq)),
             )
         )).all()
 
+        # Индекс по product_key для быстрого поиска
+        cp_by_key: dict[str, list[tuple[str, bool]]] = {}
+        for r in cp_rows:
+            cp_by_key.setdefault(r.product_key, []).append((r.file_path, r.is_main))
+
         for key in keys_on_page:
-            photos_for = [(r.file_path, r.is_main) for r in cp_rows if r.product_key == key]
+            # Сначала ищем фото по ключу с цветом, затем по ключу без цвета
+            photos_for = cp_by_key.get(key) or cp_by_key.get(key_to_nc[key], [])
             catalog_photo_counts[key] = len(photos_for)
             main = next((fp for fp, im in photos_for if im), None)
             if main is None and photos_for:
@@ -1020,6 +1027,12 @@ async def _product_detail_new(
     total_qty = sum(per_store.values())
 
     # Фото: CatalogPhoto - HiddenCatalogPhoto для текущего store
+    # Используем оба ключа: с цветом и без (fallback для старых записей)
+    pkey_nc = make_product_key_no_color(
+        ref.brand or "", ref.model or "", ref.storage or ""
+    )
+    photo_keys = list({product_key_val, pkey_nc})
+
     hidden_subq = (
         select(HiddenCatalogPhoto.catalog_photo_id)
         .where(HiddenCatalogPhoto.store_id == store.id)
@@ -1028,7 +1041,7 @@ async def _product_detail_new(
     cp_rows = (await db.execute(
         select(CatalogPhoto)
         .where(
-            CatalogPhoto.product_key == product_key_val,
+            CatalogPhoto.product_key.in_(photo_keys),
             CatalogPhoto.id.notin_(select(hidden_subq)),
         )
         .order_by(CatalogPhoto.is_main.desc(), CatalogPhoto.created_at.asc())
@@ -1071,11 +1084,13 @@ async def _product_detail_new(
 @router.get("/{store_id}/categories", response_model=FacetsOut)
 async def get_categories(
     store_id: str,
-    condition: Literal["new", "used"] = Query(...),
+    condition: Literal["new", "used"] | None = Query(None),
     store: Store = Depends(get_active_store),
     db: AsyncSession = Depends(get_db),
 ) -> FacetsOut:
-    """Список категорий с количеством видимых товаров."""
+    """Список категорий с количеством видимых товаров.
+    condition необязателен: если не передан — считается по всем товарам (new + used).
+    """
     rows = await _facet_rows(store=store, db=db, field=Product.category, condition=condition)
     items = [FacetItem(value=v, count=c) for v, c in rows if v]
     return FacetsOut(items=items)
@@ -1084,11 +1099,13 @@ async def get_categories(
 @router.get("/{store_id}/brands", response_model=FacetsOut)
 async def get_brands(
     store_id: str,
-    condition: Literal["new", "used"] = Query(...),
+    condition: Literal["new", "used"] | None = Query(None),
     store: Store = Depends(get_active_store),
     db: AsyncSession = Depends(get_db),
 ) -> FacetsOut:
-    """Список брендов с количеством видимых товаров."""
+    """Список брендов с количеством видимых товаров.
+    condition необязателен: если не передан — считается по всем товарам (new + used).
+    """
     rows = await _facet_rows(store=store, db=db, field=Product.brand, condition=condition)
     items = [FacetItem(value=v, count=c) for v, c in rows if v]
     return FacetsOut(items=items)
@@ -1099,11 +1116,12 @@ async def _facet_rows(
     store: Store,
     db: AsyncSession,
     field,
-    condition: str,
+    condition: str | None,
 ) -> list[tuple[str, int]]:
     """
     Вспомогательная функция: возвращает (value, count) для фасета.
     Учитывает фильтры видимости (site_published, is_sold, in_repair).
+    condition=None → все товары (new + used).
     """
     if condition == "used":
         q = (
@@ -1119,11 +1137,23 @@ async def _facet_rows(
             .group_by(field)
             .order_by(func.count(Product.id).desc())
         )
-    else:
+    elif condition == "new":
         q = (
             select(field, func.count(Product.id).label("cnt"))
             .where(
                 Product.is_new.is_(True),
+                Product.site_published.is_(True),
+                Product.quantity > 0,
+            )
+            .group_by(field)
+            .order_by(func.count(Product.id).desc())
+        )
+    else:
+        # condition=None: все товары без фильтра по is_new
+        q = (
+            select(field, func.count(Product.id).label("cnt"))
+            .where(
+                Product.store_id == store.id,
                 Product.site_published.is_(True),
                 Product.quantity > 0,
             )
