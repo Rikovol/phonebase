@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import analytics, auth, avito, catalog_photos, competitor_prices, feeds, imports, logs, personal_data, photos, products, purchase_docs, sites, sites_oauth, stores, users
+from app.api import analytics, auth, avito, catalog_photos, competitor_prices, feeds, imports, logs, personal_data, photos, products, purchase_docs, site_bonuses_admin, site_messages_admin, site_promotions_admin, sites, sites_oauth, stores, users
 from app.api import settings as settings_api
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.4.31",
+    version="1.4.32",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -103,6 +103,9 @@ app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"
 app.include_router(competitor_prices.router, prefix="/api/competitor-prices", tags=["competitor_prices"])
 app.include_router(sites.router, prefix="/api/sites", tags=["sites"])
 app.include_router(sites_oauth.router, prefix="/api/sites", tags=["sites-auth"])
+app.include_router(site_messages_admin.router, prefix="/api/site-messages", tags=["site-messages"])
+app.include_router(site_promotions_admin.router, prefix="/api/site-promotions", tags=["site-promotions"])
+app.include_router(site_bonuses_admin.router, prefix="/api/site-bonuses", tags=["site-bonuses"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)

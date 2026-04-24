@@ -12,7 +12,7 @@
 
 Админ: полный доступ ко всем магазинам.
 """
-from app.models.business import Product, User
+from app.models.business import Product, SiteBonus, SiteMessage, SitePromotion, User
 
 
 def can_view_product(user: User, product: Product) -> bool:
@@ -34,4 +34,76 @@ def can_modify_product(user: User, product: Product) -> bool:
         return False
     if user.role == "staff":
         return bool(user.store_id and product.store_id == user.store_id)
+    return False
+
+
+def can_view_site_message(user: User, message: SiteMessage) -> bool:
+    """Просмотр заявки с сайта. info — read-only весь список без PATCH/POST."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return True
+    if user.role == "staff":
+        return bool(user.store_id and message.store_id == user.store_id)
+    return False
+
+
+def can_modify_site_message(user: User, message: SiteMessage) -> bool:
+    """PATCH заявки, ответ клиенту."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return False
+    if user.role == "staff":
+        return bool(user.store_id and message.store_id == user.store_id)
+    return False
+
+
+def can_view_site_promotion(user: User, promotion: SitePromotion) -> bool:
+    """Просмотр акции. info — read-only."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return True
+    if user.role == "staff":
+        # staff видит свои акции + глобальные (store_id=None)
+        if promotion.store_id is None:
+            return True
+        return bool(user.store_id and promotion.store_id == user.store_id)
+    return False
+
+
+def can_modify_site_promotion(user: User, promotion: SitePromotion) -> bool:
+    """POST/PATCH/DELETE акции."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return False
+    if user.role == "staff":
+        # staff не может редактировать глобальные акции
+        if promotion.store_id is None:
+            return False
+        return bool(user.store_id and promotion.store_id == user.store_id)
+    return False
+
+
+def can_view_site_bonus(user: User, bonus: SiteBonus) -> bool:
+    """Просмотр бонусной программы. info — read-only."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return True
+    if user.role == "staff":
+        return bool(user.store_id and bonus.store_id == user.store_id)
+    return False
+
+
+def can_modify_site_bonus(user: User, bonus: SiteBonus) -> bool:
+    """POST/PATCH/DELETE бонусной программы."""
+    if user.role == "admin":
+        return True
+    if user.role == "info":
+        return False
+    if user.role == "staff":
+        return bool(user.store_id and bonus.store_id == user.store_id)
     return False
