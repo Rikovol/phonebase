@@ -15,7 +15,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr, Field, root_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -312,21 +312,21 @@ class MessageCreateIn(BaseModel):
     website: str = Field("", max_length=200)    # honeypot-поле (должно остаться пустым)
     time_to_submit_ms: int = Field(..., ge=0)
 
-    @root_validator
-    def check_anti_spam(cls, v: dict) -> dict:
+    @model_validator(mode='after')
+    def check_anti_spam(self) -> 'MessageCreateIn':
         """Honeypot + минимальное время заполнения формы."""
-        if v.get("website"):
+        if self.website:
             raise ValueError("spam")
-        if v.get("time_to_submit_ms", 0) < 3000:
+        if self.time_to_submit_ms < 3000:
             raise ValueError("spam")
-        return v
+        return self
 
-    @root_validator
-    def check_tradein_fields(cls, v: dict) -> dict:
+    @model_validator(mode='after')
+    def check_tradein_fields(self) -> 'MessageCreateIn':
         """Для trade-in обязательны поля tradein."""
-        if v.get("message_type") == "tradein" and not v.get("tradein"):
+        if self.message_type == "tradein" and not self.tradein:
             raise ValueError("tradein fields required")
-        return v
+        return self
 
 
 class MessageCreatedOut(BaseModel):
