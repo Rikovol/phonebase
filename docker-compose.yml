@@ -117,8 +117,15 @@ services:
       - /opt/mobileax/docker/nginx-shop.conf:/etc/nginx/conf.d/shop.basestock.ru.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
+    networks:
+      - default
+      - mobileax_default
     depends_on:
       - backend
+
+networks:
+  mobileax_default:
+    external: true
 
 volumes:
   postgres_data:
