@@ -386,6 +386,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 /* PLACEHOLDER */
 
+/* STORE PAGE TABS */
+.store-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap}
+.store-tab{padding:9px 16px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;font-family:var(--sans);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.store-tab:hover{color:var(--text);background:rgba(6,182,212,.05)}
+.store-tab.active{color:var(--cyan);border-bottom-color:var(--accent);font-weight:700}
+.store-tab .tab-badge{background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;line-height:1}
+.sm-list{display:flex;flex-direction:column;gap:6px}
+.sm-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;transition:all .2s;display:flex;align-items:flex-start;gap:10px}
+.sm-item:hover{border-color:rgba(6,182,212,.3);background:rgba(6,182,212,.04)}
+.sm-item.unread{border-left:3px solid var(--accent)}
+.sm-item.selected{border-color:var(--accent);background:rgba(6,182,212,.07)}
+.sm-meta{font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
+.sm-body{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:380px}
+.sm-detail{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;animation:fadeUp .25s ease}
+.sm-reply-form{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.sm-reply-form textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 12px;resize:vertical;min-height:70px;outline:none;transition:all .2s}
+.sm-reply-form textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.sm-status-select{padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;cursor:pointer;outline:none;transition:all .2s}
+.sm-status-select:focus{border-color:var(--accent)}
+.promo-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s}
+.promo-card:hover{border-color:rgba(6,182,212,.3);background:rgba(6,182,212,.04)}
+.promo-card.inactive{opacity:.55}
+.promo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:4px}
+.bonus-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px}
+.bonus-row + .bonus-row{margin-top:6px}
+.stub-msg{color:var(--muted);font-size:13px;padding:48px 0;text-align:center;line-height:2}
+
 /* CPW */
 .cpww{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(8px)}
 .cpwb{width:420px;max-height:90vh;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px;box-shadow:var(--shadow-lg);animation:fadeUp .3s ease}
@@ -491,6 +518,12 @@ const Icon={
   trash:()=><svg {...I.p} width={14} height={14}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
   card:()=><svg {...I.p} width={14} height={14}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>,
   msg:()=><svg {...I.p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  store:()=><svg {...I.p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  siteMsg:()=><svg {...I.p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>,
+  promo:()=><svg {...I.p}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+  bonus:()=><svg {...I.p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  order:()=><svg {...I.p}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
+  send:()=><svg {...I.p} width={14} height={14}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
 };
 
 // ─── МЕЛКИЕ КОМПОНЕНТЫ ────────────────────────────────────────────────────────
@@ -4570,6 +4603,593 @@ function CompetitorPricesPage({ user, token }) {
   );
 }
 
+// ─── МАГАЗИН: СООБЩЕНИЯ САЙТА ────────────────────────────────────────────────
+const MSG_STATUSES = [
+  { value: "new", label: "Новый" },
+  { value: "in_progress", label: "В работе" },
+  { value: "resolved", label: "Закрыт" },
+  { value: "spam", label: "Спам" },
+];
+const MSG_TYPES = [
+  { value: "", label: "Все типы" },
+  { value: "contact", label: "Обратная связь" },
+  { value: "order", label: "Заказ" },
+  { value: "callback", label: "Перезвонить" },
+  { value: "other", label: "Другое" },
+];
+
+function SiteMessagesTab({ user, token, msgType }) {
+  const isAdm = Access.isAdmin(user);
+  const isInfo = Access.isInfo(user);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterType, setFilterType] = useState(msgType || "");
+  const [filterUnread, setFilterUnread] = useState(false);
+  const [search, setSearch] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
+  const [stores, setStores] = useState([]);
+
+  useEffect(() => {
+    if (!isAdm) return;
+    apiFetch("/stores/", { token }).then(d => setStores(d.items || [])).catch(() => {});
+  }, [token, isAdm]);
+
+  const load = async () => {
+    setLoading(true); setErr("");
+    try {
+      const params = new URLSearchParams();
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterType) params.set("message_type", filterType);
+      if (filterUnread) params.set("unread_only", "true");
+      if (search) params.set("search", search);
+      if (storeId) params.set("store_id", storeId);
+      const d = await apiFetch(`/site-messages/?${params}`, { token });
+      setItems(d.items || d || []);
+    } catch (e) { setErr(e.message || "Ошибка загрузки"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [filterStatus, filterType, filterUnread, storeId, token]);
+
+  const handleSearch = (e) => { e.preventDefault(); load(); };
+
+  const openMsg = async (msg) => {
+    setSelected(msg);
+    setReplyText("");
+    if (!msg.is_read) {
+      try {
+        await apiFetch(`/site-messages/${msg.id}`, { token, method: "PATCH", json: { is_read: true } });
+        setItems(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
+      } catch {}
+    }
+  };
+
+  const sendReply = async () => {
+    if (!replyText.trim()) return;
+    setReplyLoading(true);
+    try {
+      await apiFetch(`/site-messages/${selected.id}/reply`, { token, method: "POST", json: { text: replyText.trim() } });
+      setReplyText("");
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка отправки"); }
+    setReplyLoading(false);
+  };
+
+  const changeStatus = async (id, status) => {
+    setStatusLoading(true);
+    try {
+      const updated = await apiFetch(`/site-messages/${id}`, { token, method: "PATCH", json: { status } });
+      setItems(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+      if (selected?.id === id) setSelected(s => ({ ...s, status }));
+    } catch (e) { setErr(e.message || "Ошибка"); }
+    setStatusLoading(false);
+  };
+
+  const unreadCount = items.filter(m => !m.is_read).length;
+
+  const statusLabel = (s) => MSG_STATUSES.find(x => x.value === s)?.label || s;
+  const statusColor = (s) => ({ new: "var(--accent)", in_progress: "var(--warn)", resolved: "var(--success)", spam: "var(--muted)" }[s] || "var(--muted)");
+
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      {/* Список */}
+      <div style={{ flex: "0 0 400px", minWidth: 0 }}>
+        {/* Фильтры */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {isAdm && (
+            <select className="fs" value={storeId} onChange={e => setStoreId(e.target.value)} style={{ minWidth: 140 }}>
+              <option value="">Все магазины</option>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          <select className="fs" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">Все статусы</option>
+            {MSG_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          {!msgType && (
+            <select className="fs" value={filterType} onChange={e => setFilterType(e.target.value)}>
+              {MSG_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={filterUnread} onChange={e => setFilterUnread(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            Непрочитанные {unreadCount > 0 && <span style={{ color: "var(--danger)", fontWeight: 700 }}>({unreadCount})</span>}
+          </label>
+        </div>
+        <form onSubmit={handleSearch} style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          <input className="fi" placeholder="Поиск по имени, email, тексту…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+          <button type="submit" className="btn btn-sm btn-outline">Найти</button>
+        </form>
+        {err && <div className="err">{err}</div>}
+        {loading && <div style={{ color: "var(--muted)", fontSize: 13 }}><span className="spinner" /> Загрузка…</div>}
+        <div className="sm-list">
+          {!loading && items.length === 0 && <div className="stub-msg">Нет заявок</div>}
+          {items.map(m => (
+            <div key={m.id} className={`sm-item${!m.is_read ? " unread" : ""}${selected?.id === m.id ? " selected" : ""}`} onClick={() => openMsg(m)}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{m.visitor_name || m.visitor_phone || m.visitor_email || "Аноним"}</span>
+                  {!m.is_read && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", display: "inline-block", flexShrink: 0 }} />}
+                  <span className="sm-meta" style={{ marginLeft: "auto" }}>{fmtDt(m.created_at)}</span>
+                </div>
+                <div className="sm-body">{m.message || m.body || "—"}</div>
+                <div style={{ marginTop: 4, display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: statusColor(m.status) }}>{statusLabel(m.status)}</span>
+                  {m.message_type && <span style={{ fontSize: 10, color: "var(--muted)" }}>· {m.message_type}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Детали */}
+      {selected && (
+        <div className="sm-detail" style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{selected.visitor_name || "Аноним"}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.8 }}>
+                {selected.visitor_phone && <div>📞 {selected.visitor_phone}</div>}
+                {selected.visitor_email && <div>✉ {selected.visitor_email}</div>}
+                {selected.visitor && selected.visitor.total_messages_count > 1 && (
+                  <div style={{ color: "var(--warn)" }}>⚡ Всего заявок: {selected.visitor.total_messages_count}</div>
+                )}
+              </div>
+            </div>
+            <button className="btn-ghost" onClick={() => setSelected(null)} title="Закрыть" style={{ fontSize: 18 }}>×</button>
+          </div>
+
+          <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "12px 14px", marginBottom: 14, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {selected.message || selected.body || "—"}
+          </div>
+
+          {selected.reply && (
+            <div style={{ background: "rgba(6,182,212,.08)", border: "1px solid rgba(6,182,212,.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12 }}>
+              <div style={{ fontSize: 10, color: "var(--accent2)", fontWeight: 700, marginBottom: 4 }}>ОТВЕТ ОПЕРАТОРА</div>
+              <div style={{ lineHeight: 1.7 }}>{selected.reply}</div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Статус:</label>
+            {isInfo ? (
+              <span style={{ fontSize: 12, fontWeight: 600, color: statusColor(selected.status) }}>{statusLabel(selected.status)}</span>
+            ) : (
+              <select className="sm-status-select" value={selected.status || ""} onChange={e => changeStatus(selected.id, e.target.value)} disabled={statusLoading}>
+                {MSG_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            )}
+          </div>
+
+          {!isInfo && (
+            <div className="sm-reply-form">
+              <label style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px" }}>Ответить клиенту</label>
+              <textarea placeholder="Текст ответа…" value={replyText} onChange={e => setReplyText(e.target.value)} />
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn btn-sm btn-primary" disabled={replyLoading || !replyText.trim()} onClick={sendReply}>
+                  {replyLoading ? <><span className="spinner" /> Отправка…</> : <><Icon.send /> Отправить</>}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── МАГАЗИН: АКЦИИ ──────────────────────────────────────────────────────────
+const DISCOUNT_TYPES = [
+  { value: "percent", label: "Процент (%)" },
+  { value: "fixed", label: "Фиксированная сумма (₽)" },
+];
+const PROMO_EMPTY = {
+  title: "", body: "", code: "", discount_type: "percent", discount_value: "",
+  starts_at: "", ends_at: "", applies_to_brand: "", applies_to_category: "",
+  banner_image: "", landing_url: "", is_active: true,
+};
+
+function SitePromotionsTab({ user, token }) {
+  const isAdm = Access.isAdmin(user);
+  const isInfo = Access.isInfo(user);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [filterActive, setFilterActive] = useState("");
+  const [modal, setModal] = useState(null); // null | "create" | "edit" | "apply"
+  const [form, setForm] = useState({ ...PROMO_EMPTY });
+  const [editId, setEditId] = useState(null);
+  const [applyPromoId, setApplyPromoId] = useState(null);
+  const [applySearch, setApplySearch] = useState("");
+  const [applyProducts, setApplyProducts] = useState([]);
+  const [applyOverride, setApplyOverride] = useState("");
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
+  const [stores, setStores] = useState([]);
+
+  useEffect(() => {
+    if (!isAdm) return;
+    apiFetch("/stores/", { token }).then(d => setStores(d.items || [])).catch(() => {});
+  }, [token, isAdm]);
+
+  const load = async () => {
+    setLoading(true); setErr("");
+    try {
+      const params = new URLSearchParams();
+      if (filterActive !== "") params.set("is_active", filterActive);
+      if (storeId) params.set("store_id", storeId);
+      const d = await apiFetch(`/site-promotions/?${params}`, { token });
+      setItems(d.items || d || []);
+    } catch (e) { setErr(e.message || "Ошибка загрузки"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [filterActive, storeId, token]);
+
+  const openCreate = () => { setForm({ ...PROMO_EMPTY }); setEditId(null); setModal("create"); setErr(""); };
+  const openEdit = (p) => { setForm({
+    title: p.title || "", body: p.body || "", code: p.code || "",
+    discount_type: p.discount_type || "percent", discount_value: p.discount_value != null ? String(p.discount_value) : "",
+    starts_at: p.starts_at ? p.starts_at.slice(0, 16) : "",
+    ends_at: p.ends_at ? p.ends_at.slice(0, 16) : "",
+    applies_to_brand: p.applies_to_brand || "", applies_to_category: p.applies_to_category || "",
+    banner_image: p.banner_image || "", landing_url: p.landing_url || "",
+    is_active: p.is_active !== false,
+  }); setEditId(p.id); setModal("edit"); setErr(""); };
+
+  const submitForm = async (e) => {
+    e.preventDefault(); setErr("");
+    try {
+      const body = {
+        ...form,
+        discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
+        starts_at: form.starts_at || null,
+        ends_at: form.ends_at || null,
+        applies_to_brand: form.applies_to_brand || null,
+        applies_to_category: form.applies_to_category || null,
+        banner_image: form.banner_image || null,
+        landing_url: form.landing_url || null,
+        code: form.code || null,
+        store_id: storeId || null,
+      };
+      if (modal === "create") {
+        await apiFetch("/site-promotions/", { token, method: "POST", json: body });
+      } else {
+        await apiFetch(`/site-promotions/${editId}`, { token, method: "PATCH", json: body });
+      }
+      setModal(null); await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const toggleActive = async (p) => {
+    try {
+      await apiFetch(`/site-promotions/${p.id}`, { token, method: "PATCH", json: { is_active: !p.is_active } });
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const openApply = (id) => { setApplyPromoId(id); setApplySearch(""); setApplyProducts([]); setApplyOverride(""); setModal("apply"); setErr(""); };
+
+  const searchProducts = async () => {
+    if (!applySearch.trim()) return;
+    try {
+      const d = await apiFetch(`/products/?q=${encodeURIComponent(applySearch)}&limit=20`, { token });
+      setApplyProducts(d.items || []);
+    } catch (e) { setErr(e.message || "Ошибка поиска"); }
+  };
+
+  const applyToProduct = async (productId) => {
+    setApplyLoading(true); setErr("");
+    try {
+      const body = applyOverride ? { override_price: parseFloat(applyOverride) } : {};
+      await apiFetch(`/site-promotions/${applyPromoId}/apply-to-product/${productId}`, { token, method: "POST", json: body });
+      setModal(null);
+    } catch (e) { setErr(e.message || "Ошибка применения"); }
+    setApplyLoading(false);
+  };
+
+  const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        {isAdm && (
+          <select className="fs" value={storeId} onChange={e => setStoreId(e.target.value)} style={{ minWidth: 140 }}>
+            <option value="">Все магазины</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+        <select className="fs" value={filterActive} onChange={e => setFilterActive(e.target.value)}>
+          <option value="">Все</option>
+          <option value="true">Активные</option>
+          <option value="false">Неактивные</option>
+        </select>
+        {!isInfo && (
+          <button className="btn btn-sm btn-primary" style={{ marginLeft: "auto" }} onClick={openCreate}>
+            + Создать акцию
+          </button>
+        )}
+      </div>
+      {err && <div className="err">{err}</div>}
+      {loading && <div style={{ color: "var(--muted)", fontSize: 13 }}><span className="spinner" /> Загрузка…</div>}
+      <div className="promo-grid">
+        {!loading && items.length === 0 && <div className="stub-msg" style={{ gridColumn: "1/-1" }}>Нет акций</div>}
+        {items.map(p => (
+          <div key={p.id} className={`promo-card${p.is_active ? "" : " inactive"}`}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{p.title}</div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: p.is_active ? "var(--success)" : "var(--muted)" }}>{p.is_active ? "● Активна" : "○ Неактивна"}</span>
+            </div>
+            {p.body && <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, lineHeight: 1.6 }}>{p.body}</div>}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              {p.code && <span style={{ fontFamily: "var(--mono)", fontSize: 11, background: "rgba(6,182,212,.12)", color: "var(--cyan)", padding: "2px 8px", borderRadius: 4 }}>КОД: {p.code}</span>}
+              {p.discount_value && <span style={{ fontSize: 11, color: "var(--warn)" }}>−{p.discount_value}{p.discount_type === "percent" ? "%" : "₽"}</span>}
+              {p.ends_at && <span style={{ fontSize: 10, color: "var(--muted)" }}>до {fmtDt(p.ends_at)}</span>}
+            </div>
+            {!isInfo && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button className="act" style={{ fontSize: 11 }} onClick={() => openEdit(p)}>✏ Ред.</button>
+                <button className="act" style={{ fontSize: 11 }} onClick={() => toggleActive(p)}>{p.is_active ? "⏸ Деакт." : "▶ Актив."}</button>
+                <button className="act" style={{ fontSize: 11 }} onClick={() => openApply(p.id)}>🔗 К товару</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Модал создания/редактирования */}
+      {(modal === "create" || modal === "edit") && (
+        <div className="mo" onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div className="md" style={{ width: 520 }}>
+            <div className="mt">{modal === "create" ? "Новая акция" : "Редактировать акцию"}</div>
+            <div className="ms">Заполните параметры акции</div>
+            {err && <div className="err">{err}</div>}
+            <form onSubmit={submitForm}>
+              <div className="field"><label>Название *</label><input value={form.title} onChange={e => f("title", e.target.value)} required placeholder="Название акции" /></div>
+              <div className="field"><label>Описание</label><input value={form.body} onChange={e => f("body", e.target.value)} placeholder="Краткое описание" /></div>
+              <div className="field"><label>Промокод</label><input value={form.code} onChange={e => f("code", e.target.value)} placeholder="PROMO2025" /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="field"><label>Тип скидки</label>
+                  <select value={form.discount_type} onChange={e => f("discount_type", e.target.value)}>
+                    {DISCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div className="field"><label>Размер скидки</label><input type="number" value={form.discount_value} onChange={e => f("discount_value", e.target.value)} placeholder="10" /></div>
+                <div className="field"><label>Начало</label><input type="datetime-local" value={form.starts_at} onChange={e => f("starts_at", e.target.value)} /></div>
+                <div className="field"><label>Конец</label><input type="datetime-local" value={form.ends_at} onChange={e => f("ends_at", e.target.value)} /></div>
+              </div>
+              <div className="field"><label>Бренд (применить к)</label><input value={form.applies_to_brand} onChange={e => f("applies_to_brand", e.target.value)} placeholder="Apple, Samsung…" /></div>
+              <div className="field"><label>Категория</label><input value={form.applies_to_category} onChange={e => f("applies_to_category", e.target.value)} placeholder="Смартфоны…" /></div>
+              <div className="field"><label>URL баннера</label><input value={form.banner_image} onChange={e => f("banner_image", e.target.value)} placeholder="https://…" /></div>
+              <div className="field"><label>Landing URL</label><input value={form.landing_url} onChange={e => f("landing_url", e.target.value)} placeholder="https://…" /></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <input type="checkbox" id="promo-active" checked={form.is_active} onChange={e => f("is_active", e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+                <label htmlFor="promo-active" style={{ fontSize: 13, cursor: "pointer" }}>Активна</label>
+              </div>
+              <div className="mf">
+                <button type="button" className="btn btn-outline" onClick={() => setModal(null)}>Отмена</button>
+                <button type="submit" className="btn btn-primary">{modal === "create" ? "Создать" : "Сохранить"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Модал применить к товару */}
+      {modal === "apply" && (
+        <div className="mo" onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div className="md">
+            <div className="mt">Применить к товару</div>
+            <div className="ms">Найдите товар и при необходимости укажите цену</div>
+            {err && <div className="err">{err}</div>}
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <input className="fi" placeholder="Модель или IMEI…" value={applySearch} onChange={e => setApplySearch(e.target.value)} onKeyDown={e => e.key === "Enter" && searchProducts()} />
+              <button className="btn btn-sm btn-outline" onClick={searchProducts}>Найти</button>
+            </div>
+            <div className="field"><label>Переопределить цену (₽)</label><input type="number" value={applyOverride} onChange={e => setApplyOverride(e.target.value)} placeholder="Оставьте пустым для авто" /></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+              {applyProducts.map(p => (
+                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg3)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 13 }}>{p.model} {p.memory || ""}</span>
+                  <button className="btn btn-sm btn-primary" disabled={applyLoading} onClick={() => applyToProduct(p.id)}>Применить</button>
+                </div>
+              ))}
+            </div>
+            <div className="mf"><button className="btn btn-outline" onClick={() => setModal(null)}>Закрыть</button></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── МАГАЗИН: БОНУСЫ ─────────────────────────────────────────────────────────
+const BONUS_EMPTY = { title: "", description: "", points_required: "", reward_description: "", is_active: true };
+
+function SiteBonusesTab({ user, token }) {
+  const isInfo = Access.isInfo(user);
+  const isAdm = Access.isAdmin(user);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ ...BONUS_EMPTY });
+  const [editId, setEditId] = useState(null);
+
+  const load = async () => {
+    setLoading(true); setErr("");
+    try {
+      const d = await apiFetch("/site-bonuses/", { token });
+      setItems(d.items || d || []);
+    } catch (e) { setErr(e.message || "Ошибка загрузки"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [token]);
+
+  const openCreate = () => { setForm({ ...BONUS_EMPTY }); setEditId(null); setModal("form"); setErr(""); };
+  const openEdit = (b) => { setForm({
+    title: b.title || "", description: b.description || "",
+    points_required: b.points_required != null ? String(b.points_required) : "",
+    reward_description: b.reward_description || "", is_active: b.is_active !== false,
+  }); setEditId(b.id); setModal("form"); setErr(""); };
+
+  const submitForm = async (e) => {
+    e.preventDefault(); setErr("");
+    try {
+      const body = { ...form, points_required: form.points_required ? parseInt(form.points_required) : null };
+      if (editId) {
+        await apiFetch(`/site-bonuses/${editId}`, { token, method: "PATCH", json: body });
+      } else {
+        await apiFetch("/site-bonuses/", { token, method: "POST", json: body });
+      }
+      setModal(null); await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const toggleActive = async (b) => {
+    try {
+      await apiFetch(`/site-bonuses/${b.id}`, { token, method: "PATCH", json: { is_active: !b.is_active } });
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>Программа лояльности и бонусные предложения</span>
+        {!isInfo && <button className="btn btn-sm btn-primary" onClick={openCreate}>+ Добавить бонус</button>}
+      </div>
+      {err && <div className="err">{err}</div>}
+      {loading && <div style={{ color: "var(--muted)", fontSize: 13 }}><span className="spinner" /> Загрузка…</div>}
+      {!loading && items.length === 0 && <div className="stub-msg">Нет бонусов</div>}
+      {items.map(b => (
+        <div key={b.id} className="bonus-row" style={{ opacity: b.is_active ? 1 : .55 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{b.title}</div>
+            {b.description && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{b.description}</div>}
+            {b.points_required && <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 2 }}>🏆 {b.points_required} баллов</div>}
+          </div>
+          {!isInfo && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="act" style={{ fontSize: 11 }} onClick={() => openEdit(b)}>✏</button>
+              <button className="act" style={{ fontSize: 11 }} onClick={() => toggleActive(b)}>{b.is_active ? "⏸" : "▶"}</button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {modal === "form" && (
+        <div className="mo" onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div className="md">
+            <div className="mt">{editId ? "Редактировать бонус" : "Новый бонус"}</div>
+            <div className="ms">Параметры бонусного предложения</div>
+            {err && <div className="err">{err}</div>}
+            <form onSubmit={submitForm}>
+              <div className="field"><label>Название *</label><input value={form.title} onChange={e => f("title", e.target.value)} required placeholder="Кешбэк 5%" /></div>
+              <div className="field"><label>Описание</label><input value={form.description} onChange={e => f("description", e.target.value)} placeholder="Краткое описание…" /></div>
+              <div className="field"><label>Порог баллов</label><input type="number" value={form.points_required} onChange={e => f("points_required", e.target.value)} placeholder="100" /></div>
+              <div className="field"><label>Вознаграждение</label><input value={form.reward_description} onChange={e => f("reward_description", e.target.value)} placeholder="Скидка 500₽" /></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <input type="checkbox" id="bonus-active" checked={form.is_active} onChange={e => f("is_active", e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+                <label htmlFor="bonus-active" style={{ fontSize: 13, cursor: "pointer" }}>Активен</label>
+              </div>
+              <div className="mf">
+                <button type="button" className="btn btn-outline" onClick={() => setModal(null)}>Отмена</button>
+                <button type="submit" className="btn btn-primary">{editId ? "Сохранить" : "Создать"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── МАГАЗИН: ГЛАВНАЯ СТРАНИЦА ────────────────────────────────────────────────
+function StorePage({ user, token, activeStore }) {
+  const [tab, setTab] = useState("messages");
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Подгружаем счётчик непрочитанных для badge
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const params = new URLSearchParams({ unread_only: "true" });
+        if (!Access.isAdmin(user) && user.store_id) params.set("store_id", user.store_id);
+        const d = await apiFetch(`/site-messages/?${params}&limit=1`, { token });
+        setUnreadCount((d.items || d || []).length > 0 ? (d.total || (d.items || d).length) : 0);
+      } catch {}
+    };
+    fetchUnread();
+    const timer = setInterval(fetchUnread, 60000);
+    return () => clearInterval(timer);
+  }, [token, user]);
+
+  const TABS = [
+    { id: "messages", label: "Сообщения", icon: "💬" },
+    { id: "orders", label: "Заказы", icon: "🛒" },
+    { id: "avito-msgs", label: "Авито", icon: "📋" },
+    { id: "promotions", label: "Акции", icon: "🏷" },
+    { id: "bonuses", label: "Бонусы", icon: "⭐" },
+  ];
+
+  return (
+    <div>
+      <div className="store-tabs">
+        {TABS.map(t => (
+          <button key={t.id} className={`store-tab${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
+            <span>{t.icon}</span>
+            <span>{t.label}</span>
+            {t.id === "messages" && unreadCount > 0 && <span className="tab-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === "messages" && <SiteMessagesTab user={user} token={token} />}
+      {tab === "orders" && <SiteMessagesTab user={user} token={token} msgType="order" />}
+      {tab === "avito-msgs" && (
+        <div className="stub-msg">
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+          <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Сообщения Авито</div>
+          <div>Перейдите в раздел <strong>«Авито»</strong> для просмотра диалогов Авито</div>
+        </div>
+      )}
+      {tab === "promotions" && <SitePromotionsTab user={user} token={token} />}
+      {tab === "bonuses" && <SiteBonusesTab user={user} token={token} />}
+    </div>
+  );
+}
+
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
   const [page,setPage]=useState(()=>sessionStorage.getItem("pb_page")||"products");
@@ -4591,6 +5211,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     { divider: true },
     ...(!Access.isInfo(user) ? [{ id: "avito", icon: <Icon.mega/>, label: "Авито" }] : []),
     ...(!Access.isInfo(user) ? [{ id: "messages", icon: <Icon.msg/>, label: "Сообщения" }] : []),
+    { id: "store", icon: <Icon.store/>, label: "Магазин" },
     { id: "analytics", icon: <Icon.chart/>, label: "Аналитика" },
     { id: "competitor-prices", icon: <Icon.competitors/>, label: "Конкуренты" },
     ...(isAdm
@@ -4608,6 +5229,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     sold: openCard ? "Карточка товара" : "Продано",
     avito: "Авито — мои объявления",
     messages: "Сообщения Авито",
+    store: "Магазин",
     analytics: "Аналитика цен",
     "competitor-prices": "Цены конкурентов",
     users: "Пользователи",
@@ -4671,6 +5293,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="sold"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
           {page==="avito"&&<AvitoPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="messages"&&<MessagesPage user={user} token={token} activeStore={activeStore}/>}
+          {page==="store"&&<StorePage user={user} token={token} activeStore={activeStore}/>}
           {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="competitor-prices"&&<CompetitorPricesPage user={user} token={token}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
