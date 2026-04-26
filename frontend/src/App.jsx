@@ -5599,6 +5599,7 @@ function StorePage({ user, token, activeStore }) {
     { id: "orders", label: "Заказы", icon: "🛒" },
     { id: "promotions", label: "Акции", icon: "🏷" },
     { id: "bonuses", label: "Бонусы", icon: "⭐" },
+    { id: "home", label: "Главная сайта", icon: "🏠" },
   ];
 
   return (
@@ -5617,9 +5618,422 @@ function StorePage({ user, token, activeStore }) {
       {tab === "orders" && <UnifiedInbox user={user} token={token} kind="order" />}
       {tab === "promotions" && <SitePromotionsTab user={user} token={token} />}
       {tab === "bonuses" && <SiteBonusesTab user={user} token={token} />}
+      {tab === "home" && <HomeBlocksTab user={user} token={token} />}
     </div>
   );
 }
+
+// ─── HOME BLOCKS (CMS главной mobileax) ──────────────────────────────────────
+const SECTION_LABELS = {
+  hero_dual: "Hero — 2 крупные плашки сверху",
+  highlight_dual: "Промо-блоки — 2 плашки",
+  shop_latest: "Слайдер «The latest» (340×440)",
+  discover_scroll: "Слайдер «Discover» (360×460)",
+};
+
+const BG_PRESET_STYLES = {
+  "dark":            { bg: "#1d1d1f",                                                         text: "#f5f5f7", muted: "rgba(255,255,255,0.6)",   eyebrow: "rgba(255,255,255,0.6)"  },
+  "light":           { bg: "#fbfbfd",                                                         text: "#1d1d1f", muted: "#6e6e73",                  eyebrow: "rgba(0,0,0,0.5)"          },
+  "black":           { bg: "#000000",                                                         text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+  "apple-blue":      { bg: "linear-gradient(135deg,#0a0f1f 0%,#14192e 50%,#0d1226 100%)",     text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+  "apple-pro-dark":  { bg: "linear-gradient(135deg,#0a0f1f 0%,#14192e 50%,#0d1226 100%)",     text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+  "trade-in-blue":   { bg: "#0a2a4a",                                                         text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+  "trade-in-orange": { bg: "linear-gradient(135deg,#fff5e6 0%,#ffe4cc 50%,#ffd5b8 100%)",     text: "#1d1d1f", muted: "#6e6e73",                  eyebrow: "rgba(80,40,20,0.55)"     },
+  "samsung-blue":    { bg: "#0a0a14",                                                         text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+  "samsung-dark":    { bg: "#1a1a1c",                                                         text: "#f5f5f7", muted: "rgba(255,255,255,0.65)",  eyebrow: "rgba(255,255,255,0.6)"  },
+};
+
+const CTA_COLOR_STYLES = {
+  "primary":         "#0071e3",
+  "dark":            "#1d1d1f",
+  "gradient-orange": "linear-gradient(135deg,#ff6b35 0%,#ff8c42 100%)",
+  "gradient-blue":   "linear-gradient(135deg,#0066ff 0%,#00b4ff 100%)",
+};
+
+const PHONEBASE_API_BASE = "";  // /media отдается тем же origin что и /api
+
+function imgUrl(image_url) {
+  if (!image_url) return null;
+  if (/^(https?:|data:)/.test(image_url)) return image_url;
+  return PHONEBASE_API_BASE + image_url;
+}
+
+function HomeBlocksTab({ user, token }) {
+  const isAdm = Access.isAdmin(user);
+  const isInfo = Access.isInfo(user);
+  const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
+  const [stores, setStores] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [presets, setPresets] = useState({ bg_presets: [], cta_colors: [], section_keys: [] });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [editingCardId, setEditingCardId] = useState(null);
+  const [openSection, setOpenSection] = useState(null);  // expanded section id
+
+  useEffect(() => {
+    if (!isAdm) return;
+    apiFetch("/stores/", { token }).then(d => setStores(d.items || [])).catch(() => {});
+  }, [token, isAdm]);
+
+  useEffect(() => {
+    apiFetch("/home-blocks/presets", { token }).then(setPresets).catch(() => {});
+  }, [token]);
+
+  const load = async () => {
+    if (!storeId) { setSections([]); return; }
+    setLoading(true); setErr("");
+    try {
+      const d = await apiFetch(`/home-blocks/sections?store_id=${storeId}`, { token });
+      setSections(Array.isArray(d) ? d : (d.items || []));
+      if (Array.isArray(d) && d.length > 0 && openSection === null) {
+        setOpenSection(d[0].id);
+      }
+    } catch (e) { setErr(e.message || "Ошибка загрузки"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [storeId, token]);
+
+  if (isInfo) {
+    return <div style={{padding:24,color:"var(--muted)"}}>Роль «Инфо» не имеет доступа к настройке главной.</div>;
+  }
+
+  const toggleSection = async (section) => {
+    try {
+      await apiFetch(`/home-blocks/sections/${section.id}`, {
+        token, method: "PATCH", json: { enabled: !section.enabled },
+      });
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const addCard = async (section_id) => {
+    try {
+      const card = await apiFetch("/home-blocks/cards", {
+        token, method: "POST",
+        json: { section_id, eyebrow: "Новая плашка", title: "Заголовок", subtitle: null,
+                bg_preset: "dark", text_dark: false, cta_label: "Подробнее", cta_href: "/", cta_color: "primary" },
+      });
+      setEditingCardId(card.id);
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const deleteCard = async (cardId) => {
+    if (!confirm("Удалить эту плашку?")) return;
+    try {
+      await apiFetch(`/home-blocks/cards/${cardId}`, { token, method: "DELETE" });
+      if (editingCardId === cardId) setEditingCardId(null);
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  const moveCard = async (section, cardId, dir) => {
+    const cards = [...section.cards].sort((a, b) => a.sort_order - b.sort_order);
+    const idx = cards.findIndex(c => c.id === cardId);
+    const nidx = idx + dir;
+    if (idx < 0 || nidx < 0 || nidx >= cards.length) return;
+    [cards[idx], cards[nidx]] = [cards[nidx], cards[idx]];
+    const items = cards.map((c, i) => ({ id: c.id, sort_order: i }));
+    try {
+      await apiFetch(`/home-blocks/sections/${section.id}/sort`, { token, method: "POST", json: { items } });
+      await load();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+  };
+
+  return (
+    <div style={{padding:24,maxWidth:1200,margin:"0 auto"}}>
+      <h1 style={{fontSize:22,fontWeight:600,marginBottom:8}}>Главная страница сайта</h1>
+      <p style={{color:"var(--muted)",fontSize:13,marginBottom:20}}>
+        Управление блоками главной shop.basestock.ru. Изменения применяются на сайте через 5 минут (ISR кэш) или сразу — после очистки кэша.
+      </p>
+      {isAdm && (
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:11,color:"var(--muted)",marginRight:8}}>Магазин</label>
+          <select value={storeId} onChange={e=>setStoreId(e.target.value)} style={{padding:"6px 10px",borderRadius:6,background:"var(--bg2)",border:"1px solid var(--border2)",color:"var(--text)"}}>
+            <option value="">— выберите магазин —</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      )}
+      {err && <div style={{background:"var(--danger-dim)",color:"var(--danger)",padding:"8px 12px",borderRadius:6,marginBottom:12}}>{err}</div>}
+      {loading && <div style={{color:"var(--muted)"}}>Загрузка…</div>}
+      {!loading && !storeId && isAdm && <div style={{color:"var(--muted)"}}>Выберите магазин выше</div>}
+
+      {sections.map(section => (
+        <div key={section.id} style={{
+          marginBottom:16, background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:10, overflow:"hidden",
+        }}>
+          <div style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:openSection===section.id?"1px solid var(--border2)":"none",cursor:"pointer"}}
+               onClick={() => setOpenSection(openSection === section.id ? null : section.id)}>
+            <div>
+              <div style={{fontWeight:600,fontSize:15}}>{SECTION_LABELS[section.key] || section.key}</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{section.cards.length} плашек · {section.enabled ? "видна" : "скрыта"}</div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+              <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,cursor:"pointer"}}>
+                <input type="checkbox" checked={section.enabled} onChange={() => toggleSection(section)} />
+                Показывать
+              </label>
+              <span style={{fontSize:18,color:"var(--muted)"}}>{openSection === section.id ? "▾" : "▸"}</span>
+            </div>
+          </div>
+
+          {openSection === section.id && (
+            <div style={{padding:18}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14,marginBottom:14}}>
+                {section.cards.sort((a,b) => a.sort_order - b.sort_order).map((card, idx) => (
+                  <HomeCardItem
+                    key={card.id}
+                    card={card}
+                    isEditing={editingCardId === card.id}
+                    onEdit={() => setEditingCardId(editingCardId === card.id ? null : card.id)}
+                    onDelete={() => deleteCard(card.id)}
+                    onMoveUp={idx > 0 ? () => moveCard(section, card.id, -1) : null}
+                    onMoveDown={idx < section.cards.length - 1 ? () => moveCard(section, card.id, +1) : null}
+                  />
+                ))}
+              </div>
+              <button onClick={() => addCard(section.id)}
+                style={{padding:"8px 14px",background:"var(--accent)",color:"#000",border:0,borderRadius:6,fontWeight:500,cursor:"pointer"}}>
+                + Добавить плашку
+              </button>
+
+              {editingCardId && section.cards.find(c => c.id === editingCardId) && (
+                <HomeCardEditor
+                  key={editingCardId}
+                  card={section.cards.find(c => c.id === editingCardId)}
+                  presets={presets}
+                  token={token}
+                  onSaved={async () => { await load(); }}
+                  onClose={() => setEditingCardId(null)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HomeCardItem({ card, isEditing, onEdit, onDelete, onMoveUp, onMoveDown }) {
+  return (
+    <div style={{
+      border: isEditing ? "2px solid var(--accent)" : "1px solid var(--border2)",
+      borderRadius:10, overflow:"hidden", background:"var(--bg)",
+    }}>
+      <HomeCardPreview card={card} compact />
+      <div style={{padding:"8px 10px",display:"flex",gap:6,alignItems:"center",justifyContent:"space-between",borderTop:"1px solid var(--border2)"}}>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={onMoveUp} disabled={!onMoveUp} title="Сдвинуть вверх"
+            style={{padding:"4px 8px",background:"transparent",border:"1px solid var(--border2)",color:"var(--text)",borderRadius:4,cursor:onMoveUp?"pointer":"default",opacity:onMoveUp?1:0.3}}>↑</button>
+          <button onClick={onMoveDown} disabled={!onMoveDown} title="Сдвинуть вниз"
+            style={{padding:"4px 8px",background:"transparent",border:"1px solid var(--border2)",color:"var(--text)",borderRadius:4,cursor:onMoveDown?"pointer":"default",opacity:onMoveDown?1:0.3}}>↓</button>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={onEdit}
+            style={{padding:"4px 10px",background:isEditing?"var(--accent)":"transparent",color:isEditing?"#000":"var(--text)",border:"1px solid var(--border2)",borderRadius:4,cursor:"pointer",fontSize:12}}>
+            {isEditing ? "Закрыть" : "Изменить"}
+          </button>
+          <button onClick={onDelete}
+            style={{padding:"4px 8px",background:"transparent",border:"1px solid var(--danger)",color:"var(--danger)",borderRadius:4,cursor:"pointer",fontSize:12}}>
+            Удалить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HomeCardPreview({ card, compact }) {
+  const style = BG_PRESET_STYLES[card.bg_preset] || BG_PRESET_STYLES.dark;
+  const isLight = !!card.text_dark;
+  const ctaBg = CTA_COLOR_STYLES[card.cta_color] || CTA_COLOR_STYLES.primary;
+  const isMuted = !card.enabled;
+  return (
+    <div style={{
+      position:"relative",
+      background:style.bg,
+      color:isLight?"#1d1d1f":style.text,
+      minHeight:compact?160:300,
+      display:"flex",flexDirection:"column",
+      opacity:isMuted?0.45:1,
+    }}>
+      <div style={{padding:compact?"12px 14px 0":"24px 26px 0",position:"relative",zIndex:2}}>
+        {card.eyebrow && <div style={{fontSize:compact?9:11,fontWeight:600,letterSpacing:"0.14em",textTransform:"uppercase",color:isLight?"rgba(0,0,0,0.5)":style.eyebrow,marginBottom:compact?4:8}}>{card.eyebrow}</div>}
+        {card.title && <div style={{fontSize:compact?13:18,fontWeight:600,letterSpacing:"-0.025em",lineHeight:1.15,whiteSpace:"pre-line"}}>{card.title}</div>}
+        {card.subtitle && <div style={{fontSize:compact?11:13,color:isLight?"#6e6e73":style.muted,marginTop:compact?3:8,whiteSpace:"pre-line"}}>{card.subtitle}</div>}
+        {card.cta_label && (
+          <div style={{
+            display:"inline-block",marginTop:compact?8:14,padding:compact?"4px 10px":"6px 14px",
+            background:ctaBg,color:"#fff",borderRadius:999,fontSize:compact?11:13,fontWeight:500,
+          }}>{card.cta_label}</div>
+        )}
+      </div>
+      {card.image_url && (
+        <div style={{position:"relative",flex:1,minHeight:compact?70:140,marginTop:compact?6:12,overflow:"hidden"}}>
+          <img src={imgUrl(card.image_url)} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"contain",objectPosition:"bottom"}}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeCardEditor({ card, presets, token, onSaved, onClose }) {
+  const [form, setForm] = useState({
+    eyebrow: card.eyebrow || "",
+    title: card.title || "",
+    subtitle: card.subtitle || "",
+    bg_preset: card.bg_preset,
+    text_dark: card.text_dark,
+    cta_label: card.cta_label || "",
+    cta_href: card.cta_href || "",
+    cta_color: card.cta_color,
+    image_url: card.image_url || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState("");
+
+  // live preview из form (без сохранения)
+  const previewCard = {
+    ...card,
+    eyebrow: form.eyebrow,
+    title: form.title,
+    subtitle: form.subtitle,
+    bg_preset: form.bg_preset,
+    text_dark: form.text_dark,
+    cta_label: form.cta_label || null,
+    cta_href: form.cta_href || null,
+    cta_color: form.cta_color,
+    image_url: form.image_url,
+    enabled: true,
+  };
+
+  const save = async () => {
+    setSaving(true); setErr("");
+    try {
+      await apiFetch(`/home-blocks/cards/${card.id}`, {
+        token, method: "PATCH",
+        json: {
+          eyebrow: form.eyebrow || null,
+          title: form.title || null,
+          subtitle: form.subtitle || null,
+          bg_preset: form.bg_preset,
+          text_dark: form.text_dark,
+          cta_label: form.cta_label || null,
+          cta_href: form.cta_href || null,
+          cta_color: form.cta_color,
+        },
+      });
+      await onSaved();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+    setSaving(false);
+  };
+
+  const upload = async (file) => {
+    if (!file) return;
+    setUploading(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_BASE}/home-blocks/cards/${card.id}/image`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(_detailFromApi(data) || "Ошибка загрузки");
+      setForm(f => ({ ...f, image_url: data.image_url }));
+      await onSaved();
+    } catch (e) { setErr(e.message || "Ошибка"); }
+    setUploading(false);
+  };
+
+  return (
+    <div style={{marginTop:18,background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:10,padding:18}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <h3 style={{fontSize:14,fontWeight:600}}>Редактирование плашки</h3>
+        <button onClick={onClose} style={{padding:"4px 12px",background:"transparent",border:"1px solid var(--border2)",color:"var(--muted)",borderRadius:4,cursor:"pointer",fontSize:12}}>Закрыть</button>
+      </div>
+      {err && <div style={{background:"var(--danger-dim)",color:"var(--danger)",padding:"6px 10px",borderRadius:4,marginBottom:10,fontSize:12}}>{err}</div>}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="Надзаголовок (eyebrow)" hint="Маленький текст сверху, например «Новинка»">
+            <input value={form.eyebrow} onChange={e=>setForm(f=>({...f,eyebrow:e.target.value}))} maxLength={80} style={inputStyle}/>
+          </Field>
+          <Field label="Заголовок" hint="\\n для переноса строки">
+            <textarea value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value.replace(/\\n/g,"\n")}))} rows={2} maxLength={200} style={inputStyle}/>
+          </Field>
+          <Field label="Подзаголовок (опц.)" hint="Только для slider'ов 340×440">
+            <textarea value={form.subtitle} onChange={e=>setForm(f=>({...f,subtitle:e.target.value}))} rows={2} maxLength={300} style={inputStyle}/>
+          </Field>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Фон">
+              <select value={form.bg_preset} onChange={e=>setForm(f=>({...f,bg_preset:e.target.value}))} style={inputStyle}>
+                {presets.bg_presets.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
+            <Field label="Тёмный текст?">
+              <label style={{display:"flex",alignItems:"center",gap:6,padding:"8px 0"}}>
+                <input type="checkbox" checked={form.text_dark} onChange={e=>setForm(f=>({...f,text_dark:e.target.checked}))} />
+                Для светлых фонов
+              </label>
+            </Field>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Кнопка — текст" hint="Пусто = без кнопки">
+              <input value={form.cta_label} onChange={e=>setForm(f=>({...f,cta_label:e.target.value}))} maxLength={60} style={inputStyle}/>
+            </Field>
+            <Field label="Кнопка — цвет">
+              <select value={form.cta_color} onChange={e=>setForm(f=>({...f,cta_color:e.target.value}))} style={inputStyle}>
+                {presets.cta_colors.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Кнопка — ссылка" hint="Куда ведёт, например /trade-in или /catalog/Apple?category=iphone">
+            <input value={form.cta_href} onChange={e=>setForm(f=>({...f,cta_href:e.target.value}))} maxLength={500} style={inputStyle}/>
+          </Field>
+
+          <Field label="Картинка">
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files?.[0])} disabled={uploading}
+                   style={{padding:6,background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:4,color:"var(--text)",fontSize:12}}/>
+            {uploading && <span style={{fontSize:11,color:"var(--muted)"}}>Загрузка…</span>}
+            {form.image_url && <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>{form.image_url}</div>}
+          </Field>
+
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <button onClick={save} disabled={saving} style={{padding:"8px 16px",background:"var(--accent)",color:"#000",border:0,borderRadius:6,fontWeight:500,cursor:saving?"default":"pointer",opacity:saving?0.6:1}}>
+              {saving ? "Сохранение…" : "Сохранить"}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{fontSize:11,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.1em"}}>Превью</div>
+          <div style={{borderRadius:14,overflow:"hidden",border:"1px solid var(--border2)"}}>
+            <HomeCardPreview card={previewCard} />
+          </div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Так плашка будет выглядеть на сайте (упрощённо).</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div>
+      <label style={{display:"block",fontSize:11,color:"var(--muted)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</label>
+      {children}
+      {hint && <div style={{fontSize:11,color:"var(--muted)",marginTop:3,opacity:0.7}}>{hint}</div>}
+    </div>
+  );
+}
+
+const inputStyle = { width:"100%", padding:"7px 10px", background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:5, color:"var(--text)", fontSize:13, fontFamily:"inherit" };
 
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
