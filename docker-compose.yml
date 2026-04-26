@@ -42,6 +42,8 @@ services:
       PURCHASE_DOCS_ROOT: /app/purchase_docs      # документы закупки по папкам IMEI
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://basestock.ru,https://www.basestock.ru}
+      SITE_ORIGINS: ${SITE_ORIGINS:-https://shop.basestock.ru,https://xn--80abvjddo3a.xn--p1ai}
       IMPORT_1C_HTML_URL: ${IMPORT_1C_HTML_URL:-}
       IMPORT_1C_HTML_PATH: ${IMPORT_1C_HTML_PATH:-/data/base.html}
       IMPORT_1C_NEW_HTML_PATH: ${IMPORT_1C_NEW_HTML_PATH:-/data/new.html}
