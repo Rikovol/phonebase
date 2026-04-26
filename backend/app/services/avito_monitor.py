@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy import and_, select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import AvitoStats, Product, Store
@@ -333,25 +334,37 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
                         backfilled += 1
                     continue
 
-                # Новое сообщение
-                db.add(AvitoMessage(
-                    store_id=store.id,
-                    chat_id=chat_id,
-                    avito_message_id=msg_id,
-                    direction=direction,
-                    author_id=author_id,
-                    content=content,
-                    created_at=created_dt,
-                    author_name=author_name,
-                    author_avatar_url=author_avatar_url,
-                    author_profile_url=author_profile_url,
-                    item_id=item_id,
-                    item_title=item_title,
-                    item_url=item_url,
-                    is_order=is_order,
-                    status="new" if direction == "incoming" else "answered",
-                ))
-                new_messages += 1
+                # Новое сообщение. SAVEPOINT защищает от падения всей пачки,
+                # если avito_message_id уже сохранён (например, мы только что
+                # отправили исходящий ответ с локально сгенерированным UUID,
+                # а API теперь вернул реальный id с тем же значением).
+                try:
+                    async with db.begin_nested():
+                        db.add(AvitoMessage(
+                            store_id=store.id,
+                            chat_id=chat_id,
+                            avito_message_id=msg_id,
+                            direction=direction,
+                            author_id=author_id,
+                            content=content,
+                            created_at=created_dt,
+                            author_name=author_name,
+                            author_avatar_url=author_avatar_url,
+                            author_profile_url=author_profile_url,
+                            item_id=item_id,
+                            item_title=item_title,
+                            item_url=item_url,
+                            is_order=is_order,
+                            status="new" if direction == "incoming" else "answered",
+                        ))
+                        await db.flush()
+                    new_messages += 1
+                except IntegrityError:
+                    logger.warning(
+                        "Avito monitor: дубль avito_message_id=%s (store=%s, chat=%s) — пропускаем",
+                        msg_id, store.id, chat_id,
+                    )
+                    continue
 
     await db.commit()
     return {

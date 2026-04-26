@@ -210,6 +210,32 @@ async def migrate_add_avito_message_metadata() -> None:
         logger.exception("Миграция add_avito_message_metadata не выполнена")
 
 
+async def migrate_add_anon_visitor_phone_unique() -> None:
+    """v1.4.43: партиальный UNIQUE-индекс для дедупликации анонимных visitor по телефону.
+
+    Гарантирует на уровне БД, что в одном магазине не появится два анонимных
+    SiteVisitor (auth_provider IS NULL) с одинаковым contact_phone — закрывает
+    race-condition между двумя параллельными POST /api/sites/{store_id}/messages.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(text(
+                "SELECT indexname FROM pg_indexes "
+                "WHERE tablename = 'site_visitors' "
+                "AND indexname = 'uq_anon_visitor_store_phone'"
+            ))
+            if res.first() is None:
+                await session.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_anon_visitor_store_phone "
+                    "ON site_visitors (store_id, contact_phone) "
+                    "WHERE auth_provider IS NULL AND contact_phone IS NOT NULL"
+                ))
+                await session.commit()
+                logger.info("Миграция: создан партиальный UNIQUE uq_anon_visitor_store_phone")
+    except Exception:
+        logger.exception("Миграция add_anon_visitor_phone_unique не выполнена")
+
+
 async def migrate_seed_competitor_prices() -> None:
     """Загрузить начальные цены конкурентов из CSV, если таблица пуста."""
     import csv

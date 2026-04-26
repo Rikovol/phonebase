@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.catalog_photos import make_product_key, make_product_key_no_color
@@ -1330,8 +1331,28 @@ async def create_message(
             contact_email=str(body.contact_email) if body.contact_email else None,
             preferred_channel=body.preferred_channel,
         )
-        db.add(visitor)
-        await db.flush()  # получаем visitor.id до создания SiteMessage
+        # SAVEPOINT: при race-condition с параллельным анон-сабмитом одного и того
+        # же телефона партиальный UNIQUE-индекс uq_anon_visitor_store_phone бросит
+        # IntegrityError — ловим, откатываем только savepoint и подхватываем
+        # уже созданного visitor другим запросом.
+        try:
+            async with db.begin_nested():
+                db.add(visitor)
+                await db.flush()  # получаем visitor.id до создания SiteMessage
+        except IntegrityError:
+            visitor = None
+            if body.contact_phone:
+                visitor = (await db.execute(
+                    select(SiteVisitor).where(
+                        SiteVisitor.store_id == store.id,
+                        SiteVisitor.auth_provider.is_(None),
+                        SiteVisitor.contact_phone == body.contact_phone,
+                    ).limit(1)
+                )).scalar_one_or_none()
+            if not visitor:
+                raise HTTPException(status_code=409, detail="Конфликт создания клиента, повторите")
+            if visitor.is_blocked:
+                raise HTTPException(status_code=403, detail="Доступ заблокирован")
 
     # Создаём заявку с денормализацией данных из visitor
     msg = SiteMessage(

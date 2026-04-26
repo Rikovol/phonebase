@@ -519,7 +519,11 @@ async def reply_to_avito_message(
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="Текст ответа пуст")
 
-    msg = await db.get(AvitoMessage, message_id)
+    # Row-level lock против TOCTOU: два оператора не должны параллельно
+    # пройти проверки и отправить два ответа на одно и то же сообщение.
+    msg = (await db.execute(
+        select(AvitoMessage).where(AvitoMessage.id == message_id).with_for_update()
+    )).scalar_one_or_none()
     if not msg:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
 
@@ -529,6 +533,9 @@ async def reply_to_avito_message(
             status_code=400,
             detail="Ответ возможен только на входящее сообщение от клиента",
         )
+
+    if msg.status == "answered":
+        raise HTTPException(status_code=409, detail="Сообщение уже отвечено другим оператором")
 
     if current_user.role == "staff" and msg.store_id != current_user.store_id:
         raise HTTPException(status_code=403, detail="Нет доступа к чужому магазину")

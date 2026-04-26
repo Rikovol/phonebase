@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.database import Base, engine
 from app.db_migrations import (
+    migrate_add_anon_visitor_phone_unique,
     migrate_add_avito_api_columns,
     migrate_add_avito_message_metadata,
     migrate_add_is_new_column,
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
     await migrate_add_sim_completeness()
     await migrate_create_avito_tables()
     await migrate_add_avito_message_metadata()
+    await migrate_add_anon_visitor_phone_unique()
     await migrate_add_purchased_at()
     await seed_if_empty()
     await migrate_legacy_role_manager_to_staff()
@@ -63,7 +65,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.4.42",
+    version="1.4.43",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
