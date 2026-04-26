@@ -5299,6 +5299,186 @@ function SiteBonusesTab({ user, token }) {
   );
 }
 
+// ─── UNIFIED INBOX: site_messages + avito_messages в одной ленте ─────────────
+// Цвета и иконки берём из ответа /api/site-messages/unified.
+const INBOX_COLORS = {
+  blue:   { bg: "rgba(0,113,227,.10)",  border: "#0071e3", text: "#0071e3" },
+  cyan:   { bg: "rgba(6,182,212,.10)",  border: "#06b6d4", text: "#0891b2" },
+  purple: { bg: "rgba(138,92,246,.10)", border: "#8a5cf6", text: "#7c3aed" },
+  green:  { bg: "rgba(34,197,94,.10)",  border: "#22c55e", text: "#16a34a" },
+};
+
+function ClientAvatar({ client }) {
+  if (client?.avatar_url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={client.avatar_url}
+        alt={client.name || ""}
+        style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+        loading="lazy"
+      />
+    );
+  }
+  const initial = (client?.name || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: 36, height: 36, borderRadius: "50%",
+        background: "var(--bg3)", color: "var(--muted)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontWeight: 700, fontSize: 14, flexShrink: 0,
+      }}
+    >
+      {initial}
+    </div>
+  );
+}
+
+function UnifiedInbox({ user, token, kind }) {
+  const isAdm = Access.isAdmin(user);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
+  const [stores, setStores] = useState([]);
+  const [filterSource, setFilterSource] = useState("");
+
+  useEffect(() => {
+    if (!isAdm) return;
+    apiFetch("/stores/", { token }).then(d => setStores(d.items || [])).catch(() => {});
+  }, [token, isAdm]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setErr("");
+      try {
+        const params = new URLSearchParams();
+        if (storeId) params.set("store_id", storeId);
+        if (filterSource) params.set("source", filterSource);
+        if (kind) params.set("kind", kind);
+        const data = await apiFetch(`/site-messages/unified?${params}`, { token });
+        if (!cancelled) setItems(data.items || []);
+      } catch (e) {
+        if (!cancelled) setErr(e.message || "Ошибка загрузки");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token, storeId, filterSource, kind]);
+
+  const fmtRelative = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return "только что";
+    if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
+    return d.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        {isAdm && (
+          <select className="fs" value={storeId} onChange={e => setStoreId(e.target.value)} style={{ minWidth: 140 }}>
+            <option value="">Все магазины</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+        <select className="fs" value={filterSource} onChange={e => setFilterSource(e.target.value)}>
+          <option value="">Все источники</option>
+          <option value="site">Сайт</option>
+          <option value="avito">Авито</option>
+        </select>
+        <span className="fc" style={{ marginLeft: "auto" }}>{items.length}</span>
+      </div>
+      {err && <div className="err">{err}</div>}
+      {loading && <div style={{ color: "var(--muted)", fontSize: 13 }}><span className="spinner" /> Загрузка…</div>}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {!loading && items.length === 0 && <div className="stub-msg">Нет сообщений</div>}
+        {items.map(it => {
+          const c = INBOX_COLORS[it.color] || INBOX_COLORS.cyan;
+          const profileUrl = it.client?.profile_url;
+          return (
+            <div
+              key={`${it.source}-${it.id}`}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                padding: 12,
+                borderLeft: `4px solid ${c.border}`,
+                background: c.bg,
+                borderRadius: 8,
+              }}
+            >
+              {/* Иконка типа */}
+              <div
+                aria-hidden
+                style={{
+                  width: 28, height: 28, color: c.text,
+                  flexShrink: 0, marginTop: 4,
+                }}
+              >
+                <img
+                  src={`/icons/messages/${it.icon}.svg`}
+                  alt=""
+                  style={{ width: "100%", height: "100%", display: "block" }}
+                />
+              </div>
+
+              {/* Аватар клиента */}
+              <ClientAvatar client={it.client} />
+
+              {/* Контент */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  {profileUrl ? (
+                    <a
+                      href={profileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontWeight: 600, fontSize: 14, color: c.text, textDecoration: "none" }}
+                    >
+                      {it.client?.name || "Без имени"} ↗
+                    </a>
+                  ) : (
+                    <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
+                      {it.client?.name || "Без имени"}
+                    </span>
+                  )}
+                  {it.client?.auth_provider && (
+                    <span style={{ fontSize: 10, color: c.text, textTransform: "uppercase", fontWeight: 700 }}>
+                      {it.client.auth_provider}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: "auto" }}>
+                    {fmtRelative(it.created_at)}
+                  </span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 13, color: "var(--text)", lineHeight: 1.4 }}>
+                  {it.preview || "—"}
+                </div>
+                {(it.client?.phone || it.client?.email) && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)", display: "flex", gap: 10 }}>
+                    {it.client.phone && <span>📞 {it.client.phone}</span>}
+                    {it.client.email && <span>✉ {it.client.email}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 // ─── МАГАЗИН: ГЛАВНАЯ СТРАНИЦА ────────────────────────────────────────────────
 function StorePage({ user, token, activeStore }) {
   const [tab, setTab] = useState("messages");
@@ -5338,10 +5518,8 @@ function StorePage({ user, token, activeStore }) {
         ))}
       </div>
 
-      {tab === "messages" && <SiteMessagesTab user={user} token={token} />}
-      {tab === "orders" && (
-        <SiteMessagesTab user={user} token={token} msgTypes={["order", "tradein"]} />
-      )}
+      {tab === "messages" && <UnifiedInbox user={user} token={token} />}
+      {tab === "orders" && <UnifiedInbox user={user} token={token} kind="order" />}
       {tab === "promotions" && <SitePromotionsTab user={user} token={token} />}
       {tab === "bonuses" && <SiteBonusesTab user={user} token={token} />}
     </div>

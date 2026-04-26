@@ -9,13 +9,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access import can_modify_site_message, can_view_site_message
 from app.api.auth import require_active
 from app.core.database import get_db
-from app.models.business import SiteMessage, SiteVisitor, User
+from app.models.business import AvitoMessage, SiteMessage, SiteVisitor, User
 
 logger = logging.getLogger(__name__)
 
@@ -334,3 +334,148 @@ def _effective_store_id(user: User, requested_store_id: Optional[str]) -> Option
         return requested_store_id  # admin сам выбирает или None=всё
     # info — видит всё, но без записи
     return requested_store_id
+
+
+# ─── Unified inbox: site_messages + avito_messages в одной ленте ──────────────
+
+
+def _site_message_kind(message_type: str) -> str:
+    """Заказы с сайта = order/tradein → order; обратная связь → message."""
+    return "order" if message_type in ("order", "tradein") else "message"
+
+
+def _vk_profile_url(provider: str | None, provider_user_id: str | None) -> str | None:
+    if not provider or not provider_user_id:
+        return None
+    if provider == "vk":
+        return f"https://vk.com/id{provider_user_id}"
+    if provider == "telegram":
+        return f"https://t.me/{provider_user_id}"
+    return None
+
+
+def _build_client_from_visitor(visitor: SiteVisitor | None, msg: SiteMessage) -> dict:
+    """Достаём клиента из SiteVisitor (если есть) с fallback на денорм-поля SiteMessage."""
+    auth_provider = (visitor.auth_provider if visitor else None) or msg.auth_provider
+    return {
+        "name": (visitor.display_name if visitor else None) or msg.contact_name,
+        "avatar_url": visitor.avatar_url if visitor else None,
+        "profile_url": _vk_profile_url(
+            auth_provider,
+            visitor.auth_provider_user_id if visitor else None,
+        ),
+        "phone": (visitor.contact_phone if visitor else None) or msg.contact_phone,
+        "email": (visitor.contact_email if visitor else None) or msg.contact_email,
+        "auth_provider": auth_provider,
+    }
+
+
+def _site_preview(msg: SiteMessage) -> str:
+    if msg.message_type == "tradein":
+        parts = [msg.tradein_brand or "", msg.tradein_model or "", msg.tradein_storage or ""]
+        return f"Trade-in: {' '.join(p for p in parts if p)}".strip()
+    if msg.message_type == "order":
+        return "Заказ с сайта"
+    return "Обращение с сайта"
+
+
+@router.get("/unified")
+async def list_unified(
+    store_id: Optional[str] = Query(None),
+    source: Optional[str] = Query(None, description="site|avito|None"),
+    kind: Optional[str] = Query(None, description="order|message|None"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_active),
+):
+    """Единая лента: заявки с сайта + диалоги Avito.
+
+    Возвращает items с полями source/kind/color/icon — фронтенд использует их
+    для раскраски карточек. Аватарка/имя/ссылка на профиль приходят в client.
+    """
+    effective_store_id = _effective_store_id(current_user, store_id)
+    items: list[dict] = []
+
+    # Site messages
+    if source != "avito":
+        site_q = (
+            select(SiteMessage, SiteVisitor)
+            .outerjoin(SiteVisitor, SiteMessage.visitor_id == SiteVisitor.id)
+            .order_by(SiteMessage.created_at.desc())
+        )
+        if effective_store_id:
+            site_q = site_q.where(SiteMessage.store_id == effective_store_id)
+        if kind == "order":
+            site_q = site_q.where(SiteMessage.message_type.in_(["order", "tradein"]))
+        elif kind == "message":
+            site_q = site_q.where(SiteMessage.message_type.in_(["contact", "feedback"]))
+        site_q = site_q.limit(per_page * 4)  # запас для merge-сортировки
+        for msg, visitor in (await db.execute(site_q)).all():
+            is_order = msg.message_type in ("order", "tradein")
+            items.append({
+                "id": msg.id,
+                "source": "site",
+                "kind": "order" if is_order else "message",
+                "color": "blue" if is_order else "cyan",
+                "icon": "order-site" if is_order else "message-site",
+                "created_at": msg.created_at.isoformat(),
+                "status": msg.status,
+                "preview": _site_preview(msg),
+                "client": _build_client_from_visitor(visitor, msg),
+                "internal": {
+                    "message_type": msg.message_type,
+                    "site_message_id": msg.id,
+                },
+            })
+
+    # Avito messages — пока все incoming как message (фиолетовый).
+    # Заказы Avito (зелёный) — отдельный этап с детектором по содержимому.
+    if source != "site" and kind != "order":
+        av_q = (
+            select(AvitoMessage)
+            .where(AvitoMessage.direction == "incoming")
+            .order_by(AvitoMessage.created_at.desc())
+        )
+        if effective_store_id:
+            av_q = av_q.where(AvitoMessage.store_id == effective_store_id)
+        av_q = av_q.limit(per_page * 4)
+        for am in (await db.execute(av_q)).scalars().all():
+            short_id = (am.author_id or "")[:8]
+            items.append({
+                "id": am.id,
+                "source": "avito",
+                "kind": "message",
+                "color": "purple",
+                "icon": "message-avito",
+                "created_at": am.created_at.isoformat(),
+                "status": "new",
+                "preview": (am.content or "")[:200],
+                "client": {
+                    "name": f"Авито · {short_id}",
+                    "avatar_url": None,  # появится после Avito profile API cache
+                    "profile_url": (
+                        f"https://www.avito.ru/profile/messenger/channel/{am.chat_id}"
+                        if am.chat_id else None
+                    ),
+                    "phone": None,
+                    "email": None,
+                    "auth_provider": "avito",
+                },
+                "internal": {
+                    "chat_id": am.chat_id,
+                    "avito_message_id": am.avito_message_id,
+                },
+            })
+
+    # Сортировка по дате + пагинация
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    total = len(items)
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": items[start:end],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
