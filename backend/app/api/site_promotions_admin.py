@@ -4,7 +4,7 @@
 Публичный роутер для сайтов-витрин — в sites.py, не трогать.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -16,6 +16,9 @@ from app.api.access import can_modify_site_promotion, can_view_site_promotion
 from app.api.auth import require_active
 from app.core.database import get_db
 from app.models.business import PriceOverride, Product, SitePromotion, User
+
+# Бизнес-правило: скидка типа `fixed` не может превышать 3000₽
+MAX_FIXED_DISCOUNT = 3000.0
 
 router = APIRouter()
 
@@ -89,6 +92,14 @@ class ApplyToProductBody(BaseModel):
     ends_at: Optional[str] = None
 
 
+class ApplyToProductsBody(BaseModel):
+    """Батч: применить fixed-акцию к нескольким товарам.
+    override_price вычисляется автоматически как price_retail - discount_value."""
+    product_ids: List[str]
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -118,6 +129,26 @@ def _promo_out(p: SitePromotion) -> SitePromotionOut:
 
 
 _VALID_DISCOUNT_TYPES = {"percent", "fixed", "info_only"}
+
+
+def _validate_discount(discount_type: Optional[str], discount_value: Optional[float]) -> None:
+    """Проверяет тип и сумму скидки.
+    fixed: discount_value (₽) должно быть <= MAX_FIXED_DISCOUNT.
+    """
+    if discount_type is not None and discount_type not in _VALID_DISCOUNT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недопустимый discount_type. Допустимые: {_VALID_DISCOUNT_TYPES}",
+        )
+    if (
+        discount_type == "fixed"
+        and discount_value is not None
+        and float(discount_value) > MAX_FIXED_DISCOUNT
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Максимальная сумма скидки — {int(MAX_FIXED_DISCOUNT)}₽",
+        )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -187,11 +218,7 @@ async def create_promotion(
         # admin: None = глобальная, или явный store_id
         effective_store_id = body.store_id
 
-    if body.discount_type not in _VALID_DISCOUNT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недопустимый discount_type. Допустимые: {_VALID_DISCOUNT_TYPES}",
-        )
+    _validate_discount(body.discount_type, body.discount_value)
 
     promo = SitePromotion(
         store_id=effective_store_id,
@@ -231,11 +258,13 @@ async def update_promotion(
     if not can_modify_site_promotion(current_user, promo):
         raise HTTPException(status_code=403, detail="Нет доступа к редактированию акции")
 
-    if body.discount_type is not None and body.discount_type not in _VALID_DISCOUNT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недопустимый discount_type. Допустимые: {_VALID_DISCOUNT_TYPES}",
-        )
+    # Проверяем разногласие между новым и старым значением:
+    # либо переданы оба, либо проверяем относительно текущих значений.
+    new_type = body.discount_type if body.discount_type is not None else promo.discount_type
+    new_value = body.discount_value if body.discount_value is not None else (
+        float(promo.discount_value) if promo.discount_value is not None else None
+    )
+    _validate_discount(new_type, new_value)
 
     if body.title is not None:
         promo.title = body.title
@@ -374,6 +403,124 @@ async def apply_to_product(
         "status": "applied",
         "price_override_id": new_override.id,
         "deactivated_count": len(existing_active),
+    }
+
+
+@router.post("/{promotion_id}/apply-to-products")
+async def apply_to_products(
+    promotion_id: str,
+    body: ApplyToProductsBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_active),
+):
+    """Батч-применение fixed-акции к нескольким товарам.
+
+    override_price вычисляется как `product.price_retail - promo.discount_value`.
+    Товары без price_retail или с new_price <= 0 пропускаются — возвращаются в `skipped`.
+    """
+    if current_user.role == "info":
+        raise HTTPException(status_code=403, detail="Роль «Инфо» не может применять акции")
+
+    promo = await db.get(SitePromotion, promotion_id)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Акция не найдена")
+    if not promo.is_active:
+        raise HTTPException(status_code=400, detail="Нельзя применить неактивную акцию")
+    if promo.discount_type != "fixed" or not promo.discount_value:
+        raise HTTPException(
+            status_code=400,
+            detail="Батч-применение поддерживается только для акций типа `fixed` с указанной суммой скидки",
+        )
+    if current_user.role == "staff":
+        if promo.store_id is not None and promo.store_id != current_user.store_id:
+            raise HTTPException(status_code=403, detail="Нет доступа к акции другого магазина")
+    if not body.product_ids:
+        raise HTTPException(status_code=400, detail="Список товаров пуст")
+
+    discount = float(promo.discount_value)
+    try:
+        starts_at = (
+            datetime.fromisoformat(body.starts_at).replace(tzinfo=timezone.utc)
+            if body.starts_at else None
+        )
+        ends_at = (
+            datetime.fromisoformat(body.ends_at).replace(tzinfo=timezone.utc)
+            if body.ends_at else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Некорректный формат даты: {e}")
+
+    now = datetime.now(timezone.utc)
+    applied_ids: list[str] = []
+    skipped: list[dict] = []
+    # Дедупликация: один и тот же product_id в запросе не должен обрабатываться дважды
+    unique_product_ids = list(dict.fromkeys(body.product_ids))
+
+    for product_id in unique_product_ids:
+        product = await db.get(Product, product_id)
+        if not product:
+            skipped.append({"product_id": product_id, "reason": "не найден"})
+            continue
+
+        # Определяем store_id для PriceOverride
+        if current_user.role == "staff":
+            override_store_id = current_user.store_id
+            if product.store_id != current_user.store_id:
+                skipped.append({"product_id": product_id, "reason": "чужой магазин"})
+                continue
+        else:
+            override_store_id = promo.store_id or product.store_id
+
+        if not product.price_retail:
+            skipped.append({"product_id": product_id, "reason": "нет price_retail"})
+            continue
+
+        new_price = float(product.price_retail) - discount
+        if new_price <= 0:
+            skipped.append({"product_id": product_id, "reason": "цена после скидки <= 0"})
+            continue
+
+        # Правило «одна активная скидка на товар в магазине» — то же что и в
+        # apply_to_product (single). Применение новой акции снимает все
+        # активные оверрайды этого товара, в т.ч. от других акций. Намеренно.
+        existing_active = (await db.execute(
+            select(PriceOverride).where(
+                PriceOverride.product_id == product_id,
+                PriceOverride.store_id == override_store_id,
+                PriceOverride.is_active == True,  # noqa: E712
+            )
+        )).scalars().all()
+        for old in existing_active:
+            old.is_active = False
+            old.updated_at = now
+
+        new_override = PriceOverride(
+            product_id=product_id,
+            store_id=override_store_id,
+            promotion_id=promotion_id,
+            override_price=new_price,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            is_active=True,
+            created_by=str(current_user.id),
+        )
+        db.add(new_override)
+        applied_ids.append(product_id)
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Параллельная попытка создать скидку. Повторите операцию.",
+        )
+
+    return {
+        "status": "applied",
+        "applied_count": len(applied_ids),
+        "applied_ids": applied_ids,
+        "skipped": skipped,
     }
 
 

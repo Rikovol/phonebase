@@ -5,7 +5,7 @@
 """
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -178,7 +178,10 @@ async def get_stats(
 async def list_messages(
     store_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    message_type: Optional[str] = Query(None),
+    message_type: Optional[List[str]] = Query(
+        None,
+        description="Один тип или несколько (повторить ?message_type=order&message_type=tradein)",
+    ),
     unread_only: bool = Query(False),
     from_date: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
     page: int = Query(1, ge=1),
@@ -194,7 +197,7 @@ async def list_messages(
     if status:
         query = query.where(SiteMessage.status == status)
     if message_type:
-        query = query.where(SiteMessage.message_type == message_type)
+        query = query.where(SiteMessage.message_type.in_(message_type))
     if unread_only:
         query = query.where(
             SiteMessage.answered_at.is_(None),

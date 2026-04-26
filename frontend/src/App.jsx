@@ -4385,7 +4385,57 @@ function UsersPage({ token, currentUserId }) {
 
 // ─── LOGS ─────────────────────────────────────────────────────────────────────
 
-function LogsPage({ token }) {
+function LogsPage({ token, user, activeStore, seesAll, setActiveStore }) {
+  // Раздел разделён на два таба: «Логи» (журнал активности) и «Продано» (архив проданных товаров).
+  const [topTab, setTopTab] = useState("activity"); // 'activity' | 'sold'
+  const [openCardId, setOpenCardId] = useState(null);
+
+  // Если открыта карточка товара (из таба «Продано») — показываем её на весь раздел
+  if (openCardId) {
+    return (
+      <ProductCard
+        productId={openCardId}
+        token={token}
+        user={user}
+        onBack={() => setOpenCardId(null)}
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="store-tabs" style={{ marginBottom: 14 }}>
+        <button
+          className={`store-tab${topTab === "activity" ? " active" : ""}`}
+          onClick={() => setTopTab("activity")}
+        >
+          <span>📜</span><span>Логи</span>
+        </button>
+        <button
+          className={`store-tab${topTab === "sold" ? " active" : ""}`}
+          onClick={() => setTopTab("sold")}
+        >
+          <span>✅</span><span>Продано</span>
+        </button>
+      </div>
+
+      {topTab === "activity" && <LogsActivity token={token} />}
+      {topTab === "sold" && (
+        <ProductsPage
+          user={user}
+          token={token}
+          activeStore={activeStore}
+          onOpen={setOpenCardId}
+          onActiveStoreChange={seesAll ? setActiveStore : undefined}
+          isNew={false}
+          soldOnly={true}
+        />
+      )}
+    </>
+  );
+}
+
+function LogsActivity({ token }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -4618,7 +4668,7 @@ const MSG_TYPES = [
   { value: "other", label: "Другое" },
 ];
 
-function SiteMessagesTab({ user, token, msgType }) {
+function SiteMessagesTab({ user, token, msgType, msgTypes }) {
   const isAdm = Access.isAdmin(user);
   const isInfo = Access.isInfo(user);
   const [items, setItems] = useState([]);
@@ -4645,7 +4695,12 @@ function SiteMessagesTab({ user, token, msgType }) {
     try {
       const params = new URLSearchParams();
       if (filterStatus) params.set("status", filterStatus);
-      if (filterType) params.set("message_type", filterType);
+      // Приоритет: явный массив msgTypes > одиночный filterType
+      if (msgTypes && msgTypes.length) {
+        msgTypes.forEach((t) => params.append("message_type", t));
+      } else if (filterType) {
+        params.set("message_type", filterType);
+      }
       if (filterUnread) params.set("unread_only", "true");
       if (search) params.set("search", search);
       if (storeId) params.set("store_id", storeId);
@@ -4806,14 +4861,11 @@ function SiteMessagesTab({ user, token, msgType }) {
 }
 
 // ─── МАГАЗИН: АКЦИИ ──────────────────────────────────────────────────────────
-const DISCOUNT_TYPES = [
-  { value: "percent", label: "Процент (%)" },
-  { value: "fixed", label: "Фиксированная сумма (₽)" },
-];
+// Скидка только в рублях (fixed), не более 3000₽. См. backend: MAX_FIXED_DISCOUNT.
+const MAX_DISCOUNT_RUB = 3000;
 const PROMO_EMPTY = {
-  title: "", body: "", code: "", discount_type: "percent", discount_value: "",
-  starts_at: "", ends_at: "", applies_to_brand: "", applies_to_category: "",
-  banner_image: "", landing_url: "", is_active: true,
+  title: "", body: "", discount_value: "",
+  starts_at: "", ends_at: "", is_active: true,
 };
 
 function SitePromotionsTab({ user, token }) {
@@ -4826,11 +4878,12 @@ function SitePromotionsTab({ user, token }) {
   const [modal, setModal] = useState(null); // null | "create" | "edit" | "apply"
   const [form, setForm] = useState({ ...PROMO_EMPTY });
   const [editId, setEditId] = useState(null);
-  const [applyPromoId, setApplyPromoId] = useState(null);
+  const [applyPromo, setApplyPromo] = useState(null);  // полная акция (для discount_value)
   const [applySearch, setApplySearch] = useState("");
   const [applyProducts, setApplyProducts] = useState([]);
-  const [applyOverride, setApplyOverride] = useState("");
+  const [applySelected, setApplySelected] = useState(new Set());  // product_ids
   const [applyLoading, setApplyLoading] = useState(false);
+  const [applyResult, setApplyResult] = useState(null);  // {applied_count, skipped[]}
   const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
   const [stores, setStores] = useState([]);
 
@@ -4855,28 +4908,34 @@ function SitePromotionsTab({ user, token }) {
 
   const openCreate = () => { setForm({ ...PROMO_EMPTY }); setEditId(null); setModal("create"); setErr(""); };
   const openEdit = (p) => { setForm({
-    title: p.title || "", body: p.body || "", code: p.code || "",
-    discount_type: p.discount_type || "percent", discount_value: p.discount_value != null ? String(p.discount_value) : "",
+    title: p.title || "",
+    body: p.body || "",
+    discount_value: p.discount_value != null ? String(p.discount_value) : "",
     starts_at: p.starts_at ? p.starts_at.slice(0, 16) : "",
     ends_at: p.ends_at ? p.ends_at.slice(0, 16) : "",
-    applies_to_brand: p.applies_to_brand || "", applies_to_category: p.applies_to_category || "",
-    banner_image: p.banner_image || "", landing_url: p.landing_url || "",
     is_active: p.is_active !== false,
   }); setEditId(p.id); setModal("edit"); setErr(""); };
 
   const submitForm = async (e) => {
     e.preventDefault(); setErr("");
+    const value = parseFloat(form.discount_value);
+    if (!form.discount_value || isNaN(value) || value <= 0) {
+      setErr("Укажите сумму скидки в рублях");
+      return;
+    }
+    if (value > MAX_DISCOUNT_RUB) {
+      setErr(`Максимальная сумма скидки — ${MAX_DISCOUNT_RUB}₽`);
+      return;
+    }
     try {
       const body = {
-        ...form,
-        discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
+        title: form.title,
+        body: form.body || null,
+        discount_type: "fixed",
+        discount_value: value,
         starts_at: form.starts_at || null,
         ends_at: form.ends_at || null,
-        applies_to_brand: form.applies_to_brand || null,
-        applies_to_category: form.applies_to_category || null,
-        banner_image: form.banner_image || null,
-        landing_url: form.landing_url || null,
-        code: form.code || null,
+        is_active: form.is_active,
         store_id: storeId || null,
       };
       if (modal === "create") {
@@ -4895,22 +4954,46 @@ function SitePromotionsTab({ user, token }) {
     } catch (e) { setErr(e.message || "Ошибка"); }
   };
 
-  const openApply = (id) => { setApplyPromoId(id); setApplySearch(""); setApplyProducts([]); setApplyOverride(""); setModal("apply"); setErr(""); };
+  const openApply = (promo) => {
+    setApplyPromo(promo);
+    setApplySearch("");
+    setApplyProducts([]);
+    setApplySelected(new Set());
+    setApplyResult(null);
+    setModal("apply");
+    setErr("");
+  };
 
   const searchProducts = async () => {
     if (!applySearch.trim()) return;
     try {
-      const d = await apiFetch(`/products/?q=${encodeURIComponent(applySearch)}&limit=20`, { token });
+      const d = await apiFetch(`/products/?q=${encodeURIComponent(applySearch)}&limit=30`, { token });
       setApplyProducts(d.items || []);
     } catch (e) { setErr(e.message || "Ошибка поиска"); }
   };
 
-  const applyToProduct = async (productId) => {
-    setApplyLoading(true); setErr("");
+  const toggleProduct = (productId) => {
+    setApplySelected(prev => {
+      const next = new Set(prev);
+      next.has(productId) ? next.delete(productId) : next.add(productId);
+      return next;
+    });
+  };
+
+  const applyToSelectedProducts = async () => {
+    if (!applyPromo || applySelected.size === 0) return;
+    setApplyLoading(true); setErr(""); setApplyResult(null);
     try {
-      const body = applyOverride ? { override_price: parseFloat(applyOverride) } : {};
-      await apiFetch(`/site-promotions/${applyPromoId}/apply-to-product/${productId}`, { token, method: "POST", json: body });
-      setModal(null);
+      const result = await apiFetch(
+        `/site-promotions/${applyPromo.id}/apply-to-products`,
+        {
+          token,
+          method: "POST",
+          json: { product_ids: Array.from(applySelected) },
+        },
+      );
+      setApplyResult(result);
+      setApplySelected(new Set());
     } catch (e) { setErr(e.message || "Ошибка применения"); }
     setApplyLoading(false);
   };
@@ -4949,15 +5032,19 @@ function SitePromotionsTab({ user, token }) {
             </div>
             {p.body && <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, lineHeight: 1.6 }}>{p.body}</div>}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-              {p.code && <span style={{ fontFamily: "var(--mono)", fontSize: 11, background: "rgba(6,182,212,.12)", color: "var(--cyan)", padding: "2px 8px", borderRadius: 4 }}>КОД: {p.code}</span>}
-              {p.discount_value && <span style={{ fontSize: 11, color: "var(--warn)" }}>−{p.discount_value}{p.discount_type === "percent" ? "%" : "₽"}</span>}
+              {p.discount_value && (
+                <span style={{ fontSize: 11, color: "var(--warn)", fontWeight: 600 }}>
+                  −{Math.round(parseFloat(p.discount_value))}₽
+                </span>
+              )}
+              {p.starts_at && <span style={{ fontSize: 10, color: "var(--muted)" }}>с {fmtDt(p.starts_at)}</span>}
               {p.ends_at && <span style={{ fontSize: 10, color: "var(--muted)" }}>до {fmtDt(p.ends_at)}</span>}
             </div>
             {!isInfo && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <button className="act" style={{ fontSize: 11 }} onClick={() => openEdit(p)}>✏ Ред.</button>
                 <button className="act" style={{ fontSize: 11 }} onClick={() => toggleActive(p)}>{p.is_active ? "⏸ Деакт." : "▶ Актив."}</button>
-                <button className="act" style={{ fontSize: 11 }} onClick={() => openApply(p.id)}>🔗 К товару</button>
+                <button className="act" style={{ fontSize: 11 }} onClick={() => openApply(p)}>🔗 К товарам</button>
               </div>
             )}
           </div>
@@ -4967,28 +5054,45 @@ function SitePromotionsTab({ user, token }) {
       {/* Модал создания/редактирования */}
       {(modal === "create" || modal === "edit") && (
         <div className="mo" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="md" style={{ width: 520 }}>
+          <div className="md" style={{ width: 480 }}>
             <div className="mt">{modal === "create" ? "Новая акция" : "Редактировать акцию"}</div>
-            <div className="ms">Заполните параметры акции</div>
+            <div className="ms">Скидка фиксированной суммой в рублях, не более {MAX_DISCOUNT_RUB}₽</div>
             {err && <div className="err">{err}</div>}
             <form onSubmit={submitForm}>
-              <div className="field"><label>Название *</label><input value={form.title} onChange={e => f("title", e.target.value)} required placeholder="Название акции" /></div>
-              <div className="field"><label>Описание</label><input value={form.body} onChange={e => f("body", e.target.value)} placeholder="Краткое описание" /></div>
-              <div className="field"><label>Промокод</label><input value={form.code} onChange={e => f("code", e.target.value)} placeholder="PROMO2025" /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div className="field"><label>Тип скидки</label>
-                  <select value={form.discount_type} onChange={e => f("discount_type", e.target.value)}>
-                    {DISCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div className="field"><label>Размер скидки</label><input type="number" value={form.discount_value} onChange={e => f("discount_value", e.target.value)} placeholder="10" /></div>
-                <div className="field"><label>Начало</label><input type="datetime-local" value={form.starts_at} onChange={e => f("starts_at", e.target.value)} /></div>
-                <div className="field"><label>Конец</label><input type="datetime-local" value={form.ends_at} onChange={e => f("ends_at", e.target.value)} /></div>
+              <div className="field">
+                <label>Причина акции *</label>
+                <input
+                  value={form.title}
+                  onChange={e => f("title", e.target.value)}
+                  required
+                  placeholder="Чёрная пятница, распродажа склада…"
+                />
               </div>
-              <div className="field"><label>Бренд (применить к)</label><input value={form.applies_to_brand} onChange={e => f("applies_to_brand", e.target.value)} placeholder="Apple, Samsung…" /></div>
-              <div className="field"><label>Категория</label><input value={form.applies_to_category} onChange={e => f("applies_to_category", e.target.value)} placeholder="Смартфоны…" /></div>
-              <div className="field"><label>URL баннера</label><input value={form.banner_image} onChange={e => f("banner_image", e.target.value)} placeholder="https://…" /></div>
-              <div className="field"><label>Landing URL</label><input value={form.landing_url} onChange={e => f("landing_url", e.target.value)} placeholder="https://…" /></div>
+              <div className="field">
+                <label>Описание</label>
+                <input
+                  value={form.body}
+                  onChange={e => f("body", e.target.value)}
+                  placeholder="Дополнительная информация (опц.)"
+                />
+              </div>
+              <div className="field">
+                <label>Размер скидки, ₽ (макс {MAX_DISCOUNT_RUB})*</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={MAX_DISCOUNT_RUB}
+                  step="1"
+                  value={form.discount_value}
+                  onChange={e => f("discount_value", e.target.value)}
+                  placeholder="500"
+                  required
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="field"><label>Действует с</label><input type="datetime-local" value={form.starts_at} onChange={e => f("starts_at", e.target.value)} /></div>
+                <div className="field"><label>Действует до</label><input type="datetime-local" value={form.ends_at} onChange={e => f("ends_at", e.target.value)} /></div>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                 <input type="checkbox" id="promo-active" checked={form.is_active} onChange={e => f("is_active", e.target.checked)} style={{ accentColor: "var(--accent)" }} />
                 <label htmlFor="promo-active" style={{ fontSize: 13, cursor: "pointer" }}>Активна</label>
@@ -5002,27 +5106,87 @@ function SitePromotionsTab({ user, token }) {
         </div>
       )}
 
-      {/* Модал применить к товару */}
-      {modal === "apply" && (
+      {/* Модал применения акции к нескольким товарам */}
+      {modal === "apply" && applyPromo && (
         <div className="mo" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="md">
-            <div className="mt">Применить к товару</div>
-            <div className="ms">Найдите товар и при необходимости укажите цену</div>
+          <div className="md" style={{ width: 560 }}>
+            <div className="mt">«{applyPromo.title}» — применить к товарам</div>
+            <div className="ms">
+              Скидка <b>−{Math.round(parseFloat(applyPromo.discount_value || 0))}₽</b> на цену каждого выбранного товара. Найдите товары и отметьте галочками.
+            </div>
             {err && <div className="err">{err}</div>}
+            {applyResult && (
+              <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, marginBottom: 10, fontSize: 12 }}>
+                <div style={{ color: "var(--success)", fontWeight: 600 }}>Применено к {applyResult.applied_count} товарам</div>
+                {applyResult.skipped && applyResult.skipped.length > 0 && (
+                  <div style={{ color: "var(--muted)", marginTop: 4 }}>
+                    Пропущено {applyResult.skipped.length}: {applyResult.skipped.slice(0, 3).map(s => s.reason).join(", ")}
+                    {applyResult.skipped.length > 3 ? "…" : ""}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              <input className="fi" placeholder="Модель или IMEI…" value={applySearch} onChange={e => setApplySearch(e.target.value)} onKeyDown={e => e.key === "Enter" && searchProducts()} />
-              <button className="btn btn-sm btn-outline" onClick={searchProducts}>Найти</button>
+              <input
+                className="fi"
+                placeholder="Модель или IMEI…"
+                value={applySearch}
+                onChange={e => setApplySearch(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && searchProducts()}
+              />
+              <button type="button" className="btn btn-sm btn-outline" onClick={searchProducts}>Найти</button>
             </div>
-            <div className="field"><label>Переопределить цену (₽)</label><input type="number" value={applyOverride} onChange={e => setApplyOverride(e.target.value)} placeholder="Оставьте пустым для авто" /></div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
-              {applyProducts.map(p => (
-                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg3)", borderRadius: 8, border: "1px solid var(--border)" }}>
-                  <span style={{ fontSize: 13 }}>{p.model} {p.memory || ""}</span>
-                  <button className="btn btn-sm btn-primary" disabled={applyLoading} onClick={() => applyToProduct(p.id)}>Применить</button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 280, overflowY: "auto", marginBottom: 10 }}>
+              {applyProducts.length === 0 && (
+                <div style={{ color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 20 }}>
+                  Найдите товары через поиск
                 </div>
-              ))}
+              )}
+              {applyProducts.map(p => {
+                const checked = applySelected.has(p.id);
+                return (
+                  <label
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 12px",
+                      background: checked ? "rgba(6,182,212,.10)" : "var(--bg3)",
+                      borderRadius: 8,
+                      border: `1px solid ${checked ? "var(--cyan)" : "var(--border)"}`,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProduct(p.id)}
+                      style={{ accentColor: "var(--accent)" }}
+                    />
+                    <span style={{ fontSize: 13, flex: 1 }}>
+                      {p.model} {p.memory || ""}
+                      {p.price_retail && (
+                        <span style={{ color: "var(--muted)", marginLeft: 8 }}>
+                          {Math.round(parseFloat(p.price_retail))}₽
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
-            <div className="mf"><button className="btn btn-outline" onClick={() => setModal(null)}>Закрыть</button></div>
+            <div className="mf">
+              <button type="button" className="btn btn-outline" onClick={() => setModal(null)}>Закрыть</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={applyLoading || applySelected.size === 0}
+                onClick={applyToSelectedProducts}
+              >
+                {applyLoading ? "Применяем…" : `Применить (${applySelected.size})`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5158,7 +5322,6 @@ function StorePage({ user, token, activeStore }) {
   const TABS = [
     { id: "messages", label: "Сообщения", icon: "💬" },
     { id: "orders", label: "Заказы", icon: "🛒" },
-    { id: "avito-msgs", label: "Авито", icon: "📋" },
     { id: "promotions", label: "Акции", icon: "🏷" },
     { id: "bonuses", label: "Бонусы", icon: "⭐" },
   ];
@@ -5176,13 +5339,8 @@ function StorePage({ user, token, activeStore }) {
       </div>
 
       {tab === "messages" && <SiteMessagesTab user={user} token={token} />}
-      {tab === "orders" && <SiteMessagesTab user={user} token={token} msgType="order" />}
-      {tab === "avito-msgs" && (
-        <div className="stub-msg">
-          <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-          <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Сообщения Авито</div>
-          <div>Перейдите в раздел <strong>«Авито»</strong> для просмотра диалогов Авито</div>
-        </div>
+      {tab === "orders" && (
+        <SiteMessagesTab user={user} token={token} msgTypes={["order", "tradein"]} />
       )}
       {tab === "promotions" && <SitePromotionsTab user={user} token={token} />}
       {tab === "bonuses" && <SiteBonusesTab user={user} token={token} />}
@@ -5192,7 +5350,11 @@ function StorePage({ user, token, activeStore }) {
 
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
-  const [page,setPage]=useState(()=>sessionStorage.getItem("pb_page")||"products");
+  const [page,setPage]=useState(()=>{
+    // sold перенесён в раздел "Логи" — редиректим старые сохранённые ссылки
+    const stored = sessionStorage.getItem("pb_page") || "products";
+    return stored === "sold" ? "logs" : stored;
+  });
   const [activeStore,_setActiveStore]=useState(()=>user.role==="staff"?(user.store_name||""):(sessionStorage.getItem("pb_store")||""));
   const setActiveStore=(v)=>{_setActiveStore(v);sessionStorage.setItem("pb_store",v);};
   const [openCard,setOpenCard]=useState(null);
@@ -5207,10 +5369,8 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
   const nav = [
     { id: "products", icon: <Icon.box/>, label: "Б/У Товары" },
     { id: "new-products", icon: <Icon.plus/>, label: "Новые" },
-    ...(isAdm ? [{ id: "sold", icon: <Icon.check/>, label: "Продано" }] : []),
     { divider: true },
     ...(!Access.isInfo(user) ? [{ id: "avito", icon: <Icon.mega/>, label: "Авито" }] : []),
-    ...(!Access.isInfo(user) ? [{ id: "messages", icon: <Icon.msg/>, label: "Сообщения" }] : []),
     { id: "store", icon: <Icon.store/>, label: "Магазин" },
     { id: "analytics", icon: <Icon.chart/>, label: "Аналитика" },
     { id: "competitor-prices", icon: <Icon.competitors/>, label: "Конкуренты" },
@@ -5289,15 +5449,13 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="products"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
           {page==="new-products"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={true}/>}
           {page==="new-products"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
-          {page==="sold"&&!openCard&&<ProductsPage user={user} token={token} activeStore={activeStore} onOpen={(id)=>setOpenCard(id)} onActiveStoreChange={seesAll ? setActiveStore : undefined} isNew={false} soldOnly={true}/>}
-          {page==="sold"&&openCard&&<ProductCard productId={openCard} token={token} user={user} onBack={()=>setOpenCard(null)}/>}
           {page==="avito"&&<AvitoPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="messages"&&<MessagesPage user={user} token={token} activeStore={activeStore}/>}
           {page==="store"&&<StorePage user={user} token={token} activeStore={activeStore}/>}
           {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="competitor-prices"&&<CompetitorPricesPage user={user} token={token}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
-          {page==="logs"&&isAdm&&<LogsPage token={token}/>}
+          {page==="logs"&&isAdm&&<LogsPage token={token} user={user} activeStore={activeStore} seesAll={seesAll} setActiveStore={setActiveStore}/>}
           {page==="store-settings"&&isAdm&&<StoreSettingsPage token={token} activeStore={activeStore}/>}
         </div>
       </div>
