@@ -340,8 +340,23 @@ def _effective_store_id(user: User, requested_store_id: Optional[str]) -> Option
 
 
 def _site_message_kind(message_type: str) -> str:
-    """Заказы с сайта = order/tradein → order; обратная связь → message."""
-    return "order" if message_type in ("order", "tradein") else "message"
+    """В таб «Заказы» уходит только `order` с сайта.
+    Trade-in — это заявка на оценку, не заказ; идёт в «Сообщения» отдельным цветом.
+    """
+    return "order" if message_type == "order" else "message"
+
+
+def _site_message_visuals(message_type: str) -> tuple[str, str]:
+    """(color, icon) для site_messages по типу.
+    - order  → blue  + order-site  (Заказы)
+    - tradein→ blue  + message-site (Сообщения, выделенный синий — это заявка)
+    - contact/feedback → cyan + message-site (Сообщения)
+    """
+    if message_type == "order":
+        return ("blue", "order-site")
+    if message_type == "tradein":
+        return ("blue", "message-site")
+    return ("cyan", "message-site")
 
 
 def _vk_profile_url(provider: str | None, provider_user_id: str | None) -> str | None:
@@ -407,18 +422,20 @@ async def list_unified(
         if effective_store_id:
             site_q = site_q.where(SiteMessage.store_id == effective_store_id)
         if kind == "order":
-            site_q = site_q.where(SiteMessage.message_type.in_(["order", "tradein"]))
+            site_q = site_q.where(SiteMessage.message_type == "order")
         elif kind == "message":
-            site_q = site_q.where(SiteMessage.message_type.in_(["contact", "feedback"]))
+            site_q = site_q.where(
+                SiteMessage.message_type.in_(["contact", "feedback", "tradein"])
+            )
         site_q = site_q.limit(per_page * 4)  # запас для merge-сортировки
         for msg, visitor in (await db.execute(site_q)).all():
-            is_order = msg.message_type in ("order", "tradein")
+            color, icon = _site_message_visuals(msg.message_type)
             items.append({
                 "id": msg.id,
                 "source": "site",
-                "kind": "order" if is_order else "message",
-                "color": "blue" if is_order else "cyan",
-                "icon": "order-site" if is_order else "message-site",
+                "kind": _site_message_kind(msg.message_type),
+                "color": color,
+                "icon": icon,
                 "created_at": msg.created_at.isoformat(),
                 "status": msg.status,
                 "preview": _site_preview(msg),

@@ -1294,12 +1294,14 @@ async def create_message(
     if not visitor and not (body.contact_phone or body.contact_email):
         raise HTTPException(status_code=400, detail="Требуется телефон или email")
 
-    # Анон → создаём запись SiteVisitor
+    # Анон → создаём запись SiteVisitor.
+    # ВНИМАНИЕ: SiteVisitor.display_name (а не contact_name).
+    # contact_name — это поле SiteMessage (денормализация для админ-фильтров).
     if not visitor:
         visitor = SiteVisitor(
             store_id=store.id,
             auth_provider=None,
-            contact_name=body.contact_name,
+            display_name=body.contact_name,
             contact_phone=body.contact_phone,
             contact_email=str(body.contact_email) if body.contact_email else None,
             preferred_channel=body.preferred_channel,
