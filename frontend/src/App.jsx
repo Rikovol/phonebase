@@ -5338,12 +5338,17 @@ function ClientAvatar({ client }) {
 
 function UnifiedInbox({ user, token, kind }) {
   const isAdm = Access.isAdmin(user);
+  const isInfo = Access.isInfo(user);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [storeId, setStoreId] = useState(isAdm ? "" : (user.store_id || ""));
   const [stores, setStores] = useState([]);
   const [filterSource, setFilterSource] = useState("");
+  const [replyOpenFor, setReplyOpenFor] = useState(null);  // item id
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!isAdm) return;
@@ -5368,7 +5373,27 @@ function UnifiedInbox({ user, token, kind }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [token, storeId, filterSource, kind]);
+  }, [token, storeId, filterSource, kind, reloadKey]);
+
+  const openReply = (id) => { setReplyOpenFor(id); setReplyText(""); };
+  const closeReply = () => { setReplyOpenFor(null); setReplyText(""); };
+  const sendReply = async (item) => {
+    if (!replyText.trim()) return;
+    setReplySending(true);
+    try {
+      await apiFetch(`/avito/reply/${item.id}`, {
+        token,
+        method: "POST",
+        json: { text: replyText.trim() },
+      });
+      closeReply();
+      setReloadKey(k => k + 1);
+    } catch (e) {
+      setErr(e.message || "Ошибка отправки");
+    } finally {
+      setReplySending(false);
+    }
+  };
 
   const fmtRelative = (iso) => {
     if (!iso) return "";
@@ -5464,10 +5489,80 @@ function UnifiedInbox({ user, token, kind }) {
                 <div style={{ marginTop: 4, fontSize: 13, color: "var(--text)", lineHeight: 1.4 }}>
                   {it.preview || "—"}
                 </div>
+                {it.context?.item_title && (
+                  <div style={{ marginTop: 6, fontSize: 11 }}>
+                    <span style={{ color: "var(--muted)" }}>Объявление: </span>
+                    {it.context.item_url ? (
+                      <a
+                        href={it.context.item_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: c.text, textDecoration: "none" }}
+                      >
+                        {it.context.item_title} ↗
+                      </a>
+                    ) : (
+                      <span style={{ color: "var(--text)" }}>{it.context.item_title}</span>
+                    )}
+                  </div>
+                )}
                 {(it.client?.phone || it.client?.email) && (
                   <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)", display: "flex", gap: 10 }}>
                     {it.client.phone && <span>📞 {it.client.phone}</span>}
                     {it.client.email && <span>✉ {it.client.email}</span>}
+                  </div>
+                )}
+
+                {/* Кнопка «Ответить» для Avito (status === 'new') */}
+                {it.source === "avito" && !isInfo && it.status !== "answered" && replyOpenFor !== it.id && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      className="btn btn-sm btn-outline"
+                      style={{ fontSize: 11, padding: "4px 10px" }}
+                      onClick={() => openReply(it.id)}
+                    >
+                      ✉ Ответить
+                    </button>
+                  </div>
+                )}
+
+                {/* Composer ответа */}
+                {it.source === "avito" && replyOpenFor === it.id && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <textarea
+                      value={replyText}
+                      onChange={e => setReplyText(e.target.value)}
+                      placeholder="Текст ответа клиенту…"
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        background: "var(--bg2)",
+                        color: "var(--text)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        padding: 8,
+                        fontFamily: "inherit",
+                        fontSize: 13,
+                        resize: "vertical",
+                      }}
+                      autoFocus
+                    />
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-sm btn-outline"
+                        onClick={closeReply}
+                        disabled={replySending}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => sendReply(it)}
+                        disabled={replySending || !replyText.trim()}
+                      >
+                        {replySending ? "Отправка…" : "Отправить в Авито"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

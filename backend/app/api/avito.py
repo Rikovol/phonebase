@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import Response
 
 from app.api.access import can_modify_product
-from app.api.auth import get_current_user, require_admin
+from app.api.auth import get_current_user, require_active, require_admin
 from app.core.database import get_db
 from app.models.business import AvitoMessage, AvitoStats, Product, Store, User
+from app.services.avito_api import AvitoAPIError, build_avito_client
 
 router = APIRouter()
 
@@ -493,3 +494,97 @@ async def trigger_check_feed(
     from app.services.avito_monitor import check_feed_and_map_ids
     result = await check_feed_and_map_ids(db, store)
     return result
+
+
+# ─── Reply to Avito message from inbox ────────────────────────────────────────
+
+
+class AvitoReplyBody(BaseModel):
+    text: str
+
+
+@router.post("/reply/{message_id}")
+async def reply_to_avito_message(
+    message_id: str,
+    body: AvitoReplyBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_active),
+):
+    """Отправить ответ на конкретное Avito-сообщение через мессенджер Авито.
+    Помечает чат прочитанным, сохраняет исходящую копию в БД, обновляет
+    статус исходного сообщения на answered.
+    """
+    if current_user.role == "info":
+        raise HTTPException(status_code=403, detail="Роль «Инфо» не может отвечать на сообщения")
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="Текст ответа пуст")
+
+    msg = await db.get(AvitoMessage, message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+
+    # Отвечать имеет смысл только на входящие сообщения от клиента
+    if msg.direction != "incoming":
+        raise HTTPException(
+            status_code=400,
+            detail="Ответ возможен только на входящее сообщение от клиента",
+        )
+
+    if current_user.role == "staff" and msg.store_id != current_user.store_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к чужому магазину")
+
+    store = await db.get(Store, msg.store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    client = build_avito_client(store)
+    if not client:
+        raise HTTPException(status_code=400, detail="Avito API не настроен для магазина")
+
+    import logging
+    log = logging.getLogger(__name__)
+    text_value = body.text.strip()
+    try:
+        async with client:
+            user_id = await client.get_user_id()
+            result = await client.send_message(user_id, msg.chat_id, text_value)
+            try:
+                await client.mark_chat_read(user_id, msg.chat_id)
+            except AvitoAPIError as mark_err:
+                log.warning(
+                    "Avito mark_chat_read failed (chat=%s): %s",
+                    msg.chat_id, mark_err.detail[:120],
+                )
+    except AvitoAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Avito API: {e.detail[:300]}")
+
+    import uuid
+    avito_id = result.get("id") or result.get("message_id")
+    if not avito_id:
+        avito_id = str(uuid.uuid4())
+        log.warning(
+            "Avito send_message returned no message id (chat=%s) — generated local UUID %s. "
+            "Monitor may create a duplicate row when this message comes back via API.",
+            msg.chat_id, avito_id,
+        )
+    sent_id = str(avito_id)
+    now = datetime.now(timezone.utc)
+    db.add(AvitoMessage(
+        store_id=msg.store_id,
+        chat_id=msg.chat_id,
+        avito_message_id=sent_id,
+        direction="outgoing",
+        author_id=str(user_id),
+        content=text_value,
+        created_at=now,
+        item_id=msg.item_id,
+        item_title=msg.item_title,
+        item_url=msg.item_url,
+        status="answered",
+    ))
+    msg.status = "answered"
+    msg.answered_at = now
+    msg.answered_by = str(current_user.id)
+    await db.commit()
+
+    return {"ok": True, "avito_message_id": sent_id}

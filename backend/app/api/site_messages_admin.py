@@ -429,9 +429,9 @@ async def list_unified(
                 },
             })
 
-    # Avito messages — пока все incoming как message (фиолетовый).
-    # Заказы Avito (зелёный) — отдельный этап с детектором по содержимому.
-    if source != "site" and kind != "order":
+    # Avito messages: incoming-сообщения с заполненными полями автора/контекста.
+    # Заказы Avito (kind=order, зелёный) определяются детектором is_order.
+    if source != "site":
         av_q = (
             select(AvitoMessage)
             .where(AvitoMessage.direction == "incoming")
@@ -439,29 +439,42 @@ async def list_unified(
         )
         if effective_store_id:
             av_q = av_q.where(AvitoMessage.store_id == effective_store_id)
+        if kind == "order":
+            av_q = av_q.where(AvitoMessage.is_order.is_(True))
+        elif kind == "message":
+            av_q = av_q.where(AvitoMessage.is_order.is_(False))
         av_q = av_q.limit(per_page * 4)
         for am in (await db.execute(av_q)).scalars().all():
+            is_order = bool(am.is_order)
             short_id = (am.author_id or "")[:8]
+            display_name = am.author_name or f"Авито · {short_id}"
+            chat_url = (
+                f"https://www.avito.ru/profile/messenger/channel/{am.chat_id}"
+                if am.chat_id else None
+            )
             items.append({
                 "id": am.id,
                 "source": "avito",
-                "kind": "message",
-                "color": "purple",
-                "icon": "message-avito",
+                "kind": "order" if is_order else "message",
+                "color": "green" if is_order else "purple",
+                "icon": "order-avito" if is_order else "message-avito",
                 "created_at": am.created_at.isoformat(),
-                "status": "new",
+                "status": am.status or "new",
                 "preview": (am.content or "")[:200],
                 "client": {
-                    "name": f"Авито · {short_id}",
-                    "avatar_url": None,  # появится после Avito profile API cache
-                    "profile_url": (
-                        f"https://www.avito.ru/profile/messenger/channel/{am.chat_id}"
-                        if am.chat_id else None
-                    ),
+                    "name": display_name,
+                    "avatar_url": am.author_avatar_url,
+                    "profile_url": am.author_profile_url or chat_url,
                     "phone": None,
                     "email": None,
                     "auth_provider": "avito",
                 },
+                "context": {
+                    "item_id": am.item_id,
+                    "item_title": am.item_title,
+                    "item_url": am.item_url,
+                    "chat_url": chat_url,
+                } if am.item_id else None,
                 "internal": {
                     "chat_id": am.chat_id,
                     "avito_message_id": am.avito_message_id,

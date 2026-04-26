@@ -241,6 +241,24 @@ class AvitoMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
+    # Профиль клиента (приходит вместе с chat в users[]) — заполняется монитором
+    author_name: Mapped[str | None] = mapped_column(String(200))
+    author_avatar_url: Mapped[str | None] = mapped_column(String(500))
+    author_profile_url: Mapped[str | None] = mapped_column(String(500))
+
+    # Контекст: какое объявление обсуждают (chat.context.value)
+    item_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    item_title: Mapped[str | None] = mapped_column(String(500))
+    item_url: Mapped[str | None] = mapped_column(String(500))
+
+    # Признак потенциального заказа (детектор по контенту: «куплю», «заказ», цена)
+    is_order: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+
+    # Статус для inbox: new (не отвечено) / answered / closed
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answered_by: Mapped[str | None] = mapped_column(String(36))
+
 
 # ── Site-witnessed объекты (заявки, акции, бонусы, корректировки цен) ──────
 # Добавлено 2026-04-24: phonebase становится multi-tenant CRM для 3 магазинов

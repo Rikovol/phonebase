@@ -161,6 +161,55 @@ async def migrate_create_avito_tables() -> None:
         logger.exception("Миграция create_avito_tables не выполнена")
 
 
+async def migrate_add_avito_message_metadata() -> None:
+    """v1.4.39: добавить поля профиля клиента + контекст объявления + status в avito_messages."""
+    columns = [
+        ("author_name", "VARCHAR(200)"),
+        ("author_avatar_url", "VARCHAR(500)"),
+        ("author_profile_url", "VARCHAR(500)"),
+        ("item_id", "VARCHAR(100)"),
+        ("item_title", "VARCHAR(500)"),
+        ("item_url", "VARCHAR(500)"),
+        ("is_order", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("status", "VARCHAR(20) NOT NULL DEFAULT 'new'"),
+        ("answered_at", "TIMESTAMPTZ"),
+        ("answered_by", "VARCHAR(36)"),
+    ]
+    try:
+        async with AsyncSessionLocal() as session:
+            existing = (await session.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'avito_messages'"
+            ))).scalars().all()
+            existing_set = {c.lower() for c in existing}
+            added = []
+            for col, ddl in columns:
+                if col.lower() in existing_set:
+                    continue
+                await session.execute(text(f"ALTER TABLE avito_messages ADD COLUMN {col} {ddl}"))
+                added.append(col)
+            if "item_id" in added:
+                await session.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_avito_messages_item_id "
+                    "ON avito_messages(item_id)"
+                ))
+            if "is_order" in added:
+                await session.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_avito_messages_is_order "
+                    "ON avito_messages(is_order)"
+                ))
+            if "status" in added:
+                await session.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_avito_messages_status "
+                    "ON avito_messages(status)"
+                ))
+            await session.commit()
+            if added:
+                logger.info("Миграция: добавлены колонки в avito_messages: %s", added)
+    except Exception:
+        logger.exception("Миграция add_avito_message_metadata не выполнена")
+
+
 async def migrate_seed_competitor_prices() -> None:
     """Загрузить начальные цены конкурентов из CSV, если таблица пуста."""
     import csv

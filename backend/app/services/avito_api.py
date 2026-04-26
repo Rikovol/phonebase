@@ -171,6 +171,21 @@ class AvitoAPIClient:
     async def delete_webhook(self, user_id: str, webhook_id: str) -> None:
         await self._request("DELETE", f"/messenger/v3/accounts/{user_id}/webhooks/{webhook_id}")
 
+    async def send_message(self, user_id: str, chat_id: str, text: str) -> dict:
+        """Отправить текстовое сообщение в чат Авито."""
+        return await self._request(
+            "POST",
+            f"/messenger/v1/accounts/{user_id}/chats/{chat_id}/messages",
+            json={"message": {"text": text}, "type": "text"},
+        )
+
+    async def mark_chat_read(self, user_id: str, chat_id: str) -> dict | None:
+        """Отметить чат прочитанным."""
+        return await self._request(
+            "POST",
+            f"/messenger/v1/accounts/{user_id}/chats/{chat_id}/read",
+        )
+
     # ── Autoload Reports API ────────────────────────────────
 
     async def get_autoload_reports(self, page: int = 1, per_page: int = 10) -> dict:

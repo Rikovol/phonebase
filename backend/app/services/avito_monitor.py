@@ -2,6 +2,7 @@
 Мониторинг автозагрузки Авито: проверка отчётов, маппинг item_id, алерты.
 """
 import logging
+import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy import and_, select, func
@@ -11,6 +12,42 @@ from app.models.business import AvitoStats, Product, Store
 from app.services.avito_api import AvitoAPIError, build_avito_client
 
 logger = logging.getLogger(__name__)
+
+
+# Детектор-заказов: грубая эвристика по русскоязычному контексту.
+# True если в сообщении явно прослеживается намерение купить / оформить.
+_ORDER_HINTS = re.compile(
+    r"\b("
+    r"купл[юяе]|куплю|оформ[лит]|заказ(ать|ыва|у)|готов(а|ы)?\s+вз[яе]т|"
+    r"бер[уеёт]|могу\s+вз[яе]т|приеду|приедем|приду|подъед|"
+    r"когда\s+можно|есть\s+в\s+налич|давайте\s+оформ"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def detect_avito_order(content: str) -> bool:
+    """True если контент сообщения похож на намерение купить."""
+    if not content:
+        return False
+    return bool(_ORDER_HINTS.search(content))
+
+
+def _avito_avatar_url(profile: dict | None) -> str | None:
+    """Извлекает наибольший доступный аватар из avito user.public_user_profile.avatar."""
+    if not profile:
+        return None
+    avatar = profile.get("avatar") or {}
+    images = avatar.get("images") or {}
+    # Авито отдаёт ключи "64x64", "128x128", "256x256" — берём максимум
+    if isinstance(images, dict) and images:
+        # сортируем по числу (64 → 256), берём наибольший
+        try:
+            best = max(images.items(), key=lambda kv: int(str(kv[0]).split("x")[0]))
+            return best[1]
+        except (ValueError, KeyError, IndexError):
+            pass
+    return avatar.get("default") or None
 
 
 async def fetch_stats_for_store(db: AsyncSession, store: Store) -> dict:
@@ -177,7 +214,14 @@ async def check_feed_and_map_ids(db: AsyncSession, store: Store) -> dict:
 
 
 async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
-    """Получить новые сообщения из мессенджера Авито."""
+    """Получить новые сообщения из мессенджера Авито + информацию о клиенте и объявлении.
+
+    Заполняем расширенные поля AvitoMessage: имя клиента, аватар, ссылка на профиль,
+    контекст (item_id/title/url), детектор-заказов is_order.
+    Также бэкфилим существующие сообщения чата (UPDATE по тем же chat_id), у которых
+    эти поля ещё не заполнены — это даёт автоматический backfill при первом проходе
+    после миграции.
+    """
     from app.models.business import AvitoMessage
 
     client = build_avito_client(store)
@@ -185,6 +229,8 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
         return {"error": "not_configured"}
 
     new_messages = 0
+    backfilled = 0
+
     async with client:
         try:
             user_id = await client.get_user_id()
@@ -204,6 +250,26 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
             if not chat_id:
                 continue
 
+            # ── Извлекаем информацию из chat-объекта ──────────────────────
+            # users[] — клиенты + наш аккаунт продавца
+            users = chat.get("users") or []
+            users_by_id: dict[str, dict] = {}
+            for u in users:
+                uid = str(u.get("id", ""))
+                if uid:
+                    users_by_id[uid] = u
+
+            # context.value — объявление, по которому идёт переписка
+            context_value = (chat.get("context") or {}).get("value") or {}
+            raw_item_id = context_value.get("id")
+            item_id = str(raw_item_id) if raw_item_id else None
+            # Fallback на price_string ТОЛЬКО если item_id есть — иначе "Объявление None"
+            item_title = context_value.get("title")
+            if not item_title and item_id and context_value.get("price_string"):
+                item_title = f"Объявление {item_id}"
+            item_url = context_value.get("url") or None
+
+            # ── Получаем сообщения этого чата ─────────────────────────────
             try:
                 msgs_data = await client.get_chat_messages(user_id, chat_id, limit=50)
             except AvitoAPIError:
@@ -215,12 +281,11 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
                 if not msg_id:
                     continue
 
-                # Дедупликация
+                # Дедупликация: проверяем существующее сообщение СНАЧАЛА (быстрый short-circuit
+                # для уже импортированных msg, чтобы не парсить контекст/users каждый раз).
                 existing = (await db.execute(
-                    select(AvitoMessage.id).where(AvitoMessage.avito_message_id == msg_id)
-                )).first()
-                if existing:
-                    continue
+                    select(AvitoMessage).where(AvitoMessage.avito_message_id == msg_id)
+                )).scalar_one_or_none()
 
                 author_id = str(msg.get("author_id", ""))
                 direction = "outgoing" if author_id == user_id else "incoming"
@@ -232,6 +297,43 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
                 except (ValueError, AttributeError):
                     created_dt = datetime.now(timezone.utc)
 
+                # Профиль автора из users[]
+                author = users_by_id.get(author_id, {})
+                author_name = author.get("name") or None
+                public = author.get("public_user_profile") or {}
+                author_avatar_url = _avito_avatar_url(public)
+                author_profile_url = public.get("url") or None
+
+                # Детектор-заказ: только для входящих.
+                # NB: backfill ниже устанавливает is_order только в True (UP-only) —
+                # ручной revert через UI, монитор не сбрасывает флаг.
+                is_order = direction == "incoming" and detect_avito_order(content)
+
+                if existing:
+                    # Backfill: заполняем поля если они пустые
+                    changed = False
+                    if not existing.author_name and author_name:
+                        existing.author_name = author_name
+                        changed = True
+                    if not existing.author_avatar_url and author_avatar_url:
+                        existing.author_avatar_url = author_avatar_url
+                        changed = True
+                    if not existing.author_profile_url and author_profile_url:
+                        existing.author_profile_url = author_profile_url
+                        changed = True
+                    if not existing.item_id and item_id:
+                        existing.item_id = item_id
+                        existing.item_title = item_title
+                        existing.item_url = item_url
+                        changed = True
+                    if not existing.is_order and is_order:
+                        existing.is_order = True
+                        changed = True
+                    if changed:
+                        backfilled += 1
+                    continue
+
+                # Новое сообщение
                 db.add(AvitoMessage(
                     store_id=store.id,
                     chat_id=chat_id,
@@ -240,8 +342,20 @@ async def fetch_messages_for_store(db: AsyncSession, store: Store) -> dict:
                     author_id=author_id,
                     content=content,
                     created_at=created_dt,
+                    author_name=author_name,
+                    author_avatar_url=author_avatar_url,
+                    author_profile_url=author_profile_url,
+                    item_id=item_id,
+                    item_title=item_title,
+                    item_url=item_url,
+                    is_order=is_order,
+                    status="new" if direction == "incoming" else "answered",
                 ))
                 new_messages += 1
 
     await db.commit()
-    return {"new_messages": new_messages, "chats_checked": len(chats_data.get("chats", []))}
+    return {
+        "new_messages": new_messages,
+        "backfilled": backfilled,
+        "chats_checked": len(chats_data.get("chats", [])),
+    }
