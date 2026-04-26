@@ -366,3 +366,126 @@ async def migrate_add_purchased_at() -> None:
                 logger.info("Миграция: добавлена колонка purchased_at в products")
     except Exception:
         logger.exception("Миграция add_purchased_at не выполнена")
+
+
+async def migrate_seed_home_blocks() -> None:
+    """Заводит дефолтные секции и карточки главной для всех существующих stores.
+
+    Идемпотентно: если по (store_id, key) уже есть запись — ничего не делает.
+    Дефолты повторяют hardcoded карточки в mobileax-next, чтобы при первом
+    апгрейде сайт визуально не изменился.
+    """
+    from app.models.business import HomeCard, HomeSection, Store
+
+    DEFAULTS = {
+        "hero_dual": {
+            "title": "Hero (2 крупные плашки)",
+            "sort_order": 0,
+            "cards": [
+                {
+                    "eyebrow": "iPhone 17 Pro",
+                    "title": "Идеальный iPhone.",
+                    "image_path": "/themes/mobileax/heroes/iphone-17-pro.png",
+                    "bg_preset": "apple-pro-dark",
+                    "text_dark": False,
+                    "cta_label": "Купить",
+                    "cta_href": "/catalog/Apple?category=iphone&line=17-pro",
+                    "cta_color": "primary",
+                },
+                {
+                    "eyebrow": "Trade-In",
+                    "title": "Сдай старый — получи скидку.",
+                    "image_path": "/themes/mobileax/heroes/tradein.png",
+                    "bg_preset": "trade-in-orange",
+                    "text_dark": True,
+                    "cta_label": "Оценить",
+                    "cta_href": "/trade-in",
+                    "cta_color": "gradient-orange",
+                },
+            ],
+        },
+        "highlight_dual": {
+            "title": "Промо-блоки (Trade-In + Рассрочка)",
+            "sort_order": 1,
+            "cards": [
+                {
+                    "eyebrow": "Trade-In",
+                    "title": "Сдайте старое.\nПолучите новое со скидкой.",
+                    "image_path": "/themes/mobileax/heroes/iphone-17e.png",
+                    "bg_preset": "light",
+                    "text_dark": True,
+                    "cta_label": "Оценить устройство",
+                    "cta_href": "/trade-in",
+                    "cta_color": "primary",
+                },
+                {
+                    "eyebrow": "Рассрочка 0%",
+                    "title": "Сегодня — техника.\nПлатите потом.",
+                    "image_path": "/themes/mobileax/heroes/iphone-17-pro.png",
+                    "bg_preset": "dark",
+                    "text_dark": False,
+                    "cta_label": "Узнать условия",
+                    "cta_href": "/delivery",
+                    "cta_color": "primary",
+                },
+            ],
+        },
+        "shop_latest": {
+            "title": "Slider «The latest» (340×440)",
+            "sort_order": 2,
+            "cards": [
+                {"eyebrow": "Выгода", "title": "Trade-In", "subtitle": "Сдай старое — получи скидку", "image_path": "/themes/mobileax/heroes/iphone-17-pro.png", "bg_preset": "trade-in-blue", "text_dark": False, "cta_label": "Оценить", "cta_href": "/trade-in", "cta_color": "primary"},
+                {"eyebrow": "Новинка", "title": "iPhone 17 Pro", "subtitle": "Самый продвинутый iPhone", "image_path": "/themes/mobileax/heroes/iphone-17-pro.png", "bg_preset": "black", "text_dark": False, "cta_label": "Купить", "cta_href": "/catalog/Apple?category=iphone&line=17-pro", "cta_color": "primary"},
+                {"eyebrow": "Доступно", "title": "iPhone 17e", "subtitle": "Та же мощь, проще цена", "image_path": "/themes/mobileax/heroes/iphone-17e.png", "bg_preset": "dark", "text_dark": False, "cta_label": "Купить", "cta_href": "/catalog/Apple?category=iphone&line=17", "cta_color": "primary"},
+                {"eyebrow": "Производительность", "title": "MacBook", "subtitle": "Лёгкий и мощный", "image_path": "/themes/mobileax/heroes/macbook.png", "bg_preset": "dark", "text_dark": False, "cta_label": "Купить", "cta_href": "/catalog/Apple?category=mac&line=macbook-pro", "cta_color": "primary"},
+                {"eyebrow": "Звук", "title": "AirPods Max", "subtitle": "Активное шумоподавление", "image_path": "/themes/mobileax/heroes/airpods-max.png", "bg_preset": "light", "text_dark": True, "cta_label": "Купить", "cta_href": "/catalog/Apple?category=airpods&line=max", "cta_color": "primary"},
+            ],
+        },
+        "discover_scroll": {
+            "title": "Slider «Discover» (360×460)",
+            "sort_order": 3,
+            "cards": [
+                {"eyebrow": "Apple Vision Pro", "title": "Будущее уже здесь.", "image_path": "/themes/mobileax/categories/vision-pro.png", "bg_preset": "dark", "text_dark": False, "cta_label": "Узнать больше", "cta_href": "/catalog/Apple?category=vision", "cta_color": "primary"},
+                {"eyebrow": "Galaxy S26 Ultra", "title": "Флагман Samsung. AI на каждый день.", "image_path": "/themes/mobileax/heroes/iphone-17-pro.png", "bg_preset": "black", "text_dark": False, "cta_label": "Купить", "cta_href": "/catalog/Samsung?category=galaxy-s&line=s26-ultra", "cta_color": "primary"},
+                {"eyebrow": "Б/У с гарантией", "title": "Проверенная техника.\nЦена — честная.", "image_path": "/themes/mobileax/heroes/macbook.png", "bg_preset": "light", "text_dark": True, "cta_label": "Смотреть Б/У", "cta_href": "/used", "cta_color": "primary"},
+                {"eyebrow": "Trade-In", "title": "Сдай старое.\nПолучи скидку.", "image_path": "/themes/mobileax/heroes/iphone-17e.png", "bg_preset": "trade-in-blue", "text_dark": False, "cta_label": "Оценить устройство", "cta_href": "/trade-in", "cta_color": "primary"},
+                {"eyebrow": "Рассрочка 0%", "title": "Сегодня — техника.\nПлатите потом.", "image_path": "/themes/mobileax/heroes/airpods-max.png", "bg_preset": "dark", "text_dark": False, "cta_label": "Узнать условия", "cta_href": "/delivery", "cta_color": "primary"},
+                {"eyebrow": "Магазин в Орле", "title": "ул. Автовокзальная, 1.\nПн-Вс 09:00–19:00.", "image_path": "/themes/mobileax/categories/iphone.png", "bg_preset": "light", "text_dark": True, "cta_label": "На карте", "cta_href": "/contacts", "cta_color": "primary"},
+            ],
+        },
+    }
+
+    try:
+        async with AsyncSessionLocal() as session:
+            from sqlalchemy import select
+            stores = (await session.execute(select(Store))).scalars().all()
+            seeded = 0
+            for store in stores:
+                for key, spec in DEFAULTS.items():
+                    existing = (
+                        await session.execute(
+                            select(HomeSection).where(
+                                HomeSection.store_id == store.id,
+                                HomeSection.key == key,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if existing is not None:
+                        continue
+                    section = HomeSection(
+                        store_id=store.id,
+                        key=key,
+                        title=spec["title"],
+                        sort_order=spec["sort_order"],
+                        enabled=True,
+                    )
+                    session.add(section)
+                    await session.flush()
+                    for idx, c in enumerate(spec["cards"]):
+                        session.add(HomeCard(section_id=section.id, sort_order=idx, **c))
+                    seeded += 1
+            if seeded:
+                await session.commit()
+                logger.info("Миграция home_blocks: создано секций %s", seeded)
+    except Exception:
+        logger.exception("Миграция seed_home_blocks не выполнена")

@@ -502,3 +502,71 @@ class HiddenCatalogPhoto(Base):
     catalog_photo_id: Mapped[str] = mapped_column(String(36), ForeignKey("catalog_photos.id", ondelete="CASCADE"), nullable=False, index=True)
     hidden_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
     hidden_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+# ── Главная страница сайта (CMS) ──────────────────────────────────────────────
+
+
+class HomeSection(Base):
+    """Секция на главной странице сайта-витрины. По одной на key per store.
+
+    Ключи (key) — фиксированные шаблоны, которые умеет рендерить mobileax-next:
+      hero_dual       — 2 крупные карточки (HeroSlider) сверху страницы
+      highlight_dual  — 2 карточки (HighlightCards) — Trade-In + Рассрочка
+      shop_latest     — горизонтальный скроллер «The latest» (340×440 карточки)
+      discover_scroll — горизонтальный скроллер «Discover» (360×460 карточки)
+
+    enabled=false — секция скрыта на сайте целиком.
+    Если для store_id нет записи по key — mobileax-next использует hardcoded fallback.
+    """
+    __tablename__ = "home_sections"
+    __table_args__ = (
+        UniqueConstraint("store_id", "key", name="uq_home_sections_store_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(200))  # для админа, на сайте обычно не показываем
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class HomeCard(Base):
+    """Карточка внутри HomeSection. Поля закрывают все 4 шаблона.
+
+    Не все поля используются каждым шаблоном:
+      hero_dual / highlight_dual / shop_latest / discover_scroll — все читают
+      eyebrow + title + subtitle + cta_label + cta_href + image_path + bg_preset.
+      hero_dual дополнительно поддерживает SVG-декорации через bg_preset (theme).
+
+    bg_preset — slug заранее заготовленных тем (см. mobileax-next /lib/home-presets.ts):
+      apple-blue | trade-in-orange | dark | light | black | apple-pro-dark | …
+    Произвольный hex/gradient НЕ принимается — продавец только выбирает из списка.
+    """
+    __tablename__ = "home_cards"
+    __table_args__ = (
+        Index("idx_home_cards_section_sort", "section_id", "sort_order"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    section_id: Mapped[str] = mapped_column(String(36), ForeignKey("home_sections.id", ondelete="CASCADE"), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    eyebrow: Mapped[str | None] = mapped_column(String(80))
+    title: Mapped[str | None] = mapped_column(String(200))
+    subtitle: Mapped[str | None] = mapped_column(String(300))
+
+    image_path: Mapped[str | None] = mapped_column(String(500))  # относительно /media/{store_id}/, либо /themes/...
+    bg_preset: Mapped[str] = mapped_column(String(40), default="dark", nullable=False)
+    text_dark: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # для светлых фонов
+
+    cta_label: Mapped[str | None] = mapped_column(String(60))   # null → кнопка не рисуется
+    cta_href: Mapped[str | None] = mapped_column(String(500))
+    cta_color: Mapped[str] = mapped_column(String(20), default="primary", nullable=False)  # primary | dark | gradient-orange
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)

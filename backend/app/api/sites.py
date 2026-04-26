@@ -27,6 +27,8 @@ from app.core.limiter import limiter
 from app.models.business import (
     CatalogPhoto,
     HiddenCatalogPhoto,
+    HomeCard,
+    HomeSection,
     PriceOverride,
     Product,
     SiteBonus,
@@ -1434,3 +1436,107 @@ async def get_my_messages(
     ]
 
     return MyMessagesOut(items=items, total=len(items))
+
+
+# ── Home blocks (CMS) ────────────────────────────────────────────────────────
+
+
+class _HomeCardPublic(BaseModel):
+    eyebrow: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    image_url: str | None = None
+    bg_preset: str
+    text_dark: bool
+    cta_label: str | None = None
+    cta_href: str | None = None
+    cta_color: str
+
+
+class _HomeSectionPublic(BaseModel):
+    key: str
+    enabled: bool
+    cards: list[_HomeCardPublic]
+
+
+class HomeBlocksOut(BaseModel):
+    sections: list[_HomeSectionPublic]
+
+
+@router.get("/{store_id}/home-blocks", response_model=HomeBlocksOut)
+@limiter.limit("60/minute")
+async def get_home_blocks(
+    request: Request,
+    store_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Публичный feed блоков главной для mobileax-next SSR.
+
+    Возвращает только enabled секции и enabled карточки внутри них,
+    в том порядке как заданы в админке (sort_order).
+    """
+    store = await db.get(Store, store_id)
+    if not store or not store.is_active:
+        raise HTTPException(status_code=404, detail="Магазин не найден")
+
+    sections = (
+        (
+            await db.execute(
+                select(HomeSection)
+                .where(HomeSection.store_id == store_id, HomeSection.enabled.is_(True))
+                .order_by(HomeSection.sort_order, HomeSection.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not sections:
+        return HomeBlocksOut(sections=[])
+
+    section_ids = [s.id for s in sections]
+    cards = (
+        (
+            await db.execute(
+                select(HomeCard)
+                .where(HomeCard.section_id.in_(section_ids), HomeCard.enabled.is_(True))
+                .order_by(HomeCard.sort_order, HomeCard.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    cards_by_section: dict[str, list[HomeCard]] = {}
+    for c in cards:
+        cards_by_section.setdefault(c.section_id, []).append(c)
+
+    def _img(p: str | None) -> str | None:
+        if not p:
+            return None
+        if p.startswith(("http://", "https://", "/themes/")):
+            return p
+        return f"/media/{p.lstrip('/')}"
+
+    out_sections = []
+    for s in sections:
+        out_sections.append(
+            _HomeSectionPublic(
+                key=s.key,
+                enabled=s.enabled,
+                cards=[
+                    _HomeCardPublic(
+                        eyebrow=c.eyebrow,
+                        title=c.title,
+                        subtitle=c.subtitle,
+                        image_url=_img(c.image_path),
+                        bg_preset=c.bg_preset,
+                        text_dark=c.text_dark,
+                        cta_label=c.cta_label,
+                        cta_href=c.cta_href,
+                        cta_color=c.cta_color,
+                    )
+                    for c in cards_by_section.get(s.id, [])
+                ],
+            )
+        )
+
+    return HomeBlocksOut(sections=out_sections)
