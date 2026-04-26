@@ -1294,10 +1294,34 @@ async def create_message(
     if not visitor and not (body.contact_phone or body.contact_email):
         raise HTTPException(status_code=400, detail="Требуется телефон или email")
 
-    # Анон → создаём запись SiteVisitor.
-    # ВНИМАНИЕ: SiteVisitor.display_name (а не contact_name).
-    # contact_name — это поле SiteMessage (денормализация для админ-фильтров).
+    # Анон → пробуем найти существующего visitor по телефону в этом магазине,
+    # чтобы не создавать новую «анонимную» карточку клиента при каждом обращении.
+    # Идентификация по phone — наиболее надёжный анти-фрагментирующий ключ
+    # (email тоже норм, но phone обязателен для контакта в РФ).
     if not visitor:
+        if body.contact_phone:
+            existing = (await db.execute(
+                select(SiteVisitor).where(
+                    SiteVisitor.store_id == store.id,
+                    SiteVisitor.auth_provider.is_(None),
+                    SiteVisitor.contact_phone == body.contact_phone,
+                ).limit(1)
+            )).scalar_one_or_none()
+            if existing and not existing.is_blocked:
+                visitor = existing
+                # Освежаем данные если новые более полные (имя/email/канал)
+                if body.contact_name and not visitor.display_name:
+                    visitor.display_name = body.contact_name
+                if body.contact_email and not visitor.contact_email:
+                    visitor.contact_email = str(body.contact_email)
+                if body.preferred_channel and not visitor.preferred_channel:
+                    visitor.preferred_channel = body.preferred_channel
+                visitor.last_seen_at = datetime.now(timezone.utc)
+
+    if not visitor:
+        # Новый анонимный visitor — создаём запись.
+        # ВНИМАНИЕ: SiteVisitor.display_name (а не contact_name).
+        # contact_name — это поле SiteMessage (денормализация для админ-фильтров).
         visitor = SiteVisitor(
             store_id=store.id,
             auth_provider=None,
