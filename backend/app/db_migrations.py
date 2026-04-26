@@ -216,6 +216,10 @@ async def migrate_add_anon_visitor_phone_unique() -> None:
     Гарантирует на уровне БД, что в одном магазине не появится два анонимных
     SiteVisitor (auth_provider IS NULL) с одинаковым contact_phone — закрывает
     race-condition между двумя параллельными POST /api/sites/{store_id}/messages.
+
+    Перед созданием индекса очищает существующие дубликаты:
+    - Все site_messages дубликата перепривязываются к самой старой копии (keeper).
+    - Дубли (rn>1) удаляются.
     """
     try:
         async with AsyncSessionLocal() as session:
@@ -224,14 +228,63 @@ async def migrate_add_anon_visitor_phone_unique() -> None:
                 "WHERE tablename = 'site_visitors' "
                 "AND indexname = 'uq_anon_visitor_store_phone'"
             ))
-            if res.first() is None:
-                await session.execute(text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_anon_visitor_store_phone "
-                    "ON site_visitors (store_id, contact_phone) "
-                    "WHERE auth_provider IS NULL AND contact_phone IS NOT NULL"
-                ))
-                await session.commit()
-                logger.info("Миграция: создан партиальный UNIQUE uq_anon_visitor_store_phone")
+            if res.first() is not None:
+                return  # индекс уже есть — миграция выполнялась ранее
+
+            # Шаг 1: перепривязать SiteMessages с дубликатов на keeper
+            reassigned = await session.execute(text("""
+                WITH dup AS (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY store_id, contact_phone
+                               ORDER BY first_seen_at
+                           ) AS rn,
+                           FIRST_VALUE(id) OVER (
+                               PARTITION BY store_id, contact_phone
+                               ORDER BY first_seen_at
+                           ) AS keeper
+                    FROM site_visitors
+                    WHERE auth_provider IS NULL AND contact_phone IS NOT NULL
+                )
+                UPDATE site_messages
+                SET visitor_id = dup.keeper
+                FROM dup
+                WHERE site_messages.visitor_id = dup.id AND dup.rn > 1
+            """))
+            if reassigned.rowcount:
+                logger.info(
+                    "Миграция: перепривязано %s site_messages с дублей анонимных visitor",
+                    reassigned.rowcount,
+                )
+
+            # Шаг 2: удалить дубли
+            deleted = await session.execute(text("""
+                WITH dup AS (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY store_id, contact_phone
+                               ORDER BY first_seen_at
+                           ) AS rn
+                    FROM site_visitors
+                    WHERE auth_provider IS NULL AND contact_phone IS NOT NULL
+                )
+                DELETE FROM site_visitors
+                WHERE id IN (SELECT id FROM dup WHERE rn > 1)
+            """))
+            if deleted.rowcount:
+                logger.info(
+                    "Миграция: удалено %s дубликатов анонимных SiteVisitor",
+                    deleted.rowcount,
+                )
+
+            # Шаг 3: создать unique index
+            await session.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_anon_visitor_store_phone "
+                "ON site_visitors (store_id, contact_phone) "
+                "WHERE auth_provider IS NULL AND contact_phone IS NOT NULL"
+            ))
+            await session.commit()
+            logger.info("Миграция: создан партиальный UNIQUE uq_anon_visitor_store_phone")
     except Exception:
         logger.exception("Миграция add_anon_visitor_phone_unique не выполнена")
 
