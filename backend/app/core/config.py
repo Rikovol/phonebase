@@ -85,6 +85,7 @@ class Settings(BaseSettings):
 
     # OAuth — Telegram Login Widget
     TELEGRAM_BOT_TOKEN: str | None = None
+    TELEGRAM_BOT_USERNAME: str | None = None  # без @, нужен для Telegram Login Widget на сайте
 
 
 settings = Settings()

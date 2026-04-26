@@ -44,6 +44,13 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://basestock.ru,https://www.basestock.ru}
       SITE_ORIGINS: ${SITE_ORIGINS:-https://shop.basestock.ru,https://xn--80abvjddo3a.xn--p1ai}
+      SITE_SESSION_COOKIE_DOMAIN: ${SITE_SESSION_COOKIE_DOMAIN:-.basestock.ru}
+      VK_APP_ID: ${VK_APP_ID:-}
+      VK_APP_SECRET: ${VK_APP_SECRET:-}
+      VK_REDIRECT_URI: ${VK_REDIRECT_URI:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      SITE_RETURN_URL: ${SITE_RETURN_URL:-https://shop.basestock.ru}
       IMPORT_1C_HTML_URL: ${IMPORT_1C_HTML_URL:-}
       IMPORT_1C_HTML_PATH: ${IMPORT_1C_HTML_PATH:-/data/base.html}
       IMPORT_1C_NEW_HTML_PATH: ${IMPORT_1C_NEW_HTML_PATH:-/data/new.html}

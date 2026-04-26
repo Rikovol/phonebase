@@ -212,6 +212,33 @@ def _verify_vk_state(state_from_url: str, state_from_cookie: str) -> bool:
 # ── Эндпоинты ─────────────────────────────────────────────────────────────────
 
 
+@router.get("/{store_id}/auth/status")
+async def site_auth_status(store: Store = Depends(get_active_store)) -> dict:
+    """Feature flag для frontend: какие OAuth-провайдеры настроены и доступны.
+    Виджет на сайте использует это, чтобы скрыть кнопки VK/TG до момента,
+    когда credentials будут получены и заданы в .env phonebase.
+    """
+    vk_app_id = getattr(settings, "VK_APP_ID", None)
+    vk_app_secret = getattr(settings, "VK_APP_SECRET", None)
+    tg_bot_token = getattr(settings, "TELEGRAM_BOT_TOKEN", None)
+
+    # Telegram Login Widget работает по bot.username, не по token —
+    # парсим username из формата '12345:ABCdef...' если задан
+    tg_bot_username: Optional[str] = None
+    if tg_bot_token:
+        # Telegram Login Widget хочет имя бота, не токен. Имя обычно хранится
+        # в отдельной env-переменной TELEGRAM_BOT_USERNAME (но её пока нет в Settings).
+        # Берём из getattr с fallback None — UI скроет кнопку TG если username не задан.
+        tg_bot_username = getattr(settings, "TELEGRAM_BOT_USERNAME", None)
+
+    return {
+        "vk_available": bool(vk_app_id and vk_app_secret),
+        "telegram_available": bool(tg_bot_token and tg_bot_username),
+        "telegram_bot_username": tg_bot_username,
+        "store_id": store.id,
+    }
+
+
 @router.get("/{store_id}/auth/vk/start")
 async def vk_auth_start(
     store: Store = Depends(get_active_store),
