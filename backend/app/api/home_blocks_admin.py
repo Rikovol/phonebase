@@ -5,6 +5,7 @@ CMS для главной — продавец / админ редактируе
 """
 import asyncio
 import io
+import os
 import re
 import uuid
 from pathlib import Path
@@ -395,7 +396,10 @@ async def upload_card_image(
     media_root = Path(settings.MEDIA_ROOT).resolve()
     rel_dir = f"home/{section.store_id}"
     out_dir = (media_root / rel_dir).resolve()
-    if not str(out_dir).startswith(str(media_root)):
+    # Защита от path traversal: out_dir должен быть строго внутри media_root.
+    # `startswith(str(media_root))` без separator-боундари ловится `/media_evil`,
+    # поэтому добавляем os.sep — иначе `/media` префиксно матчит `/media_evil`.
+    if not str(out_dir).startswith(str(media_root) + os.sep) and str(out_dir) != str(media_root):
         raise HTTPException(status_code=400, detail="Недопустимый путь")
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = uuid.uuid4().hex
