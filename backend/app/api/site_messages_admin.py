@@ -221,6 +221,125 @@ async def list_messages(
     }
 
 
+# ⚠ Маршрут «/unified» обязан быть объявлен ДО «/{message_id}» — иначе FastAPI
+# матчит «unified» как message_id и отдаёт 404 «Заявка не найдена».
+@router.get("/unified")
+async def list_unified(
+    store_id: Optional[str] = Query(None),
+    source: Optional[str] = Query(None, description="site|avito|None"),
+    kind: Optional[str] = Query(None, description="order|message|None"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_active),
+):
+    """Единая лента: заявки с сайта + диалоги Avito.
+
+    Возвращает items с полями source/kind/color/icon — фронтенд использует их
+    для раскраски карточек. Аватарка/имя/ссылка на профиль приходят в client.
+    """
+    effective_store_id = _effective_store_id(current_user, store_id)
+    items: list[dict] = []
+
+    # Site messages
+    if source != "avito":
+        site_q = (
+            select(SiteMessage, SiteVisitor)
+            .outerjoin(SiteVisitor, SiteMessage.visitor_id == SiteVisitor.id)
+            .order_by(SiteMessage.created_at.desc())
+        )
+        if effective_store_id:
+            site_q = site_q.where(SiteMessage.store_id == effective_store_id)
+        if kind == "order":
+            site_q = site_q.where(SiteMessage.message_type == "order")
+        elif kind == "message":
+            site_q = site_q.where(
+                SiteMessage.message_type.in_(["contact", "feedback", "tradein"])
+            )
+        site_q = site_q.limit(per_page * 4)  # запас для merge-сортировки
+        for msg, visitor in (await db.execute(site_q)).all():
+            color, icon = _site_message_visuals(msg.message_type)
+            items.append({
+                "id": msg.id,
+                "source": "site",
+                "kind": _site_message_kind(msg.message_type),
+                "color": color,
+                "icon": icon,
+                "created_at": msg.created_at.isoformat(),
+                "status": msg.status,
+                "preview": _site_preview(msg),
+                "client": _build_client_from_visitor(visitor, msg),
+                "internal": {
+                    "message_type": msg.message_type,
+                    "site_message_id": msg.id,
+                },
+            })
+
+    # Avito messages: incoming-сообщения с заполненными полями автора/контекста.
+    # Заказы Avito (kind=order, зелёный) определяются детектором is_order.
+    if source != "site":
+        av_q = (
+            select(AvitoMessage)
+            .where(AvitoMessage.direction == "incoming")
+            .order_by(AvitoMessage.created_at.desc())
+        )
+        if effective_store_id:
+            av_q = av_q.where(AvitoMessage.store_id == effective_store_id)
+        if kind == "order":
+            av_q = av_q.where(AvitoMessage.is_order.is_(True))
+        elif kind == "message":
+            av_q = av_q.where(AvitoMessage.is_order.is_(False))
+        av_q = av_q.limit(per_page * 4)
+        for am in (await db.execute(av_q)).scalars().all():
+            is_order = bool(am.is_order)
+            short_id = (am.author_id or "")[:8]
+            display_name = am.author_name or f"Авито · {short_id}"
+            chat_url = (
+                f"https://www.avito.ru/profile/messenger/channel/{am.chat_id}"
+                if am.chat_id else None
+            )
+            items.append({
+                "id": am.id,
+                "source": "avito",
+                "kind": "order" if is_order else "message",
+                "color": "green" if is_order else "purple",
+                "icon": "order-avito" if is_order else "message-avito",
+                "created_at": am.created_at.isoformat(),
+                "status": am.status or "new",
+                "preview": (am.content or "")[:200],
+                "client": {
+                    "name": display_name,
+                    "avatar_url": am.author_avatar_url,
+                    "profile_url": am.author_profile_url or chat_url,
+                    "phone": None,
+                    "email": None,
+                    "auth_provider": "avito",
+                },
+                "context": {
+                    "item_id": am.item_id,
+                    "item_title": am.item_title,
+                    "item_url": am.item_url,
+                    "chat_url": chat_url,
+                } if am.item_id else None,
+                "internal": {
+                    "chat_id": am.chat_id,
+                    "avito_message_id": am.avito_message_id,
+                },
+            })
+
+    # Сортировка по дате + пагинация
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    total = len(items)
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": items[start:end],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
 @router.get("/{message_id}", response_model=SiteMessageDetailOut)
 async def get_message(
     message_id: str,
@@ -392,120 +511,3 @@ def _site_preview(msg: SiteMessage) -> str:
     if msg.message_type == "order":
         return "Заказ с сайта"
     return "Обращение с сайта"
-
-
-@router.get("/unified")
-async def list_unified(
-    store_id: Optional[str] = Query(None),
-    source: Optional[str] = Query(None, description="site|avito|None"),
-    kind: Optional[str] = Query(None, description="order|message|None"),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active),
-):
-    """Единая лента: заявки с сайта + диалоги Avito.
-
-    Возвращает items с полями source/kind/color/icon — фронтенд использует их
-    для раскраски карточек. Аватарка/имя/ссылка на профиль приходят в client.
-    """
-    effective_store_id = _effective_store_id(current_user, store_id)
-    items: list[dict] = []
-
-    # Site messages
-    if source != "avito":
-        site_q = (
-            select(SiteMessage, SiteVisitor)
-            .outerjoin(SiteVisitor, SiteMessage.visitor_id == SiteVisitor.id)
-            .order_by(SiteMessage.created_at.desc())
-        )
-        if effective_store_id:
-            site_q = site_q.where(SiteMessage.store_id == effective_store_id)
-        if kind == "order":
-            site_q = site_q.where(SiteMessage.message_type == "order")
-        elif kind == "message":
-            site_q = site_q.where(
-                SiteMessage.message_type.in_(["contact", "feedback", "tradein"])
-            )
-        site_q = site_q.limit(per_page * 4)  # запас для merge-сортировки
-        for msg, visitor in (await db.execute(site_q)).all():
-            color, icon = _site_message_visuals(msg.message_type)
-            items.append({
-                "id": msg.id,
-                "source": "site",
-                "kind": _site_message_kind(msg.message_type),
-                "color": color,
-                "icon": icon,
-                "created_at": msg.created_at.isoformat(),
-                "status": msg.status,
-                "preview": _site_preview(msg),
-                "client": _build_client_from_visitor(visitor, msg),
-                "internal": {
-                    "message_type": msg.message_type,
-                    "site_message_id": msg.id,
-                },
-            })
-
-    # Avito messages: incoming-сообщения с заполненными полями автора/контекста.
-    # Заказы Avito (kind=order, зелёный) определяются детектором is_order.
-    if source != "site":
-        av_q = (
-            select(AvitoMessage)
-            .where(AvitoMessage.direction == "incoming")
-            .order_by(AvitoMessage.created_at.desc())
-        )
-        if effective_store_id:
-            av_q = av_q.where(AvitoMessage.store_id == effective_store_id)
-        if kind == "order":
-            av_q = av_q.where(AvitoMessage.is_order.is_(True))
-        elif kind == "message":
-            av_q = av_q.where(AvitoMessage.is_order.is_(False))
-        av_q = av_q.limit(per_page * 4)
-        for am in (await db.execute(av_q)).scalars().all():
-            is_order = bool(am.is_order)
-            short_id = (am.author_id or "")[:8]
-            display_name = am.author_name or f"Авито · {short_id}"
-            chat_url = (
-                f"https://www.avito.ru/profile/messenger/channel/{am.chat_id}"
-                if am.chat_id else None
-            )
-            items.append({
-                "id": am.id,
-                "source": "avito",
-                "kind": "order" if is_order else "message",
-                "color": "green" if is_order else "purple",
-                "icon": "order-avito" if is_order else "message-avito",
-                "created_at": am.created_at.isoformat(),
-                "status": am.status or "new",
-                "preview": (am.content or "")[:200],
-                "client": {
-                    "name": display_name,
-                    "avatar_url": am.author_avatar_url,
-                    "profile_url": am.author_profile_url or chat_url,
-                    "phone": None,
-                    "email": None,
-                    "auth_provider": "avito",
-                },
-                "context": {
-                    "item_id": am.item_id,
-                    "item_title": am.item_title,
-                    "item_url": am.item_url,
-                    "chat_url": chat_url,
-                } if am.item_id else None,
-                "internal": {
-                    "chat_id": am.chat_id,
-                    "avito_message_id": am.avito_message_id,
-                },
-            })
-
-    # Сортировка по дате + пагинация
-    items.sort(key=lambda x: x["created_at"], reverse=True)
-    total = len(items)
-    start = (page - 1) * per_page
-    end = start + per_page
-    return {
-        "items": items[start:end],
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-    }
