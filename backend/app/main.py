@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import analytics, auth, avito, catalog_photos, competitor_prices, feeds, home_blocks_admin, imports, logs, personal_data, photos, products, purchase_docs, site_bonuses_admin, site_messages_admin, site_promotions_admin, sites, sites_oauth, stores, users
-from app.api import settings as settings_api
+from app.api import analytics, auth, avito, catalog, catalog_photos, competitor_prices, feeds, home_blocks_admin, imports, logs, personal_data, photos, products, purchase_docs, site_bonuses_admin, site_messages_admin, site_promotions_admin, sites, sites_oauth, stores, users
+from app.api import leads, settings as settings_api
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.database import Base, engine
@@ -25,6 +25,7 @@ from app.db_migrations import (
     migrate_add_website_feed_columns,
     migrate_admin_clear_store,
     migrate_create_avito_tables,
+    migrate_create_catalog_tables,
     migrate_info_clear_store,
     migrate_legacy_role_manager_to_staff,
     migrate_seed_competitor_prices,
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     await migrate_seed_competitor_prices()
     await migrate_widen_staff_log_columns()
     await migrate_seed_home_blocks()
+    await migrate_create_catalog_tables()
 
     from app.services.auto_import import auto_import_loop
 
@@ -67,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.4.47",
+    version="1.5.0",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -113,6 +115,8 @@ app.include_router(site_messages_admin.router, prefix="/api/site-messages", tags
 app.include_router(site_promotions_admin.router, prefix="/api/site-promotions", tags=["site-promotions"])
 app.include_router(site_bonuses_admin.router, prefix="/api/site-bonuses", tags=["site-bonuses"])
 app.include_router(home_blocks_admin.router, prefix="/api/home-blocks", tags=["home-blocks"])
+app.include_router(catalog.router, prefix="/api/catalog", tags=["catalog"])
+app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)

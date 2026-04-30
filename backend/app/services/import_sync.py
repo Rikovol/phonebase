@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
 from app.models.business import ImportLog, Product, Store
+from app.services.catalog_refs import resolve_catalog_refs
 from app.services.import_1c import OneCHTMLParser, ParsedProduct
 
 DATA_RETENTION_DAYS = 365
@@ -86,6 +87,11 @@ async def sync_import(
 
         existing = await _existing_products(db, store_id)
 
+        # Кэш caталожных FK на уровне магазина: (brand, category, model) → model_id.
+        # resolve_catalog_refs делает round-trip к БД и при необходимости создаёт скрытые
+        # записи; кэш устраняет N лишних round-trip'ов на однотипных товарах.
+        ref_cache: dict[tuple[str, str, str], str] = {}
+
         for item in items:
             product = existing.get(item.imei)
             if product is None:
@@ -104,6 +110,26 @@ async def sync_import(
                 product.is_sold = False
                 product.sold_at = None
                 product.data_cleanup_at = None
+
+            # Резолв нормализованного каталога. Если все три поля заполнены — проставим
+            # model_id; иначе обнуляем FK (товар, ранее классифицированный, мог потерять
+            # классификацию в новом импорте — без обнуления /menu продолжит показывать
+            # его под прежней моделью, Codex review).
+            if product.brand and product.category and product.model:
+                key = (product.brand.strip(), product.category.strip(), product.model.strip())
+                if key in ref_cache:
+                    product.model_id = ref_cache[key]
+                else:
+                    refs = await resolve_catalog_refs(
+                        db, brand=key[0], category=key[1], model=key[2]
+                    )
+                    if refs is not None:
+                        ref_cache[key] = refs.model_id
+                        product.model_id = refs.model_id
+                    else:
+                        product.model_id = None
+            else:
+                product.model_id = None
 
         to_sell = [p for imei, p in existing.items() if imei not in imeis_in_file and not p.is_sold]
         if to_sell:

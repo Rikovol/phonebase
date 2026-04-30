@@ -1,5 +1,6 @@
 """Одноразовые миграции данных при старте приложения."""
 import logging
+import uuid
 
 from sqlalchemy import text, update
 
@@ -489,3 +490,236 @@ async def migrate_seed_home_blocks() -> None:
                 logger.info("Миграция home_blocks: создано секций %s", seeded)
     except Exception:
         logger.exception("Миграция seed_home_blocks не выполнена")
+
+
+async def migrate_create_catalog_tables() -> None:
+    """Создать таблицы catalog_* и колонку products.model_id, забэкфилить из текущих
+    distinct (brand, category, model) товаров.
+
+    Идемпотентно. Повторные запуски ничего не меняют — все INSERT'ы и UPDATE'ы
+    защищены проверкой на наличие записи. Создание моделей через CREATE TABLE IF NOT
+    EXISTS — на случай если SQLAlchemy create_all уже отработал.
+    """
+    from app.core.slug import slugify
+
+    try:
+        async with AsyncSessionLocal() as session:
+            # 1. Создаём таблицы (если SQLAlchemy create_all не отработал — на старых БД)
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS catalog_categories (
+                    id VARCHAR(36) PRIMARY KEY,
+                    slug VARCHAR(100) UNIQUE NOT NULL,
+                    display_name VARCHAR(120) NOT NULL,
+                    icon_url VARCHAR(500),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS catalog_brands (
+                    id VARCHAR(36) PRIMARY KEY,
+                    slug VARCHAR(100) UNIQUE NOT NULL,
+                    display_name VARCHAR(120) NOT NULL,
+                    logo_url VARCHAR(500),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS catalog_models (
+                    id VARCHAR(36) PRIMARY KEY,
+                    brand_id VARCHAR(36) NOT NULL REFERENCES catalog_brands(id),
+                    category_id VARCHAR(36) NOT NULL REFERENCES catalog_categories(id),
+                    slug VARCHAR(120) NOT NULL,
+                    display_name VARCHAR(160) NOT NULL,
+                    hero_image_url VARCHAR(500),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_catalog_models_brand_slug UNIQUE (brand_id, slug)
+                )
+            """))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_catalog_models_brand_id ON catalog_models(brand_id)"
+            ))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_catalog_models_category_id ON catalog_models(category_id)"
+            ))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_catalog_models_category_brand ON catalog_models(category_id, brand_id)"
+            ))
+
+            # 2. Добавляем products.model_id если нет
+            res = await session.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='products' AND column_name='model_id'"
+            ))
+            if res.first() is None:
+                await session.execute(text(
+                    "ALTER TABLE products ADD COLUMN model_id VARCHAR(36) REFERENCES catalog_models(id)"
+                ))
+                await session.execute(text(
+                    "CREATE INDEX ix_products_model_id ON products(model_id)"
+                ))
+                logger.info("Миграция: добавлена колонка products.model_id")
+
+            await session.commit()
+
+            # 3. Бэкфил: distinct (brand, category, model) → catalog_*
+            #    Берём только товары с непустыми brand/category/model.
+            #
+            #    Группировка case-insensitive: «Apple», «apple», «APPLE» — один бренд.
+            #    В качестве display_name берём наиболее частое написание через mode()
+            #    WITHIN GROUP — иначе MIN() в C-locale даст «APPLE» (заглавные < строчные).
+            #
+            #    Группируем по (brand, model) БЕЗ category — модель уникальна
+            #    по (brand_id, lower(display_name)). Категорию выбираем самую
+            #    частую через mode(). Если в данных «iPhone 17» приходит в
+            #    разных категориях — берём ту, что встречается чаще; админ
+            #    переназначит вручную (Codex review r3).
+            distinct_rows = (await session.execute(text("""
+                SELECT
+                    mode() WITHIN GROUP (ORDER BY TRIM(brand))    AS brand,
+                    mode() WITHIN GROUP (ORDER BY TRIM(category)) AS category,
+                    mode() WITHIN GROUP (ORDER BY TRIM(model))    AS model
+                FROM products
+                WHERE brand IS NOT NULL AND TRIM(brand) <> ''
+                  AND category IS NOT NULL AND TRIM(category) <> ''
+                  AND model IS NOT NULL AND TRIM(model) <> ''
+                GROUP BY LOWER(TRIM(brand)), LOWER(TRIM(model))
+            """))).all()
+
+            if not distinct_rows:
+                logger.info("Миграция catalog: товаров с brand+category+model нет, бэкфил пропущен")
+                return
+
+            # Поиск свободного slug при коллизии: «iPhone 17 Pro» и «iPhone-17-Pro»
+            # слугифицируются в один 'iphone-17-pro'. Вторую запись подсуффиксим -2/-3.
+            async def _free_slug_global(table_name: str, base: str) -> str:
+                candidate, n = base, 1
+                while True:
+                    exists = (await session.execute(text(
+                        f"SELECT 1 FROM {table_name} WHERE slug=:slug"
+                    ), {"slug": candidate})).first()
+                    if exists is None:
+                        return candidate
+                    n += 1
+                    candidate = f"{base}-{n}"
+
+            async def _free_slug_model(brand_id: str, base: str) -> str:
+                candidate, n = base, 1
+                while True:
+                    exists = (await session.execute(text(
+                        "SELECT 1 FROM catalog_models WHERE brand_id=:bid AND slug=:slug"
+                    ), {"bid": brand_id, "slug": candidate})).first()
+                    if exists is None:
+                        return candidate
+                    n += 1
+                    candidate = f"{base}-{n}"
+
+            # 3a. Категории
+            categories_seen: dict[str, str] = {}  # display_name (lowercase) → id
+            for row in distinct_rows:
+                cat_name = row.category
+                key = cat_name.lower()
+                if key in categories_seen:
+                    continue
+                base = slugify(cat_name) or "category"
+                # Если категория с таким display_name уже есть (case-insensitive) —
+                # переиспользуем её id. Иначе создаём новую с уникальным slug.
+                existing = (await session.execute(text(
+                    "SELECT id FROM catalog_categories WHERE LOWER(display_name)=LOWER(:n)"
+                ), {"n": cat_name})).scalar_one_or_none()
+                if existing is not None:
+                    categories_seen[key] = existing
+                    continue
+                slug = await _free_slug_global("catalog_categories", base)
+                # UUID генерируем в Python — gen_random_uuid() требует PG13+ или
+                # pgcrypto extension, которое в проекте не подключено (Codex review).
+                new_id = str(uuid.uuid4())
+                await session.execute(text("""
+                    INSERT INTO catalog_categories (id, slug, display_name)
+                    VALUES (:id, :slug, :name)
+                """), {"id": new_id, "slug": slug, "name": cat_name})
+                categories_seen[key] = new_id
+
+            # 3b. Бренды (тот же паттерн)
+            brands_seen: dict[str, str] = {}
+            for row in distinct_rows:
+                brand_name = row.brand
+                key = brand_name.lower()
+                if key in brands_seen:
+                    continue
+                base = slugify(brand_name) or "brand"
+                existing = (await session.execute(text(
+                    "SELECT id FROM catalog_brands WHERE LOWER(display_name)=LOWER(:n)"
+                ), {"n": brand_name})).scalar_one_or_none()
+                if existing is not None:
+                    brands_seen[key] = existing
+                    continue
+                slug = await _free_slug_global("catalog_brands", base)
+                new_id = str(uuid.uuid4())
+                await session.execute(text("""
+                    INSERT INTO catalog_brands (id, slug, display_name)
+                    VALUES (:id, :slug, :name)
+                """), {"id": new_id, "slug": slug, "name": brand_name})
+                brands_seen[key] = new_id
+
+            # 3c. Модели — UNIQUE (brand_id, slug). Дубль по (brand, name)
+            # case-insensitive → reuse, БЕЗ category. Storefront агрегирует
+            # товары по brand|model|storage|color без category, поэтому
+            # одна и та же модель в двух категориях должна быть одной записью
+            # (Codex review r3, переопределяет предыдущий фикс).
+            for row in distinct_rows:
+                brand_id = brands_seen[row.brand.lower()]
+                cat_id = categories_seen[row.category.lower()]
+                model_name = row.model
+                existing = (await session.execute(text("""
+                    SELECT id FROM catalog_models
+                    WHERE brand_id=:bid AND LOWER(display_name)=LOWER(:n)
+                """), {"bid": brand_id, "n": model_name})).scalar_one_or_none()
+                if existing is not None:
+                    continue
+                base = slugify(model_name) or "model"
+                model_slug = await _free_slug_model(brand_id, base)
+                await session.execute(text("""
+                    INSERT INTO catalog_models (id, brand_id, category_id, slug, display_name)
+                    VALUES (:id, :brand_id, :cat_id, :slug, :name)
+                """), {
+                    "id": str(uuid.uuid4()),
+                    "brand_id": brand_id,
+                    "cat_id": cat_id,
+                    "slug": model_slug,
+                    "name": model_name,
+                })
+
+            await session.commit()
+
+            # 3d. Проставляем products.model_id для товаров где он NULL.
+            #     Сопоставляем по (brand, model) case-insensitive БЕЗ category —
+            #     модель уникальна по (brand_id, lower(display_name)) (Codex r3).
+            #     Категория хранится в catalog_models, но не участвует в матчинге.
+            res = await session.execute(text("""
+                UPDATE products p
+                SET model_id = m.id
+                FROM catalog_models m
+                JOIN catalog_brands b ON b.id = m.brand_id
+                WHERE p.model_id IS NULL
+                  AND p.brand IS NOT NULL
+                  AND p.model IS NOT NULL
+                  AND LOWER(TRIM(p.brand)) = LOWER(b.display_name)
+                  AND LOWER(TRIM(p.model)) = LOWER(m.display_name)
+            """))
+            await session.commit()
+            n = getattr(res, "rowcount", 0) or 0
+            logger.info(
+                "Миграция catalog: создано категорий=%s, брендов=%s, моделей-уникумов=%s, бэкфилл product.model_id=%s",
+                len(categories_seen), len(brands_seen), len(distinct_rows), n,
+            )
+    except Exception:
+        logger.exception("Миграция create_catalog_tables не выполнена")

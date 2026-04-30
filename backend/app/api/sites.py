@@ -25,6 +25,9 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.models.business import (
+    CatalogBrand,
+    CatalogCategory,
+    CatalogModel,
     CatalogPhoto,
     HiddenCatalogPhoto,
     HomeCard,
@@ -372,6 +375,7 @@ async def get_catalog(
     condition: Literal["new", "used"] = Query(..., description="Тип товара: new или used"),
     brand: str | None = Query(None),
     category: str | None = Query(None),
+    model_id: str | None = Query(None, description="Фильтр по нормализованной модели каталога"),
     search: str | None = Query(None),
     in_stock: bool = Query(True, description="Только в наличии"),
     promo_only: bool = Query(False, description="Только товары с акцией"),
@@ -388,13 +392,15 @@ async def get_catalog(
     - condition=used: б/у товары конкретного магазина.
     - condition=new: новые товары — агрегация по product_key по всем магазинам,
       мин. цена с учётом PriceOverride магазина из URL.
+    - model_id: фильтр по нормализованной модели (catalog_models.id), приоритетней
+      строковых brand/category. Используется новым меню /menu.
     """
     now = _now()
 
     if condition == "used":
         return await _catalog_used(
             store=store, db=db, now=now,
-            brand=brand, category=category, search=search,
+            brand=brand, category=category, model_id=model_id, search=search,
             in_stock=in_stock, promo_only=promo_only,
             price_from=price_from, price_to=price_to,
             sort=sort, page=page, per_page=per_page,
@@ -402,7 +408,7 @@ async def get_catalog(
     else:
         return await _catalog_new(
             store=store, db=db, now=now,
-            brand=brand, category=category, search=search,
+            brand=brand, category=category, model_id=model_id, search=search,
             in_stock=in_stock, promo_only=promo_only,
             price_from=price_from, price_to=price_to,
             sort=sort, page=page, per_page=per_page,
@@ -416,6 +422,7 @@ async def _catalog_used(
     now: datetime,
     brand: str | None,
     category: str | None,
+    model_id: str | None,
     search: str | None,
     in_stock: bool,
     promo_only: bool,
@@ -462,6 +469,8 @@ async def _catalog_used(
 
     if in_stock:
         base_q = base_q.where(Product.quantity > 0)
+    if model_id:
+        base_q = base_q.where(Product.model_id == model_id)
     if brand:
         base_q = base_q.where(Product.brand == brand)
     if category:
@@ -589,6 +598,7 @@ async def _catalog_new(
     now: datetime,
     brand: str | None,
     category: str | None,
+    model_id: str | None,
     search: str | None,
     in_stock: bool,
     promo_only: bool,
@@ -641,6 +651,8 @@ async def _catalog_new(
         )
     )
 
+    if model_id:
+        base_q = base_q.where(Product.model_id == model_id)
     if brand:
         base_q = base_q.where(Product.brand == brand)
     if category:
@@ -960,11 +972,13 @@ async def _product_detail_new(
     Агрегация по product_key: все магазины, per_store_availability.
     Фото: CatalogPhoto минус HiddenCatalogPhoto для текущего store.
     """
-    # Разбираем product_key на компоненты для фильтрации в SQL
+    # Разбираем product_key на компоненты. make_product_key опускает color если пустой,
+    # поэтому ключ может быть из 3 (brand|model|storage) или 4 частей (с цветом).
     parts = product_key_val.split("|")
-    if len(parts) < 4:
+    if len(parts) < 3:
         raise HTTPException(status_code=404, detail="Неверный slug")
-    brand_val, model_val, storage_val, color_val = parts[0], parts[1], parts[2], parts[3]
+    brand_val, model_val, storage_val = parts[0], parts[1], parts[2]
+    color_val = parts[3] if len(parts) >= 4 else ""
 
     # Все товары с этим ключом по всем магазинам (фильтр по компонентам в SQL)
     matching = (await db.execute(
@@ -1165,6 +1179,178 @@ async def _facet_rows(
         )
     rows = (await db.execute(q)).all()
     return [(r[0], r[1]) for r in rows]
+
+
+# ── Меню каталога: дерево Категория → Бренд → Модель ─────────────────────────
+
+# Защита от чудовищного дерева: при некорректной заливке (тысячи дублирующихся моделей)
+# /menu может вернуть многомегабайтный JSON. Логируем и режем.
+_MENU_HARD_LIMIT = 5000
+
+
+class MenuModelItem(BaseModel):
+    id: str
+    slug: str
+    display_name: str
+    hero_image_url: str | None
+    products_count: int
+
+
+class MenuBrandItem(BaseModel):
+    id: str
+    slug: str
+    display_name: str
+    logo_url: str | None
+    products_count: int
+    models: list[MenuModelItem]
+
+
+class MenuCategoryItem(BaseModel):
+    id: str
+    slug: str
+    display_name: str
+    icon_url: str | None
+    products_count: int
+    brands: list[MenuBrandItem]
+
+
+class MenuOut(BaseModel):
+    condition: Literal["new", "used"]
+    categories: list[MenuCategoryItem]
+
+
+@router.get("/{store_id}/menu", response_model=MenuOut)
+async def get_menu(
+    store_id: str,
+    condition: Literal["new", "used"] = Query(..., description="new или used"),
+    store: Store = Depends(get_active_store),
+    db: AsyncSession = Depends(get_db),
+) -> MenuOut:
+    """Дерево каталога для меню витрины: Категория → Бренд → Модель со счётчиками.
+
+    Учитывает is_visible на всех уровнях (категории/бренда/модели) и видимость
+    товаров (site_published, quantity>0, is_sold=false, in_repair=false).
+
+    condition=used → товары конкретного магазина (Product.store_id=store.id).
+    condition=new  → агрегация по всем магазинам (как /catalog?condition=new).
+
+    Категории/бренды/модели без хотя бы одного видимого товара в меню не попадают.
+    """
+    product_filter = [
+        Product.site_published.is_(True),
+        Product.is_sold.is_(False),
+        Product.in_repair.is_(False),
+        Product.quantity > 0,
+        Product.model_id.isnot(None),
+    ]
+    if condition == "used":
+        product_filter.append(Product.is_new.is_(False))
+        product_filter.append(Product.store_id == store.id)
+    else:
+        product_filter.append(Product.is_new.is_(True))
+
+    # Один запрос: GROUP BY (category, brand, model).
+    # Counter:
+    #   used → count(Product.id) — каждый IMEI отдельная карточка.
+    #   new  → count(DISTINCT product_key) — на витрине агрегация по brand|model|
+    #          storage|color (один товар в N магазинах = одна карточка). count(id)
+    #          бы overcounted (Codex r5).
+    if condition == "new":
+        # Должно совпадать с make_product_key (catalog_photos.py): strip+lower
+        # каждой части. Без trim'а «Apple» и «Apple » посчитаются как два, хотя
+        # витрина схлопнет их в одну карточку (Codex r7).
+        cnt_expr = func.count(func.distinct(func.concat_ws(
+            "|",
+            func.lower(func.trim(Product.brand)),
+            func.lower(func.trim(Product.model)),
+            func.lower(func.trim(func.coalesce(Product.storage, ""))),
+            func.lower(func.trim(func.coalesce(Product.color, ""))),
+        ))).label("cnt")
+    else:
+        cnt_expr = func.count(Product.id).label("cnt")
+
+    rows = (await db.execute(
+        select(
+            CatalogCategory.id, CatalogCategory.slug, CatalogCategory.display_name,
+            CatalogCategory.icon_url, CatalogCategory.sort_order,
+            CatalogBrand.id, CatalogBrand.slug, CatalogBrand.display_name,
+            CatalogBrand.logo_url, CatalogBrand.sort_order,
+            CatalogModel.id, CatalogModel.slug, CatalogModel.display_name,
+            CatalogModel.hero_image_url, CatalogModel.sort_order,
+            cnt_expr,
+        )
+        .select_from(CatalogModel)
+        .join(CatalogBrand, CatalogBrand.id == CatalogModel.brand_id)
+        .join(CatalogCategory, CatalogCategory.id == CatalogModel.category_id)
+        .join(Product, Product.model_id == CatalogModel.id)
+        .where(
+            CatalogCategory.is_visible.is_(True),
+            CatalogBrand.is_visible.is_(True),
+            CatalogModel.is_visible.is_(True),
+            *product_filter,
+        )
+        .group_by(
+            CatalogCategory.id, CatalogCategory.slug, CatalogCategory.display_name,
+            CatalogCategory.icon_url, CatalogCategory.sort_order,
+            CatalogBrand.id, CatalogBrand.slug, CatalogBrand.display_name,
+            CatalogBrand.logo_url, CatalogBrand.sort_order,
+            CatalogModel.id, CatalogModel.slug, CatalogModel.display_name,
+            CatalogModel.hero_image_url, CatalogModel.sort_order,
+        )
+        .order_by(
+            CatalogCategory.sort_order, CatalogCategory.display_name,
+            CatalogBrand.sort_order, CatalogBrand.display_name,
+            CatalogModel.sort_order, CatalogModel.display_name,
+        )
+        .limit(_MENU_HARD_LIMIT + 1)
+    )).all()
+
+    if len(rows) > _MENU_HARD_LIMIT:
+        import logging
+        logging.getLogger(__name__).warning(
+            "menu: store=%s condition=%s превысил HARD_LIMIT=%s — ответ обрезан",
+            store.id, condition, _MENU_HARD_LIMIT,
+        )
+        rows = rows[:_MENU_HARD_LIMIT]
+
+    # Сборка дерева. dict-индекс по id для быстрого аппенда.
+    cats: dict[str, MenuCategoryItem] = {}
+    cat_brands: dict[tuple[str, str], MenuBrandItem] = {}
+
+    for r in rows:
+        (
+            c_id, c_slug, c_name, c_icon, _c_sort,
+            b_id, b_slug, b_name, b_logo, _b_sort,
+            m_id, m_slug, m_name, m_hero, _m_sort,
+            cnt,
+        ) = r
+
+        cat = cats.get(c_id)
+        if cat is None:
+            cat = MenuCategoryItem(
+                id=c_id, slug=c_slug, display_name=c_name, icon_url=c_icon,
+                products_count=0, brands=[],
+            )
+            cats[c_id] = cat
+
+        brand_key = (c_id, b_id)
+        brand = cat_brands.get(brand_key)
+        if brand is None:
+            brand = MenuBrandItem(
+                id=b_id, slug=b_slug, display_name=b_name, logo_url=b_logo,
+                products_count=0, models=[],
+            )
+            cat.brands.append(brand)
+            cat_brands[brand_key] = brand
+
+        brand.models.append(MenuModelItem(
+            id=m_id, slug=m_slug, display_name=m_name,
+            hero_image_url=m_hero, products_count=cnt,
+        ))
+        brand.products_count += cnt
+        cat.products_count += cnt
+
+    return MenuOut(condition=condition, categories=list(cats.values()))
 
 
 # ── Акции ─────────────────────────────────────────────────────────────────────

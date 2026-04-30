@@ -11,6 +11,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import ImportLog, Product, Store
+from app.services.catalog_refs import resolve_catalog_refs
 from app.services.import_1c_new import OneCNewHTMLParser, ParsedNewProduct
 from app.services.import_sync import ensure_stores_from_1c_names
 
@@ -47,6 +48,9 @@ async def sync_import_new(
 
         existing = await _existing_new_products(db, store_id)
 
+        # Кэш каталожных FK на уровне магазина — см. import_sync.py
+        ref_cache: dict[tuple[str, str, str], str] = {}
+
         for item in items:
             product = existing.get(item.imei)
             if product is None:
@@ -66,6 +70,24 @@ async def sync_import_new(
                 product.is_sold = False
                 product.sold_at = None
                 product.data_cleanup_at = None
+
+            # См. import_sync.py: обнуляем model_id если новая строка из 1С потеряла
+            # классификацию, иначе FK останется стейл и /menu покажет неверно (Codex).
+            if product.brand and product.category and product.model:
+                key = (product.brand.strip(), product.category.strip(), product.model.strip())
+                if key in ref_cache:
+                    product.model_id = ref_cache[key]
+                else:
+                    refs = await resolve_catalog_refs(
+                        db, brand=key[0], category=key[1], model=key[2]
+                    )
+                    if refs is not None:
+                        ref_cache[key] = refs.model_id
+                        product.model_id = refs.model_id
+                    else:
+                        product.model_id = None
+            else:
+                product.model_id = None
 
         for imei, product in existing.items():
             if imei not in imeis_in_file and not product.is_sold:

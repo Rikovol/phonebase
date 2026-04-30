@@ -524,6 +524,7 @@ const Icon={
   bonus:()=><svg {...I.p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
   order:()=><svg {...I.p}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
   send:()=><svg {...I.p} width={14} height={14}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+  catalog:()=><svg {...I.p}><path d="M2 3h20v4H2z"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M9 12h6"/></svg>,
 };
 
 // ─── МЕЛКИЕ КОМПОНЕНТЫ ────────────────────────────────────────────────────────
@@ -6035,6 +6036,491 @@ function Field({ label, hint, children }) {
 
 const inputStyle = { width:"100%", padding:"7px 10px", background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:5, color:"var(--text)", fontSize:13, fontFamily:"inherit" };
 
+// ─── CATALOG (admin: категории, бренды, модели) ───────────────────────────────
+function CatalogPage({ token, user }) {
+  const [tab, setTab] = useState("models");   // models | brands | categories
+  const [needsReviewCount, setNeedsReviewCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const reload = () => setRefreshKey(k => k + 1);
+
+  // Подтягиваем счётчик «требуют проверки» (скрытые модели из импорта)
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiFetch(`/catalog/models?needs_review=true&limit=1`, { token });
+        setNeedsReviewCount(data?.total ?? 0);
+      } catch {}
+    })();
+  }, [token, refreshKey]);
+
+  const TABS = [
+    { id: "models", label: "Модели", icon: "📱" },
+    { id: "brands", label: "Бренды", icon: "🏷" },
+    { id: "categories", label: "Категории", icon: "📂" },
+  ];
+
+  return (
+    <div>
+      {needsReviewCount > 0 && tab !== "models" && (
+        <div style={{padding:"10px 14px",background:"#fef3c7",color:"#854d0e",borderRadius:8,marginBottom:12,fontSize:13,cursor:"pointer"}}
+             onClick={() => setTab("models")}>
+          ⚠️ Требуют проверки: <b>{needsReviewCount}</b> моделей создано импортом автоматически и скрыто. Откройте «Модели» → фильтр «Только требуют проверки».
+        </div>
+      )}
+      <div className="store-tabs">
+        {TABS.map(t => (
+          <button key={t.id} className={`store-tab${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
+            <span>{t.icon}</span>
+            <span>{t.label}</span>
+            {t.id === "models" && needsReviewCount > 0 && <span className="tab-badge">{needsReviewCount > 99 ? "99+" : needsReviewCount}</span>}
+          </button>
+        ))}
+      </div>
+      {tab === "models" && <CatalogModelsTab token={token} user={user} onChanged={reload}/>}
+      {tab === "brands" && <CatalogBrandsTab token={token} user={user} onChanged={reload}/>}
+      {tab === "categories" && <CatalogCategoriesTab token={token} user={user} onChanged={reload}/>}
+    </div>
+  );
+}
+
+function CatalogCategoriesTab({ token, user, onChanged }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/catalog/categories?include_hidden=true`, { token });
+      setItems(data || []);
+    } catch (e) { alert(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [token]);
+
+  const save = async (id, patch) => {
+    try {
+      await apiFetch(`/catalog/categories/${id}`, { token, method: "PATCH", json: patch });
+      setEditingId(null); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const remove = async (id) => {
+    if (!confirm("Удалить категорию?")) return;
+    try {
+      await apiFetch(`/catalog/categories/${id}`, { token, method: "DELETE" });
+      load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const create = async (payload) => {
+    try {
+      await apiFetch(`/catalog/categories`, { token, method: "POST", json: payload });
+      setNewOpen(false); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+
+  if (loading) return <div style={{padding:20,color:"var(--muted)"}}>Загрузка…</div>;
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:12}}>
+        <button className="btn-primary" onClick={() => setNewOpen(true)}>+ Создать категорию</button>
+      </div>
+      {newOpen && <CatalogRefForm kind="category" onSubmit={create} onCancel={() => setNewOpen(false)}/>}
+      <div className="card-list">
+        {items.map(c => (
+          <CatalogRefRow
+            key={c.id} kind="category" item={c}
+            isEditing={editingId === c.id}
+            onEdit={() => setEditingId(c.id)}
+            onCancel={() => setEditingId(null)}
+            onSave={(patch) => save(c.id, patch)}
+            onDelete={() => remove(c.id)}
+          />
+        ))}
+        {items.length === 0 && <div style={{padding:20,color:"var(--muted)"}}>Пока нет категорий.</div>}
+      </div>
+    </div>
+  );
+}
+
+function CatalogBrandsTab({ token, user, onChanged }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/catalog/brands?include_hidden=true`, { token });
+      setItems(data || []);
+    } catch (e) { alert(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [token]);
+
+  const save = async (id, patch) => {
+    try {
+      await apiFetch(`/catalog/brands/${id}`, { token, method: "PATCH", json: patch });
+      setEditingId(null); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const remove = async (id) => {
+    if (!confirm("Удалить бренд?")) return;
+    try {
+      await apiFetch(`/catalog/brands/${id}`, { token, method: "DELETE" });
+      load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const create = async (payload) => {
+    try {
+      await apiFetch(`/catalog/brands`, { token, method: "POST", json: payload });
+      setNewOpen(false); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+
+  if (loading) return <div style={{padding:20,color:"var(--muted)"}}>Загрузка…</div>;
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:12}}>
+        <button className="btn-primary" onClick={() => setNewOpen(true)}>+ Создать бренд</button>
+      </div>
+      {newOpen && <CatalogRefForm kind="brand" onSubmit={create} onCancel={() => setNewOpen(false)}/>}
+      <div className="card-list">
+        {items.map(b => (
+          <CatalogRefRow
+            key={b.id} kind="brand" item={b}
+            isEditing={editingId === b.id}
+            onEdit={() => setEditingId(b.id)}
+            onCancel={() => setEditingId(null)}
+            onSave={(patch) => save(b.id, patch)}
+            onDelete={() => remove(b.id)}
+          />
+        ))}
+        {items.length === 0 && <div style={{padding:20,color:"var(--muted)"}}>Пока нет брендов.</div>}
+      </div>
+    </div>
+  );
+}
+
+function CatalogRefRow({ kind, item, isEditing, onEdit, onCancel, onSave, onDelete }) {
+  const [name, setName] = useState(item.display_name);
+  const [slug, setSlug] = useState(item.slug);
+  const [sortOrder, setSortOrder] = useState(item.sort_order);
+  const [isVisible, setIsVisible] = useState(item.is_visible);
+
+  useEffect(() => {
+    setName(item.display_name); setSlug(item.slug);
+    setSortOrder(item.sort_order); setIsVisible(item.is_visible);
+  }, [item, isEditing]);
+
+  const blocker = item.models_count > 0
+    ? `Используется в ${item.models_count} моделях — удалить нельзя`
+    : null;
+
+  if (!isEditing) {
+    return (
+      <div className="row-card" style={{display:"flex",alignItems:"center",gap:14,padding:"10px 14px",border:"1px solid var(--border2)",borderRadius:8,marginBottom:8,opacity: item.is_visible ? 1 : 0.5}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:500,fontSize:14}}>{item.display_name}</div>
+          <div style={{fontSize:12,color:"var(--muted)"}}>slug: <code>{item.slug}</code> · моделей: {item.models_count} · sort: {item.sort_order} {!item.is_visible && "· скрыт"}</div>
+        </div>
+        <button className="btn-ghost" onClick={onEdit}>✎ Изменить</button>
+        <button className="btn-ghost" onClick={onDelete} disabled={!!blocker} title={blocker || "Удалить"}>🗑</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="row-card" style={{padding:14,border:"1px solid var(--border2)",borderRadius:8,marginBottom:8,background:"var(--bg2)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 80px",gap:10,marginBottom:10}}>
+        <Field label="Название"><input style={inputStyle} value={name} onChange={e => setName(e.target.value)}/></Field>
+        <Field label="Slug (URL)"><input style={inputStyle} value={slug} onChange={e => setSlug(e.target.value)}/></Field>
+        <Field label="Sort"><input style={inputStyle} type="number" value={sortOrder} onChange={e => setSortOrder(parseInt(e.target.value)||0)}/></Field>
+      </div>
+      <label style={{display:"flex",gap:6,alignItems:"center",fontSize:13,marginBottom:10}}>
+        <input type="checkbox" checked={isVisible} onChange={e => setIsVisible(e.target.checked)}/>
+        Виден на витринах сайтов
+      </label>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn-primary" onClick={() => onSave({ display_name: name, slug, sort_order: sortOrder, is_visible: isVisible })}>Сохранить</button>
+        <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogRefForm({ kind, onSubmit, onCancel, initial = {} }) {
+  const [name, setName] = useState(initial.display_name || "");
+  const [slug, setSlug] = useState(initial.slug || "");
+  const [isVisible, setIsVisible] = useState(initial.is_visible !== false);
+
+  const titles = { category: "Новая категория", brand: "Новый бренд" };
+  return (
+    <div style={{padding:14,border:"2px solid var(--border)",borderRadius:8,marginBottom:12,background:"var(--bg2)"}}>
+      <div style={{fontWeight:600,marginBottom:10}}>{titles[kind]}</div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10,marginBottom:10}}>
+        <Field label="Название"><input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder={kind === "category" ? "Смартфоны" : "Apple"}/></Field>
+        <Field label="Slug (опционально)" hint="если пусто — сгенерируется"><input style={inputStyle} value={slug} onChange={e => setSlug(e.target.value)} placeholder="auto"/></Field>
+      </div>
+      <label style={{display:"flex",gap:6,alignItems:"center",fontSize:13,marginBottom:10}}>
+        <input type="checkbox" checked={isVisible} onChange={e => setIsVisible(e.target.checked)}/>
+        Виден сразу
+      </label>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn-primary" disabled={!name.trim()} onClick={() => onSubmit({ display_name: name.trim(), slug: slug.trim() || null, is_visible: isVisible })}>Создать</button>
+        <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogModelsTab({ token, user, onChanged }) {
+  const PAGE = 200;
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [brands, setBrands] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filterBrand, setFilterBrand] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [search, setSearch] = useState("");
+  const [needsReview, setNeedsReview] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [mergeFrom, setMergeFrom] = useState(null);  // model object для слияния
+
+  const load = async (append = false) => {
+    setLoading(true);
+    try {
+      const offset = append ? items.length : 0;
+      const params = new URLSearchParams({
+        include_hidden: "true",
+        limit: String(PAGE),
+        offset: String(offset),
+      });
+      if (filterBrand) params.set("brand_id", filterBrand);
+      if (filterCategory) params.set("category_id", filterCategory);
+      if (search.trim()) params.set("q", search.trim());
+      if (needsReview) params.set("needs_review", "true");
+      const data = await apiFetch(`/catalog/models?${params}`, { token });
+      const got = data?.items || [];
+      setItems(append ? [...items, ...got] : got);
+      setTotal(data?.total ?? got.length);
+    } catch (e) { alert(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const [bs, cs] = await Promise.all([
+          apiFetch(`/catalog/brands?include_hidden=true`, { token }),
+          apiFetch(`/catalog/categories?include_hidden=true`, { token }),
+        ]);
+        setBrands(bs || []); setCategories(cs || []);
+      } catch (e) { alert(e.message); }
+    })();
+  }, [token]);
+  useEffect(() => { load(); }, [token, filterBrand, filterCategory, needsReview]);
+  // search — по Enter
+  const onSearchKey = (e) => { if (e.key === "Enter") load(); };
+
+  const saveModel = async (id, patch) => {
+    try {
+      await apiFetch(`/catalog/models/${id}`, { token, method: "PATCH", json: patch });
+      setEditingId(null); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const removeModel = async (id) => {
+    if (!confirm("Удалить модель?")) return;
+    try {
+      await apiFetch(`/catalog/models/${id}`, { token, method: "DELETE" });
+      load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const createModel = async (payload) => {
+    try {
+      await apiFetch(`/catalog/models`, { token, method: "POST", json: payload });
+      setNewOpen(false); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+  const doMerge = async (intoId) => {
+    if (!mergeFrom) return;
+    if (!confirm(`Перенести все товары модели «${mergeFrom.display_name}» в выбранную и удалить дубль?`)) return;
+    try {
+      const res = await apiFetch(`/catalog/models/${mergeFrom.id}/merge?into=${intoId}`, { token, method: "POST" });
+      alert(`Перенесено товаров: ${res.moved_products}. Дубль удалён.`);
+      setMergeFrom(null); load(); onChanged?.();
+    } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <button className="btn-primary" onClick={() => setNewOpen(true)}>+ Создать модель</button>
+        <select style={{...inputStyle, width:"auto"}} value={filterBrand} onChange={e => setFilterBrand(e.target.value)}>
+          <option value="">Все бренды</option>
+          {brands.map(b => <option key={b.id} value={b.id}>{b.display_name}</option>)}
+        </select>
+        <select style={{...inputStyle, width:"auto"}} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+          <option value="">Все категории</option>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+        </select>
+        <input style={{...inputStyle, width:220}} placeholder="Поиск по названию (Enter)" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={onSearchKey}/>
+        <label style={{display:"flex",gap:6,alignItems:"center",fontSize:13,marginLeft:10}}>
+          <input type="checkbox" checked={needsReview} onChange={e => setNeedsReview(e.target.checked)}/>
+          Только требуют проверки
+        </label>
+      </div>
+
+      {newOpen && <CatalogModelForm onSubmit={createModel} onCancel={() => setNewOpen(false)} brands={brands} categories={categories}/>}
+
+      {mergeFrom && (
+        <div style={{padding:14,border:"2px solid #f59e0b",borderRadius:8,marginBottom:12,background:"#fef3c7",color:"#854d0e"}}>
+          <div style={{fontWeight:600,marginBottom:8}}>Слить «{mergeFrom.display_name}» с другой моделью</div>
+          <div style={{fontSize:13,marginBottom:10}}>Выберите целевую модель — товары будут перенесены, а текущая модель удалена.</div>
+          <select style={{...inputStyle, width:"auto",minWidth:300}} defaultValue="" onChange={e => e.target.value && doMerge(e.target.value)}>
+            <option value="">— выберите модель-цель —</option>
+            {items.filter(m => m.id !== mergeFrom.id).map(m => (
+              <option key={m.id} value={m.id}>{m.brand_name} / {m.display_name} ({m.products_count} товаров)</option>
+            ))}
+          </select>
+          <button className="btn-ghost" style={{marginLeft:10}} onClick={() => setMergeFrom(null)}>Отмена</button>
+        </div>
+      )}
+
+      {loading && items.length === 0 ? (
+        <div style={{padding:20,color:"var(--muted)"}}>Загрузка…</div>
+      ) : (
+        <>
+          {total > 0 && (
+            <div style={{padding:"6px 2px",color:"var(--muted)",fontSize:12,marginBottom:6}}>
+              Показано {items.length} из {total}
+            </div>
+          )}
+          <div className="card-list">
+            {items.map(m => (
+              <CatalogModelRow
+                key={m.id} item={m} brands={brands} categories={categories}
+                isEditing={editingId === m.id}
+                onEdit={() => setEditingId(m.id)}
+                onCancel={() => setEditingId(null)}
+                onSave={(patch) => saveModel(m.id, patch)}
+                onDelete={() => removeModel(m.id)}
+                onMerge={() => setMergeFrom(m)}
+              />
+            ))}
+            {items.length === 0 && <div style={{padding:20,color:"var(--muted)"}}>Нет моделей по фильтру.</div>}
+          </div>
+          {items.length < total && (
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <button className="btn-ghost" disabled={loading} onClick={() => load(true)}>
+                {loading ? "Загрузка…" : `Загрузить ещё (${total - items.length})`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CatalogModelRow({ item, brands, categories, isEditing, onEdit, onCancel, onSave, onDelete, onMerge }) {
+  const [brandId, setBrandId] = useState(item.brand_id);
+  const [categoryId, setCategoryId] = useState(item.category_id);
+  const [name, setName] = useState(item.display_name);
+  const [slug, setSlug] = useState(item.slug);
+  const [sortOrder, setSortOrder] = useState(item.sort_order);
+  const [isVisible, setIsVisible] = useState(item.is_visible);
+
+  useEffect(() => {
+    setBrandId(item.brand_id); setCategoryId(item.category_id);
+    setName(item.display_name); setSlug(item.slug);
+    setSortOrder(item.sort_order); setIsVisible(item.is_visible);
+  }, [item, isEditing]);
+
+  if (!isEditing) {
+    const review = !item.is_visible;
+    return (
+      <div className="row-card" style={{display:"flex",alignItems:"center",gap:14,padding:"10px 14px",border:`1px solid ${review ? "#f59e0b" : "var(--border2)"}`,borderRadius:8,marginBottom:8,background: review ? "rgba(245,158,11,0.05)" : undefined}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:500,fontSize:14}}>
+            {item.brand_name} / {item.display_name} {review && <span style={{color:"#b45309",fontSize:11,marginLeft:8}}>· требует проверки</span>}
+          </div>
+          <div style={{fontSize:12,color:"var(--muted)"}}>{item.category_name} · slug: <code>{item.slug}</code> · товаров: {item.products_count} · sort: {item.sort_order}</div>
+        </div>
+        <button className="btn-ghost" onClick={onMerge} title="Слить с другой моделью" disabled={item.products_count === 0}>⇆ Слить</button>
+        <button className="btn-ghost" onClick={onEdit}>✎ Изменить</button>
+        <button className="btn-ghost" onClick={onDelete} disabled={item.products_count > 0} title={item.products_count > 0 ? `${item.products_count} товаров — нельзя удалить` : "Удалить"}>🗑</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="row-card" style={{padding:14,border:"1px solid var(--border2)",borderRadius:8,marginBottom:8,background:"var(--bg2)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 80px",gap:10,marginBottom:10}}>
+        <Field label="Бренд">
+          <select style={inputStyle} value={brandId} onChange={e => setBrandId(e.target.value)}>
+            {brands.map(b => <option key={b.id} value={b.id}>{b.display_name}</option>)}
+          </select>
+        </Field>
+        <Field label="Категория">
+          <select style={inputStyle} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+          </select>
+        </Field>
+        <Field label="Название"><input style={inputStyle} value={name} onChange={e => setName(e.target.value)}/></Field>
+        <Field label="Slug"><input style={inputStyle} value={slug} onChange={e => setSlug(e.target.value)}/></Field>
+        <Field label="Sort"><input style={inputStyle} type="number" value={sortOrder} onChange={e => setSortOrder(parseInt(e.target.value)||0)}/></Field>
+      </div>
+      <label style={{display:"flex",gap:6,alignItems:"center",fontSize:13,marginBottom:10}}>
+        <input type="checkbox" checked={isVisible} onChange={e => setIsVisible(e.target.checked)}/>
+        Видна на витринах сайтов
+      </label>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn-primary" onClick={() => onSave({ brand_id: brandId, category_id: categoryId, display_name: name, slug, sort_order: sortOrder, is_visible: isVisible })}>Сохранить</button>
+        <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogModelForm({ onSubmit, onCancel, brands, categories }) {
+  const [brandId, setBrandId] = useState(brands[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [isVisible, setIsVisible] = useState(true);
+
+  return (
+    <div style={{padding:14,border:"2px solid var(--border)",borderRadius:8,marginBottom:12,background:"var(--bg2)"}}>
+      <div style={{fontWeight:600,marginBottom:10}}>Новая модель</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr",gap:10,marginBottom:10}}>
+        <Field label="Бренд">
+          <select style={inputStyle} value={brandId} onChange={e => setBrandId(e.target.value)}>
+            {brands.map(b => <option key={b.id} value={b.id}>{b.display_name}</option>)}
+          </select>
+        </Field>
+        <Field label="Категория">
+          <select style={inputStyle} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+          </select>
+        </Field>
+        <Field label="Название"><input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="iPhone 17 Pro"/></Field>
+        <Field label="Slug (опционально)" hint="auto"><input style={inputStyle} value={slug} onChange={e => setSlug(e.target.value)}/></Field>
+      </div>
+      <label style={{display:"flex",gap:6,alignItems:"center",fontSize:13,marginBottom:10}}>
+        <input type="checkbox" checked={isVisible} onChange={e => setIsVisible(e.target.checked)}/>
+        Видна сразу
+      </label>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn-primary" disabled={!name.trim() || !brandId || !categoryId} onClick={() => onSubmit({ brand_id: brandId, category_id: categoryId, display_name: name.trim(), slug: slug.trim() || null, is_visible: isVisible })}>Создать</button>
+        <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 function Shell({ user, token, onLogout, onRefreshUser }) {
   const [page,setPage]=useState(()=>{
@@ -6064,6 +6550,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     ...(isAdm
       ? [
           { divider: true },
+          { id: "catalog", icon: <Icon.catalog/>, label: "Каталог" },
           { id: "users", icon: <Icon.users/>, label: "Пользователи" },
           { id: "logs", icon: <Icon.logs/>, label: "Логи" },
           { id: "store-settings", icon: <Icon.gear/>, label: "Настройки" },
@@ -6079,6 +6566,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
     store: "Магазин",
     analytics: "Аналитика цен",
     "competitor-prices": "Цены конкурентов",
+    catalog: "Каталог: категории, бренды, модели",
     users: "Пользователи",
     logs: "Логи",
     "store-settings": "Настройки магазина",
@@ -6141,6 +6629,7 @@ function Shell({ user, token, onLogout, onRefreshUser }) {
           {page==="store"&&<StorePage user={user} token={token} activeStore={activeStore}/>}
           {page==="analytics"&&<AnalyticsPage user={user} token={token} activeStore={activeStore} onOpenProduct={openProduct}/>}
           {page==="competitor-prices"&&<CompetitorPricesPage user={user} token={token}/>}
+          {page==="catalog"&&isAdm&&<CatalogPage token={token} user={user}/>}
           {page==="users"&&isAdm&&<UsersPage token={token} currentUserId={user.id} />}
           {page==="logs"&&isAdm&&<LogsPage token={token} user={user} activeStore={activeStore} seesAll={seesAll} setActiveStore={setActiveStore}/>}
           {page==="store-settings"&&isAdm&&<StoreSettingsPage token={token} activeStore={activeStore}/>}

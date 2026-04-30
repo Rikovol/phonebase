@@ -86,6 +86,11 @@ class Product(Base):
 
     is_new: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
+    # Нормализованная ссылка на каталог (catalog_models). Заполняется импортом и при
+    # ручных правках; строковые brand/model/category выше остаются denormalized cache
+    # (читают фиды Avito и старые места). Согласовано с админкой «Каталог».
+    model_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("catalog_models.id"), nullable=True, index=True)
+
     site_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avito_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avito_title: Mapped[str | None] = mapped_column(String(50))
@@ -568,5 +573,61 @@ class HomeCard(Base):
     cta_href: Mapped[str | None] = mapped_column(String(500))
     cta_color: Mapped[str] = mapped_column(String(20), default="primary", nullable=False)  # primary | dark | gradient-orange
 
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+# ============================================================================
+# Нормализованный каталог: Категория → Бренд → Модель.
+# Глобальный для всех магазинов. Цены/остатки остаются per-store через Product.
+# ============================================================================
+
+
+class CatalogCategory(Base):
+    """Категория верхнего уровня меню: Смартфоны, Ноутбуки, Планшеты, …"""
+    __tablename__ = "catalog_categories"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    icon_url: Mapped[str | None] = mapped_column(String(500))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class CatalogBrand(Base):
+    """Бренд: Apple, Samsung, Xiaomi, …"""
+    __tablename__ = "catalog_brands"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    logo_url: Mapped[str | None] = mapped_column(String(500))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
+class CatalogModel(Base):
+    """Линейка модели: «iPhone 17 Pro», «Galaxy S26», «MacBook Pro 14"»."""
+    __tablename__ = "catalog_models"
+    __table_args__ = (
+        UniqueConstraint("brand_id", "slug", name="uq_catalog_models_brand_slug"),
+        Index("ix_catalog_models_category_brand", "category_id", "brand_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    brand_id: Mapped[str] = mapped_column(String(36), ForeignKey("catalog_brands.id"), nullable=False, index=True)
+    category_id: Mapped[str] = mapped_column(String(36), ForeignKey("catalog_categories.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    hero_image_url: Mapped[str | None] = mapped_column(String(500))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # is_visible=false → модель скрыта на витрине. Импорт 1С создаёт скрытыми; продавец
+    # вручную одобряет в админке (вкладка «Требуют проверки»).
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
