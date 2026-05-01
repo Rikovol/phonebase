@@ -837,8 +837,6 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, color, token
   const [rotating, setRotating] = useState(false);
   const [photoVer, setPhotoVer] = useState(Date.now());
   const fileRef = useRef(null);
-  const [scraping, setScraping] = useState(false);
-  const [scrapeMsg, setScrapeMsg] = useState("");
 
   const loadPhotos = async () => {
     setLoadErr("");
@@ -849,23 +847,6 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, color, token
     } catch (e) {
       setLoadErr(e.message || "Ошибка загрузки");
     }
-  };
-
-  const doScrapeBiggeek = async () => {
-    setScraping(true); setScrapeMsg("");
-    try {
-      const params = new URLSearchParams({ store_id: storeId, brand: brand || "", model: model || "", storage: storage || "", color: color || "" });
-      const r = await apiFetch(`/catalog-photos/scrape-biggeek?${params}`, { token, method: "POST" });
-      if (r.saved > 0) {
-        setScrapeMsg(`Загружено ${r.saved} из ${r.found} фото`);
-        await loadPhotos();
-      } else {
-        setScrapeMsg(r.message || "Изображения не найдены");
-      }
-    } catch (e) {
-      setScrapeMsg(e.message || "Ошибка парсинга");
-    }
-    setScraping(false);
   };
 
   useEffect(() => {
@@ -988,18 +969,7 @@ function CatalogPhotoGalleryModal({ storeId, brand, model, storage, color, token
                     {uploading?<><span className="spinner"/> Загрузка...</>:`Загрузить (${uploadFiles.length})`}
                   </button>
                 )}
-                {user?.role === "admin" && (
-                  <button type="button" className="btn btn-sm btn-outline" disabled={scraping || uploading} onClick={doScrapeBiggeek} style={{display:"inline-flex",alignItems:"center",gap:5}} title="Парсинг изображений с biggeek.ru">
-                    {scraping ? <><span className="spinner"/> Парсинг...</> : "Парсинг BigGeek"}
-                  </button>
-                )}
               </div>
-              {user?.role === "admin" && (
-                <div style={{marginTop:6,fontSize:11,color:"var(--danger)",lineHeight:1.4}}>
-                  Парсинг с BigGeek — прямой HTTP. Фото подбираются по бренду, модели, памяти и цвету.
-                </div>
-              )}
-              {scrapeMsg && <div style={{marginTop:6,fontSize:12,color: scrapeMsg.includes("Ошибка") || scrapeMsg.includes("не найден") ? "var(--danger)" : "var(--accent)"}}>{scrapeMsg}</div>}
             </div>
           )}
           <div className="mf">
@@ -2869,9 +2839,6 @@ function StoreSettingsPage({ token, activeStore }) {
   // Webhook
   const [webhookBusy, setWebhookBusy] = useState(false);
   const [webhookMsg, setWebhookMsg] = useState("");
-  // BigGeek scraper
-  const [scrapeBusy, setScrapeBusy] = useState(false);
-  const [scrapeResult, setScrapeResult] = useState("");
   // 1С integration
   const [onecUrl, setOnecUrl] = useState("");
   const [onecNewUrl, setOnecNewUrl] = useState("");
@@ -3106,43 +3073,6 @@ function StoreSettingsPage({ token, activeStore }) {
               </button>
             </div>
             {onecSyncMsg && <div style={{marginTop:8,fontSize:12,color: onecSyncMsg.includes("Ошибка") || onecSyncMsg.includes("Сначала") ? "var(--danger)" : "var(--accent)"}}>{onecSyncMsg}</div>}
-          </div>}
-        </div>
-
-        {/* ── Парсинг фото BigGeek ─────────────────────── */}
-        <div className="panel" style={{marginBottom:16}}>
-          <SectionHead id="biggeek" title="Парсинг фото — BigGeek"/>
-          {openSections.has("biggeek") && <div className="pb2">
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14,lineHeight:1.6}}>
-              Автоматический поиск и загрузка фотографий новых товаров с сайта biggeek.ru.<br/>
-              Парсятся только товары, у которых ещё нет каталожных фото.
-            </div>
-            <button
-              type="button" className="btn btn-primary"
-              disabled={scrapeBusy || !current?.id}
-              onClick={async () => {
-                setScrapeBusy(true); setScrapeResult("");
-                try {
-                  const r = await apiFetch(`/catalog-photos/scrape-biggeek-all?store_id=${current.id}`, { token, method: "POST" });
-                  let msg = "";
-                  if (r.scraped > 0) {
-                    msg = `Обработано ${r.processed} наименований (${r.stores_count || 1} маг.): загружено ${r.total_saved} фото для ${r.scraped} товаров, пропущено ${r.skipped}`;
-                  } else {
-                    msg = r.message || "Нет товаров для парсинга";
-                  }
-                  if (r.cleaned > 0) msg += `. Удалено ${r.cleaned} записей-призраков (файлы отсутствовали)`;
-                  if (r.errors?.length) msg += `. Ошибки: ${r.errors.join("; ")}`;
-                  setScrapeResult(msg);
-                } catch (e) { setScrapeResult(e.message || "Ошибка парсинга"); }
-                setScrapeBusy(false);
-              }}
-            >
-              {scrapeBusy ? <><span className="spinner"/> Парсинг каталога…</> : "Парсинг фото каталога"}
-            </button>
-            <div style={{marginTop:6,fontSize:11,color:"var(--danger)",lineHeight:1.4}}>
-              Прямой парсинг biggeek.ru по всем магазинам. Фото подбираются по бренду, модели, памяти и цвету. Пауза 1 сек между товарами.
-            </div>
-            {scrapeResult && <div style={{marginTop:8,fontSize:12,color: scrapeResult.includes("Ошибка") || scrapeResult.includes("не настроен") ? "var(--danger)" : "var(--accent)"}}>{scrapeResult}</div>}
           </div>}
         </div>
 
