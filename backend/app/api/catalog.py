@@ -241,7 +241,7 @@ async def update_category(
     return _category_out(obj, models_count=cnt)
 
 
-@router.delete("/categories/{category_id}", status_code=204)
+@router.delete("/categories/{category_id}", status_code=204, response_model=None)
 async def delete_category(
     category_id: str,
     db: AsyncSession = Depends(get_db),
@@ -372,7 +372,7 @@ async def update_brand(
     return _brand_out(obj, models_count=cnt)
 
 
-@router.delete("/brands/{brand_id}", status_code=204)
+@router.delete("/brands/{brand_id}", status_code=204, response_model=None)
 async def delete_brand(
     brand_id: str,
     db: AsyncSession = Depends(get_db),
@@ -573,7 +573,7 @@ async def update_model(
     return _model_out(obj, brand=brand, category=category, products_count=cnt)
 
 
-@router.delete("/models/{model_id}", status_code=204)
+@router.delete("/models/{model_id}", status_code=204, response_model=None)
 async def delete_model(
     model_id: str,
     db: AsyncSession = Depends(get_db),
