@@ -554,6 +554,19 @@ async def migrate_create_catalog_tables() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_catalog_models_category_brand ON catalog_models(category_id, brand_id)"
             ))
 
+            # 1a. Идемпотентно проставляем DEFAULT'ы на уже существующих таблицах:
+            # на проде таблицы могли быть созданы SQLAlchemy create_all() ранее,
+            # когда в моделях не было server_default → raw INSERT ниже падает на
+            # NotNullViolation для sort_order/is_visible/created_at/updated_at.
+            for tbl in ("catalog_categories", "catalog_brands", "catalog_models"):
+                await session.execute(text(f"""
+                    ALTER TABLE {tbl}
+                        ALTER COLUMN sort_order SET DEFAULT 0,
+                        ALTER COLUMN is_visible SET DEFAULT TRUE,
+                        ALTER COLUMN created_at SET DEFAULT NOW(),
+                        ALTER COLUMN updated_at SET DEFAULT NOW()
+                """))
+
             # 2. Добавляем products.model_id если нет
             res = await session.execute(text(
                 "SELECT column_name FROM information_schema.columns "

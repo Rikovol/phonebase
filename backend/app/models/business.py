@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -591,10 +591,10 @@ class CatalogCategory(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     icon_url: Mapped[str | None] = mapped_column(String(500))
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=text("now()"), nullable=False)
 
 
 class CatalogBrand(Base):
@@ -605,10 +605,10 @@ class CatalogBrand(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     logo_url: Mapped[str | None] = mapped_column(String(500))
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=text("now()"), nullable=False)
 
 
 class CatalogModel(Base):
@@ -625,9 +625,9 @@ class CatalogModel(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     display_name: Mapped[str] = mapped_column(String(160), nullable=False)
     hero_image_url: Mapped[str | None] = mapped_column(String(500))
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     # is_visible=false → модель скрыта на витрине. Импорт 1С создаёт скрытыми; продавец
     # вручную одобряет в админке (вкладка «Требуют проверки»).
-    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=text("now()"), nullable=False)
