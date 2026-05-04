@@ -44,7 +44,7 @@ async def _run_once() -> None:
         logger.warning("auto-import: no admin user found, skipping")
         return
 
-    if is_import_source_configured():
+    if await is_import_source_configured():
         async with AsyncSessionLocal() as db:
             try:
                 result = await run_configured_import(db, user_id)
@@ -61,7 +61,7 @@ async def _run_once() -> None:
             except Exception:
                 logger.exception("auto-import used failed")
 
-    if is_import_new_source_configured():
+    if await is_import_new_source_configured():
         async with AsyncSessionLocal() as db:
             try:
                 result = await run_configured_import_new(db, user_id)
