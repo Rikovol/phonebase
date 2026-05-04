@@ -84,5 +84,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str | None = None
     TELEGRAM_BOT_USERNAME: str | None = None  # без @, нужен для Telegram Login Widget на сайте
 
+    # Leads (Mobless Studio) — куда форс-форвардить заявки с публичной формы
+    LEADS_CHAT_ID: str = "993678231"
+
 
 settings = Settings()

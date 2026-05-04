@@ -5,18 +5,16 @@ Uses TELEGRAM_BOT_TOKEN from env (same bot used for phonebase ops chat).
 """
 from __future__ import annotations
 
-import time
+import html
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
+from app.core.limiter import limiter
 
 router = APIRouter()
-
-# Anton's personal chat — leads go directly to him
-MOBLESS_CHAT_ID = "993678231"
 
 PROJECT_TYPES = {
     "website": "Веб-сайт",
@@ -48,75 +46,54 @@ class MoblessLead(BaseModel):
         return v.strip() if isinstance(v, str) else v
 
 
-# In-memory rate limiter — survives only as long as the worker process
-_RATE: dict[str, list[float]] = {}
-_RATE_WINDOW = 60.0   # seconds
-_RATE_LIMIT = 5       # max submissions per window per IP
-
-
-def _rate_limited(ip: str) -> bool:
-    now = time.time()
-    bucket = _RATE.setdefault(ip, [])
-    bucket[:] = [t for t in bucket if now - t < _RATE_WINDOW]
-    if len(bucket) >= _RATE_LIMIT:
-        return True
-    bucket.append(now)
-    return False
-
-
-def _escape_md(text: str) -> str:
-    """Telegram MarkdownV2 has many reserved chars; we use the legacy 'Markdown'
-    parse_mode which only needs minimal escaping. Just neutralize backticks/asterisks
-    that would break formatting."""
-    return text.replace("`", "'").replace("*", "·").replace("_", " ")
-
-
 def _format_message(lead: MoblessLead, ip: str) -> str:
+    # Telegram HTML parse_mode: безопасно для URL, скобок, кавычек.
+    # Экранируем пользовательский ввод через html.escape, статичный текст — нет.
+    e = html.escape
     pt = PROJECT_TYPES.get(lead.project_type or "", lead.project_type or "—")
     bg = BUDGETS.get(lead.budget or "", lead.budget or "—")
     lines = [
-        "🆕 *Заявка с сайта Mobless*",
+        "🆕 <b>Заявка с сайта Mobless</b>",
         "",
-        f"👤 *Имя:* {_escape_md(lead.name)}",
-        f"✉️ *Email:* `{_escape_md(lead.email)}`",
+        f"👤 <b>Имя:</b> {e(lead.name)}",
+        f"✉️ <b>Email:</b> <code>{e(lead.email)}</code>",
     ]
     if lead.phone:
-        lines.append(f"📞 *Телефон:* `{_escape_md(lead.phone)}`")
-    lines.append(f"🎯 *Тип проекта:* {pt}")
-    lines.append(f"💰 *Бюджет:* {bg}")
+        lines.append(f"📞 <b>Телефон:</b> <code>{e(lead.phone)}</code>")
+    lines.append(f"🎯 <b>Тип проекта:</b> {e(pt)}")
+    lines.append(f"💰 <b>Бюджет:</b> {e(bg)}")
     if lead.message:
         lines.append("")
-        lines.append("💬 *Сообщение:*")
-        lines.append(_escape_md(lead.message))
+        lines.append("💬 <b>Сообщение:</b>")
+        lines.append(e(lead.message))
     lines.append("")
-    lines.append(f"🌐 IP: `{ip}`")
+    lines.append(f"🌐 IP: <code>{e(ip)}</code>")
     return "\n".join(lines)
 
 
 @router.post("/mobless")
-async def submit_mobless_lead(payload: MoblessLead, request: Request):
+@limiter.limit("5/minute")
+async def submit_mobless_lead(request: Request, payload: MoblessLead):
     """Public endpoint — accepts a lead from the Mobless contact form,
-    posts it to Telegram. No auth (public form), but honeypot + rate limit."""
+    posts it to Telegram. No auth (public form), but honeypot + rate limit
+    (Redis-backed через slowapi)."""
     # Honeypot: bots fill the hidden 'website' field. Silently accept and discard.
     if payload.website:
         return {"ok": True}
-
-    ip = request.client.host if request.client else "unknown"
-    if _rate_limited(ip):
-        raise HTTPException(status_code=429, detail="Слишком много заявок, попробуйте позже")
 
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
         raise HTTPException(status_code=503, detail="Lead handling not configured")
 
+    ip = request.client.host if request.client else "unknown"
     text = _format_message(payload, ip)
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(url, json={
-                "chat_id": MOBLESS_CHAT_ID,
+                "chat_id": settings.LEADS_CHAT_ID,
                 "text": text,
-                "parse_mode": "Markdown",
+                "parse_mode": "HTML",
                 "disable_web_page_preview": True,
             })
             r.raise_for_status()
