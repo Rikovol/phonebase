@@ -73,7 +73,7 @@ def _format_message(lead: MoblessLead, ip: str) -> str:
 
 @router.post("/mobless")
 @limiter.limit("5/minute")
-async def submit_mobless_lead(request: Request, payload: MoblessLead):
+async def submit_mobless_lead(payload: MoblessLead, request: Request):
     """Public endpoint — accepts a lead from the Mobless contact form,
     posts it to Telegram. No auth (public form), but honeypot + rate limit
     (Redis-backed через slowapi)."""
