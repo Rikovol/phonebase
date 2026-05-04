@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
@@ -73,7 +73,7 @@ def _format_message(lead: MoblessLead, ip: str) -> str:
 
 @router.post("/mobless")
 @limiter.limit("5/minute")
-async def submit_mobless_lead(payload: MoblessLead, request: Request):
+async def submit_mobless_lead(request: Request, payload: MoblessLead = Body(...)):
     """Public endpoint — accepts a lead from the Mobless contact form,
     posts it to Telegram. No auth (public form), but honeypot + rate limit
     (Redis-backed через slowapi)."""
