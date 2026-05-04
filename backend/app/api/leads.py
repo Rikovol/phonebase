@@ -3,8 +3,6 @@ and forwards them to Telegram via the @borisclaudebot.
 
 Uses TELEGRAM_BOT_TOKEN from env (same bot used for phonebase ops chat).
 """
-from __future__ import annotations
-
 import html
 
 import httpx
