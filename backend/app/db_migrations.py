@@ -539,6 +539,7 @@ async def migrate_create_catalog_tables() -> None:
                     hero_image_url VARCHAR(500),
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+                    auto_created BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     CONSTRAINT uq_catalog_models_brand_slug UNIQUE (brand_id, slug)
@@ -566,6 +567,36 @@ async def migrate_create_catalog_tables() -> None:
                         ALTER COLUMN created_at SET DEFAULT NOW(),
                         ALTER COLUMN updated_at SET DEFAULT NOW()
                 """))
+
+            # 1b. Колонка catalog_models.auto_created — историческая отметка
+            # «создано импортом 1С». Счётчик «Требуют проверки» = auto_created=true
+            # AND is_visible=false (Codex r8: ручное скрытие approved-моделей
+            # больше не попадает в очередь). Идемпотентный ADD COLUMN + одноразовый
+            # бэкфил для существующих скрытых моделей (на проде сейчас все is_visible=false
+            # созданы импортом).
+            await session.execute(text(
+                "ALTER TABLE catalog_models "
+                "ADD COLUMN IF NOT EXISTS auto_created BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            backfill_res = await session.execute(text(
+                "UPDATE catalog_models SET auto_created = TRUE "
+                "WHERE is_visible = FALSE AND auto_created = FALSE"
+            ))
+            if (backfill_res.rowcount or 0) > 0:
+                logger.info(
+                    "catalog_models.auto_created: backfilled %d hidden rows",
+                    backfill_res.rowcount,
+                )
+            # Partial index для needs_review — Qwen flagged: при росте каталога
+            # фильтр (auto_created AND NOT is_visible) даст seq scan. Partial
+            # index маленький (только модели в очереди review) и идемпотентен.
+            # CONCURRENTLY нельзя — мы в транзакции; на текущем объёме locks
+            # незаметны.
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_catalog_models_review "
+                "ON catalog_models (auto_created, is_visible) "
+                "WHERE auto_created = TRUE AND is_visible = FALSE"
+            ))
 
             # 2. Добавляем products.model_id если нет
             res = await session.execute(text(

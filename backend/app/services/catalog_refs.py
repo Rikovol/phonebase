@@ -165,6 +165,7 @@ async def _find_or_create_model(
                 slug=slug,
                 display_name=model_name,
                 is_visible=False,
+                auto_created=True,
             )
             db.add(obj)
             await db.flush()

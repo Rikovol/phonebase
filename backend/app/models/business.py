@@ -629,5 +629,10 @@ class CatalogModel(Base):
     # is_visible=false → модель скрыта на витрине. Импорт 1С создаёт скрытыми; продавец
     # вручную одобряет в админке (вкладка «Требуют проверки»).
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    # Историческая отметка: модель создана автоматически импортом 1С (catalog_refs).
+    # Счётчик «Требуют проверки» = auto_created=true AND is_visible=false. Когда
+    # продавец вручную скрывает уже одобренную модель — auto_created остаётся как
+    # был (false для ручных) → она не попадает в очередь review. Codex r8.
+    auto_created: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=text("now()"), nullable=False)

@@ -403,7 +403,7 @@ async def list_models(
     brand_id: str | None = Query(None),
     category_id: str | None = Query(None),
     q: str | None = Query(None, description="Поиск по display_name"),
-    needs_review: bool = Query(False, description="Только скрытые (созданные импортом)"),
+    needs_review: bool = Query(False, description="Только авто-созданные импортом и ещё скрытые (auto_created=true AND is_visible=false)"),
     include_hidden: bool = Query(True),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -412,7 +412,9 @@ async def list_models(
 ) -> ModelsListOut:
     """Список моделей с фильтрами, счётчиками товаров и общим total для пагинации.
 
-    needs_review=true → принудительно is_visible=false (включает include_hidden).
+    needs_review=true → auto_created=true AND is_visible=false (включает
+    include_hidden). Codex r8: ручное скрытие approved-моделей не должно
+    попадать в очередь review — поэтому проверяем оба флага.
     Сортировка по бренду+категории+названию для предсказуемости.
     """
     # Общий фильтр выносим в отдельный список — переиспользуем для page query и count.
@@ -424,6 +426,7 @@ async def list_models(
     if q:
         filters.append(CatalogModel.display_name.ilike(f"%{q.strip()}%"))
     if needs_review:
+        filters.append(CatalogModel.auto_created.is_(True))
         filters.append(CatalogModel.is_visible.is_(False))
     elif not include_hidden:
         filters.append(CatalogModel.is_visible.is_(True))
