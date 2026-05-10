@@ -636,3 +636,61 @@ class CatalogModel(Base):
     auto_created: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=text("now()"), nullable=False)
+
+
+# ============================================================================
+# E-commerce: Cart + CartItem (server-state корзина по SiteVisitor cookie)
+# Спека: docs/superpowers/specs/2026-05-06-mobileax-apple-redesign-design.md §3.1
+# ============================================================================
+
+
+class Cart(Base):
+    """Server-state корзина — одна на SiteVisitor (1:1).
+
+    На submit checkout-формы превращается в Order (snapshot всех CartItem'ов).
+    """
+    __tablename__ = "carts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    visitor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("site_visitors.id"), nullable=False, unique=True, index=True
+    )
+    store_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stores.id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_now,
+        onupdate=_now,
+        server_default=text("now()"),
+        nullable=False,
+    )
+
+
+class CartItem(Base):
+    """Позиция в корзине — ссылка на Product + quantity.
+
+    UNIQUE (cart_id, product_id) — добавление того же товара повторно
+    делает PATCH quantity, а не вторую строку.
+    """
+    __tablename__ = "cart_items"
+    __table_args__ = (
+        UniqueConstraint("cart_id", "product_id", name="uq_cart_items_cart_product"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    cart_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("carts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    product_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("products.id"), nullable=False, index=True
+    )
+    quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False
+    )
