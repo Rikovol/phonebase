@@ -27,7 +27,7 @@ async def test_catalog_nonexistent_store_returns_404():
     assert r.status_code == 404
 
 
-@pytest.mark.skip(reason="requires DB: get_active_store SELECT по stores происходит до validation")
+@pytest.mark.skip(reason="requires DB: get_active_store / get_site_visitor dependency срабатывает до Pydantic validation")
 @pytest.mark.asyncio
 async def test_catalog_missing_condition_returns_422():
     """GET /api/sites/{store_id}/catalog без обязательного ?condition → 422."""
@@ -86,7 +86,7 @@ async def test_post_messages_tradein_without_fields_rejected():
 
 # ── Тесты, требующие БД (интеграционные) ──────────────────────────────────────
 
-@pytest.mark.skip(reason="requires DB: PostgreSQL via Docker Compose")
+@pytest.mark.skip(reason="requires DB: get_active_store / get_site_visitor dependency срабатывает до Pydantic validation")
 @pytest.mark.asyncio
 async def test_messages_my_without_auth_returns_401():
     """GET /api/sites/{store_id}/messages/my без cookie → 401.
@@ -100,7 +100,7 @@ async def test_messages_my_without_auth_returns_401():
     assert r.status_code == 401
 
 
-@pytest.mark.skip(reason="requires DB: PostgreSQL via Docker Compose")
+@pytest.mark.skip(reason="requires DB: get_active_store / get_site_visitor dependency срабатывает до Pydantic validation")
 @pytest.mark.asyncio
 async def test_promotions_public_no_auth_required():
     """GET /api/sites/{store_id}/promotions не требует cookie — должен возвращать 200.
