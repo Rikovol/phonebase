@@ -382,3 +382,185 @@ async def clear_cart(
         text("DELETE FROM cart_items WHERE cart_id = :cid"), {"cid": cart.id}
     )
     await db.commit()
+
+
+# ─── TG уведомление продавцу при новом заказе (паттерн leads.py) ─────────────
+
+async def _notify_tg_about_order(order: Order, items: list[OrderItem]) -> None:
+    """Шлёт TG-уведомление с деталями заказа в settings.LEADS_CHAT_ID.
+
+    Best-effort — не блокирует 201 на ошибке TG. HTML parse_mode + html.escape
+    для пользовательского ввода (паттерн leads.py v1.5.4).
+    """
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return
+
+    e = html.escape
+    contact = order.contact
+    delivery = order.delivery
+    items_text = "\n".join([
+        f"• {e(it.product_snapshot.get('name') or it.product_snapshot.get('model') or '?')} "
+        f"× {it.quantity} = {it.unit_price * it.quantity} ₽"
+        for it in items
+    ])
+
+    lines = [
+        f"🆕 <b>Новый заказ #{order.id[:8]}</b>",
+        "",
+        f"👤 <b>{e(contact.get('name', ''))}</b>",
+        f"📞 <code>{e(contact.get('phone', ''))}</code>",
+    ]
+    if contact.get("email"):
+        lines.append(f"✉️ {e(contact['email'])}")
+
+    lines.extend([
+        "",
+        f"🚚 <b>Доставка:</b> {e(delivery.get('type', ''))}",
+    ])
+    if delivery.get("address"):
+        lines.append(f"📍 {e(delivery['address'])}")
+    if delivery.get("city"):
+        lines.append(f"🏙 {e(delivery['city'])}")
+
+    lines.extend([
+        "",
+        "🛒 <b>Товары:</b>",
+        items_text,
+        "",
+        f"💰 <b>Итого: {order.total_price} ₽</b>",
+    ])
+    if contact.get("comment"):
+        lines.append("")
+        lines.append(f"💬 {e(contact['comment'])}")
+
+    text_msg = "\n".join(lines)
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(url, json={
+                "chat_id": settings.LEADS_CHAT_ID,
+                "text": text_msg,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            })
+            r.raise_for_status()
+    except httpx.HTTPError:
+        logger.exception("TG order notification failed (не блокирующий)")
+
+
+# ─── Order endpoints (public POST — admin GET/PATCH/SSE в Task 10) ───────────
+
+@router.post("/sites/{store_id}/orders", response_model=OrderOut, status_code=201)
+@limiter.limit("5/minute")
+async def create_order(
+    request: Request,
+    payload: OrderCreateIn = Body(...),
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> OrderOut:
+    """Создаёт заказ из текущей корзины visitor'а:
+    1. SELECT Cart + CartItems JOIN Product с eager photos.
+    2. Snapshot каждого товара (name/brand/storage/color/condition/image_url) → JSONB.
+    3. INSERT Order + OrderItem'ы со snapshot'ами.
+    4. DELETE FROM cart_items (очищаем корзину).
+    5. publish_new_order Redis + _notify_tg_about_order (best-effort, ПОСЛЕ commit).
+    6. Returns OrderOut.
+    """
+    from sqlalchemy.orm import selectinload  # local import per Task 7 паттерн
+
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    cart = (await db.execute(
+        select(Cart).where(Cart.visitor_id == visitor.id, Cart.store_id == store.id)
+    )).scalar_one_or_none()
+    if cart is None:
+        raise HTTPException(status_code=400, detail="Корзина пуста")
+
+    rows = (await db.execute(
+        select(CartItem, Product)
+        .join(Product, Product.id == CartItem.product_id)
+        .options(selectinload(Product.photos))
+        .where(CartItem.cart_id == cart.id)
+    )).all()
+    if not rows:
+        raise HTTPException(status_code=400, detail="Корзина пуста")
+
+    # 1. Snapshot + total
+    total = Decimal("0")
+    snapshots: list[tuple[Product, int, Decimal]] = []
+    for ci, p in rows:
+        unit_price = p.price_retail or Decimal("0")
+        total += unit_price * ci.quantity
+        snapshots.append((p, ci.quantity, unit_price))
+
+    # 2. Create Order
+    order = Order(
+        store_id=store.id,
+        visitor_id=visitor.id,
+        status=OrderStatus.NEW.value,
+        contact=payload.contact.model_dump(exclude_none=True),
+        delivery=payload.delivery.model_dump(exclude_none=True),
+        total_price=total,
+    )
+    db.add(order)
+    await db.flush()  # получаем order.id
+
+    # 3. Create OrderItem'ы со snapshot'ами
+    order_items: list[OrderItem] = []
+    for p, qty, unit_price in snapshots:
+        main_photo = next((ph.file_path for ph in p.photos if ph.is_main), None)
+        if main_photo is None and p.photos:
+            main_photo = p.photos[0].file_path
+        snap = {
+            "name": p.model or "",
+            "brand": p.brand,
+            "model": p.model,
+            "storage": p.storage,
+            "color": p.color,
+            "condition": p.condition,
+            "image_url": main_photo,
+        }
+        oi = OrderItem(
+            order_id=order.id,
+            product_id=p.id,
+            product_snapshot=snap,
+            quantity=qty,
+            unit_price=unit_price,
+        )
+        db.add(oi)
+        order_items.append(oi)
+
+    # 4. Clear cart (используем уже импортированный text())
+    await db.execute(
+        text("DELETE FROM cart_items WHERE cart_id = :cid"), {"cid": cart.id}
+    )
+
+    await db.commit()
+    await db.refresh(order)
+
+    # 5. Notifications (best-effort ПОСЛЕ commit)
+    from app.core.redis_pubsub import publish_new_order
+    await publish_new_order(order.id, store.id, str(total))
+    await _notify_tg_about_order(order, order_items)
+
+    return OrderOut(
+        id=order.id,
+        store_id=order.store_id,
+        status=order.status,
+        contact=order.contact,
+        delivery=order.delivery,
+        total_price=order.total_price,
+        comment=order.comment,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        items=[OrderItemOut(
+            id=oi.id,
+            product_id=oi.product_id,
+            product_snapshot=oi.product_snapshot,
+            quantity=oi.quantity,
+            unit_price=oi.unit_price,
+        ) for oi in order_items],
+    )
