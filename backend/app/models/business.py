@@ -528,12 +528,15 @@ class HomeSection(Base):
     """
     __tablename__ = "home_sections"
     __table_args__ = (
-        UniqueConstraint("store_id", "key", name="uq_home_sections_store_key"),
+        UniqueConstraint("store_id", "key", "target_brand", name="uq_home_sections_store_key_brand"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     store_id: Mapped[str] = mapped_column(String(36), ForeignKey("stores.id"), nullable=False, index=True)
     key: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_brand: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="", server_default=text("''"),
+    )
     title: Mapped[str | None] = mapped_column(String(200))  # для админа, на сайте обычно не показываем
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

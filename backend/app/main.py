@@ -27,6 +27,7 @@ from app.db_migrations import (
     migrate_create_avito_tables,
     migrate_create_catalog_tables,
     migrate_create_ecommerce_tables,
+    migrate_extend_home_sections_target_brand,
     migrate_info_clear_store,
     migrate_legacy_role_manager_to_staff,
     migrate_seed_competitor_prices,
@@ -60,6 +61,7 @@ async def lifespan(app: FastAPI):
     await migrate_widen_staff_log_columns()
     await migrate_seed_home_blocks()
     await migrate_create_catalog_tables()
+    await migrate_extend_home_sections_target_brand()
     await migrate_create_ecommerce_tables()
 
     from app.services.auto_import import auto_import_loop

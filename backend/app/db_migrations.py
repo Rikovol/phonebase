@@ -867,3 +867,56 @@ async def migrate_create_ecommerce_tables() -> None:
     except Exception:
         logger.exception("Миграция v1.6.0 e-commerce упала")
         raise
+
+
+async def migrate_extend_home_sections_target_brand() -> None:
+    """v1.6.0 — добавляет home_sections.target_brand для catalog landings.
+
+    NOT NULL DEFAULT '' (пустая строка) — потому что PG `NULL ≠ NULL`
+    сломал бы UNIQUE (две записи с target_brand=NULL считались бы разными).
+    Расширяем UNIQUE с (store_id, key) до (store_id, key, target_brand):
+      target_brand=''     — блоки главной (hero, catalog_grid, scroller)
+      target_brand='Apple'/'Samsung'/... — блоки на /catalog/[brand]
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            # 1. Колонка (idempotent через IF NOT EXISTS)
+            await session.execute(text(
+                "ALTER TABLE home_sections "
+                "ADD COLUMN IF NOT EXISTS target_brand VARCHAR(100) NOT NULL DEFAULT ''"
+            ))
+
+            # 2. Drop старого UNIQUE constraint (idempotent)
+            await session.execute(text(
+                "ALTER TABLE home_sections "
+                "DROP CONSTRAINT IF EXISTS uq_home_sections_store_key"
+            ))
+
+            # 3. Add нового UNIQUE constraint. Idempotent через проверку pg_constraint
+            # (Postgres не поддерживает ADD CONSTRAINT IF NOT EXISTS до v18).
+            await session.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'uq_home_sections_store_key_brand'
+                    ) THEN
+                        ALTER TABLE home_sections
+                        ADD CONSTRAINT uq_home_sections_store_key_brand
+                        UNIQUE (store_id, key, target_brand);
+                    END IF;
+                END $$;
+            """))
+
+            # 4. Partial index — ускоряет поиск catalog_brand_* блоков
+            # (где target_brand != ''), главная использует UNIQUE constraint
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_home_sections_target_brand "
+                "ON home_sections(target_brand) WHERE target_brand <> ''"
+            ))
+
+            await session.commit()
+            logger.info("Миграция v1.6.0: home_sections.target_brand добавлен + UNIQUE swap")
+    except Exception:
+        logger.exception("Миграция v1.6.0 home_sections.target_brand упала")
+        raise
