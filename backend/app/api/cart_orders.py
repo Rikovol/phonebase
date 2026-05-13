@@ -242,3 +242,127 @@ async def get_cart(
     cart = await _get_or_create_cart(db, visitor, store)
     await db.commit()  # commit на случай создания пустой
     return await _build_cart_out(db, cart)
+
+
+@router.post("/sites/{store_id}/cart/items", response_model=CartOut, status_code=201)
+@limiter.limit("10/minute")
+async def add_cart_item(
+    request: Request,
+    payload: CartItemIn = Body(...),
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> CartOut:
+    """Добавить товар в корзину. Если product_id уже есть — увеличиваем quantity (cap 99)."""
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    # Verify product exists in this store (security + sanity)
+    product = (await db.execute(
+        select(Product).where(Product.id == payload.product_id, Product.store_id == store.id)
+    )).scalar_one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Товар не найден в этом магазине")
+
+    cart = await _get_or_create_cart(db, visitor, store)
+
+    # Upsert по UNIQUE (cart_id, product_id)
+    existing = (await db.execute(
+        select(CartItem).where(
+            CartItem.cart_id == cart.id, CartItem.product_id == payload.product_id
+        )
+    )).scalar_one_or_none()
+    if existing is not None:
+        existing.quantity = min(existing.quantity + payload.quantity, 99)
+    else:
+        db.add(CartItem(
+            cart_id=cart.id, product_id=payload.product_id, quantity=payload.quantity
+        ))
+
+    await db.commit()
+    return await _build_cart_out(db, cart)
+
+
+@router.patch("/sites/{store_id}/cart/items/{item_id}", response_model=CartOut)
+@limiter.limit("20/minute")
+async def update_cart_item(
+    request: Request,
+    item_id: str,
+    payload: CartItemPatch = Body(...),
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> CartOut:
+    """Изменить quantity конкретной позиции. Только в своей корзине (по visitor_id)."""
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    item = (await db.execute(
+        select(CartItem).join(Cart, Cart.id == CartItem.cart_id).where(
+            CartItem.id == item_id, Cart.visitor_id == visitor.id
+        )
+    )).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Позиция не найдена в вашей корзине")
+
+    item.quantity = payload.quantity
+    await db.commit()
+
+    cart = await _get_or_create_cart(db, visitor, store)
+    return await _build_cart_out(db, cart)
+
+
+@router.delete(
+    "/sites/{store_id}/cart/items/{item_id}",
+    response_model=CartOut,
+    response_model_exclude_none=False,
+)
+@limiter.limit("20/minute")
+async def remove_cart_item(
+    request: Request,
+    item_id: str,
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> CartOut:
+    """Удалить позицию из своей корзины. Возвращает обновлённую корзину."""
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    item = (await db.execute(
+        select(CartItem).join(Cart, Cart.id == CartItem.cart_id).where(
+            CartItem.id == item_id, Cart.visitor_id == visitor.id
+        )
+    )).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Позиция не найдена в вашей корзине")
+
+    await db.delete(item)
+    await db.commit()
+
+    cart = await _get_or_create_cart(db, visitor, store)
+    return await _build_cart_out(db, cart)
+
+
+@router.delete("/sites/{store_id}/cart", status_code=204, response_model=None)
+@limiter.limit("5/minute")
+async def clear_cart(
+    request: Request,
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Очистить корзину visitor'а целиком. 204 No Content."""
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    cart = (await db.execute(
+        select(Cart).where(Cart.visitor_id == visitor.id)
+    )).scalar_one_or_none()
+    if cart is None:
+        return  # nothing to clear — 204
+
+    await db.execute(
+        text("DELETE FROM cart_items WHERE cart_id = :cid"), {"cid": cart.id}
+    )
+    await db.commit()
