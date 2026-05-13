@@ -150,3 +150,78 @@ class OrderStatusPatch(BaseModel):
         if v not in valid:
             raise ValueError(f"status must be one of {sorted(valid)}")
         return v
+
+
+# ─── Cart endpoints (public, требуют SiteVisitor cookie) ─────────────────────
+
+
+async def _get_or_create_cart(
+    db: AsyncSession, visitor: SiteVisitor, store: Store
+) -> Cart:
+    """Возвращает корзину visitor'а или создаёт пустую.
+
+    Помещает store_id из URL — у visitor может быть только одна корзина (UNIQUE),
+    но store_id в записи фиксируется при создании.
+    Caller отвечает за commit (мы не коммитим внутри helper).
+    """
+    cart = (await db.execute(
+        select(Cart).where(Cart.visitor_id == visitor.id)
+    )).scalar_one_or_none()
+    if cart is None:
+        cart = Cart(visitor_id=visitor.id, store_id=store.id)
+        db.add(cart)
+        await db.flush()
+    return cart
+
+
+async def _build_cart_out(db: AsyncSession, cart: Cart) -> CartOut:
+    """Загружает items + JOIN Product (с eager-load photos) для имени/цены/фото и считает total."""
+    from sqlalchemy.orm import selectinload  # local import to avoid module-level overhead
+
+    rows = (await db.execute(
+        select(CartItem, Product)
+        .join(Product, Product.id == CartItem.product_id)
+        .options(selectinload(Product.photos))
+        .where(CartItem.cart_id == cart.id)
+        .order_by(CartItem.created_at)
+    )).all()
+
+    items: list[CartItemOut] = []
+    total = Decimal("0")
+    for ci, p in rows:
+        unit_price = p.price_retail or Decimal("0")
+        total += unit_price * ci.quantity
+        # Берём главное фото из relationship; если is_main нет — fallback на первое фото
+        main_photo = next((ph.file_path for ph in p.photos if ph.is_main), None)
+        if main_photo is None and p.photos:
+            main_photo = p.photos[0].file_path
+        items.append(CartItemOut(
+            id=ci.id,
+            product_id=ci.product_id,
+            quantity=ci.quantity,
+            name=p.model or "",
+            brand=p.brand,
+            model=p.model,
+            storage=p.storage,
+            color=p.color,
+            condition=p.condition,
+            unit_price=unit_price,
+            image_url=main_photo,  # relative path; frontend префиксит /media/
+        ))
+    return CartOut(id=cart.id, items=items, total=total)
+
+
+@router.get("/sites/{store_id}/cart", response_model=CartOut)
+@limiter.limit("10/minute")
+async def get_cart(
+    request: Request,
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> CartOut:
+    """Текущая корзина visitor'а. Если cookie отсутствует — 401."""
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+    cart = await _get_or_create_cart(db, visitor, store)
+    await db.commit()  # commit на случай создания пустой
+    return await _build_cart_out(db, cart)
