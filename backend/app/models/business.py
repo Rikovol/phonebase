@@ -105,7 +105,11 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     store: Mapped["Store"] = relationship(back_populates="products")
-    photos: Mapped[list["ProductPhoto"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    photos: Mapped[list["ProductPhoto"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="desc(ProductPhoto.is_main), ProductPhoto.created_at",
+    )
     docs: Mapped[list["PurchaseDoc"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
 

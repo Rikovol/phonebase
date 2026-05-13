@@ -18,6 +18,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import require_active
@@ -160,6 +161,10 @@ async def _get_or_create_cart(
 ) -> Cart:
     """Возвращает корзину visitor'а или создаёт пустую.
 
+    Race-safe: SAVEPOINT + IntegrityError → повторный SELECT (Cart.visitor_id
+    UNIQUE — два параллельных GET /cart без savepoint бросали бы 500).
+    Паттерн совпадает с catalog_refs._find_or_create_brand.
+
     Помещает store_id из URL — у visitor может быть только одна корзина (UNIQUE),
     но store_id в записи фиксируется при создании.
     Caller отвечает за commit (мы не коммитим внутри helper).
@@ -167,11 +172,23 @@ async def _get_or_create_cart(
     cart = (await db.execute(
         select(Cart).where(Cart.visitor_id == visitor.id)
     )).scalar_one_or_none()
-    if cart is None:
-        cart = Cart(visitor_id=visitor.id, store_id=store.id)
-        db.add(cart)
-        await db.flush()
-    return cart
+    if cart is not None:
+        return cart
+
+    new_cart = Cart(visitor_id=visitor.id, store_id=store.id)
+    try:
+        async with db.begin_nested():
+            db.add(new_cart)
+            await db.flush()
+    except IntegrityError:
+        # Параллельный запрос уже создал корзину — читаем существующую запись.
+        existing = (await db.execute(
+            select(Cart).where(Cart.visitor_id == visitor.id)
+        )).scalar_one_or_none()
+        if existing is not None:
+            return existing
+        raise
+    return new_cart
 
 
 async def _build_cart_out(db: AsyncSession, cart: Cart) -> CartOut:
