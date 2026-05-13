@@ -266,7 +266,9 @@ async def add_cart_item(
 
     cart = await _get_or_create_cart(db, visitor, store)
 
-    # Upsert по UNIQUE (cart_id, product_id)
+    # Upsert по UNIQUE (cart_id, product_id). Race-safe: SAVEPOINT + IntegrityError
+    # → повторный SELECT + increment (double-click на «В корзину» от frontend
+    # бросал бы 500 на UNIQUE violation; паттерн совпадает с _get_or_create_cart).
     existing = (await db.execute(
         select(CartItem).where(
             CartItem.cart_id == cart.id, CartItem.product_id == payload.product_id
@@ -275,9 +277,23 @@ async def add_cart_item(
     if existing is not None:
         existing.quantity = min(existing.quantity + payload.quantity, 99)
     else:
-        db.add(CartItem(
-            cart_id=cart.id, product_id=payload.product_id, quantity=payload.quantity
-        ))
+        try:
+            async with db.begin_nested():
+                db.add(CartItem(
+                    cart_id=cart.id,
+                    product_id=payload.product_id,
+                    quantity=payload.quantity,
+                ))
+                await db.flush()
+        except IntegrityError:
+            # Параллельный POST уже вставил тот же товар — инкрементим вместо INSERT.
+            existing = (await db.execute(
+                select(CartItem).where(
+                    CartItem.cart_id == cart.id,
+                    CartItem.product_id == payload.product_id,
+                )
+            )).scalar_one()
+            existing.quantity = min(existing.quantity + payload.quantity, 99)
 
     await db.commit()
     return await _build_cart_out(db, cart)
