@@ -515,13 +515,18 @@ class HiddenCatalogPhoto(Base):
 
 
 class HomeSection(Base):
-    """Секция на главной странице сайта-витрины. По одной на key per store.
+    """Секция на главной странице сайта-витрины. По одной на (store, key, target_brand).
 
     Ключи (key) — фиксированные шаблоны, которые умеет рендерить mobileax-next:
       hero_dual       — 2 крупные карточки (HeroSlider) сверху страницы
       highlight_dual  — 2 карточки (HighlightCards) — Trade-In + Рассрочка
       shop_latest     — горизонтальный скроллер «The latest» (340×440 карточки)
       discover_scroll — горизонтальный скроллер «Discover» (360×460 карточки)
+      catalog_brand_* — секции на /catalog/[brand] (Apple-redesign v1.6.0).
+
+    target_brand (v1.6.0) — для catalog_brand_* блоков указывает к какому
+    бренду относится: 'Apple'/'Samsung'/...; для блоков главной — '' (пустая
+    строка). NOT NULL DEFAULT '' потому что PG `NULL ≠ NULL` ломал бы UNIQUE.
 
     enabled=false — секция скрыта на сайте целиком.
     Если для store_id нет записи по key — mobileax-next использует hardcoded fallback.

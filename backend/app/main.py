@@ -59,9 +59,12 @@ async def lifespan(app: FastAPI):
     await migrate_info_clear_store()
     await migrate_seed_competitor_prices()
     await migrate_widen_staff_log_columns()
+    # ВАЖНО: target_brand миграция ДО seed_home_blocks — иначе INSERT через
+    # обновлённую ORM модель (с target_brand колонкой) упадёт на свежем
+    # store без существующих секций (code-review Task 5 Important note).
+    await migrate_extend_home_sections_target_brand()
     await migrate_seed_home_blocks()
     await migrate_create_catalog_tables()
-    await migrate_extend_home_sections_target_brand()
     await migrate_create_ecommerce_tables()
 
     from app.services.auto_import import auto_import_loop
