@@ -473,8 +473,13 @@ async def create_order(
     if visitor is None:
         raise HTTPException(status_code=401, detail="Требуется cookie site_session")
 
+    # Row-lock корзины — блокирует параллельные POST /orders для того же
+    # visitor'а, предотвращая дубль-заказы при двойном клике / network glitch
+    # (Task 9 code-review Important #2).
     cart = (await db.execute(
-        select(Cart).where(Cart.visitor_id == visitor.id, Cart.store_id == store.id)
+        select(Cart)
+        .where(Cart.visitor_id == visitor.id, Cart.store_id == store.id)
+        .with_for_update()
     )).scalar_one_or_none()
     if cart is None:
         raise HTTPException(status_code=400, detail="Корзина пуста")
@@ -488,11 +493,17 @@ async def create_order(
     if not rows:
         raise HTTPException(status_code=400, detail="Корзина пуста")
 
-    # 1. Snapshot + total
+    # 1. Snapshot + total. Защита от silent zero-price (Task 9 code-review
+    # Critical #1): товар без price_retail НЕ должен бесплатно уезжать в Order.
     total = Decimal("0")
     snapshots: list[tuple[Product, int, Decimal]] = []
     for ci, p in rows:
-        unit_price = p.price_retail or Decimal("0")
+        if p.price_retail is None or p.price_retail <= Decimal("0"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Товар «{p.model or p.id}» сейчас недоступен к заказу (нет цены)",
+            )
+        unit_price = p.price_retail
         total += unit_price * ci.quantity
         snapshots.append((p, ci.quantity, unit_price))
 
@@ -541,10 +552,14 @@ async def create_order(
     await db.commit()
     await db.refresh(order)
 
-    # 5. Notifications (best-effort ПОСЛЕ commit)
+    # 5. Notifications fire-and-forget (Task 9 code-review Important #3):
+    # await блокировал клиента на ≤10s при медленном TG api → теперь background
+    # task. Заказ уже committed; если worker крашится между commit и task — TG
+    # сообщение теряется, но Order в БД сохранён (правильный приоритет).
+    import asyncio
     from app.core.redis_pubsub import publish_new_order
-    await publish_new_order(order.id, store.id, str(total))
-    await _notify_tg_about_order(order, order_items)
+    asyncio.create_task(publish_new_order(order.id, store.id, str(total)))
+    asyncio.create_task(_notify_tg_about_order(order, order_items))
 
     return OrderOut(
         id=order.id,
