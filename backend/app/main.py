@@ -11,7 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api import analytics, auth, avito, catalog, catalog_photos, competitor_prices, feeds, home_blocks_admin, imports, logs, personal_data, photos, products, purchase_docs, site_bonuses_admin, site_messages_admin, site_promotions_admin, sites, sites_oauth, stores, users
-from app.api import leads, settings as settings_api
+from app.api import cart_orders, leads, settings as settings_api
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.database import Base, engine
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.5.7",
+    version="1.6.0",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -124,6 +124,9 @@ app.include_router(site_bonuses_admin.router, prefix="/api/site-bonuses", tags=[
 app.include_router(home_blocks_admin.router, prefix="/api/home-blocks", tags=["home-blocks"])
 app.include_router(catalog.router, prefix="/api/catalog", tags=["catalog"])
 app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
+# cart_orders включает /sites/{store_id}/cart + /sites/{store_id}/orders (public)
+# и в Task 10 добавятся /orders (admin). Prefix /api — full paths внутри router.
+app.include_router(cart_orders.router, prefix="/api", tags=["cart_orders"])
 
 _media_root = Path(settings.MEDIA_ROOT)
 _media_root.mkdir(parents=True, exist_ok=True)
