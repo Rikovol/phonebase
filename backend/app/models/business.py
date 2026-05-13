@@ -671,6 +671,10 @@ class Cart(Base):
         nullable=False,
     )
 
+    items: Mapped[list["CartItem"]] = relationship(
+        back_populates="cart", cascade="all, delete-orphan"
+    )
+
 
 class CartItem(Base):
     """Позиция в корзине — ссылка на Product + quantity.
@@ -696,6 +700,8 @@ class CartItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False
     )
+
+    cart: Mapped["Cart"] = relationship(back_populates="items")
 
 
 # ============================================================================
@@ -753,6 +759,10 @@ class Order(Base):
         nullable=False,
     )
 
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan"
+    )
+
 
 class OrderItem(Base):
     """Позиция заказа со snapshot'ом товара.
@@ -762,6 +772,7 @@ class OrderItem(Base):
 
     product_snapshot JSONB: {name, brand, model, storage, color, condition, image_url}
     unit_price — цена на момент заказа (snapshot, не текущая цена Product).
+    Timestamps: нет — created_at/updated_at наследуются от parent Order.
     """
     __tablename__ = "order_items"
 
@@ -775,3 +786,5 @@ class OrderItem(Base):
     product_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+
+    order: Mapped["Order"] = relationship(back_populates="items")
