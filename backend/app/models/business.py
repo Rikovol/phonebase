@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from enum import Enum
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -694,3 +696,82 @@ class CartItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False
     )
+
+
+# ============================================================================
+# E-commerce: Order + OrderItem (исторический record заказа)
+# Спека: docs/superpowers/specs/2026-05-06-mobileax-apple-redesign-design.md §3.1
+# ============================================================================
+
+
+class OrderStatus(str, Enum):
+    """Статусы заказа. String-Enum чтобы храниться как VARCHAR(20)
+    и спокойно мигрироваться (vs PG native enum которые требуют ALTER TYPE).
+    """
+    NEW = "new"
+    IN_PROGRESS = "in_progress"
+    CONFIRMED = "confirmed"
+    SHIPPED = "shipped"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class Order(Base):
+    """Заказ с сайта — создаётся из CartItems на submit checkout-формы.
+
+    contact JSONB: {name, phone, email?, comment?}
+    delivery JSONB: {type: pickup|courier_orel|sdek, address?, city?}
+    total_price — snapshot на момент создания заказа (не пересчитывается).
+    comment — отдельное поле для менеджерских заметок (не конфликтует с contact.comment).
+
+    Никогда не удаляется — это исторический record для отчётов.
+    """
+    __tablename__ = "orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    store_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stores.id"), nullable=False, index=True
+    )
+    visitor_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("site_visitors.id"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=OrderStatus.NEW.value, server_default=text("'new'")
+    )
+    contact: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    delivery: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_now,
+        onupdate=_now,
+        server_default=text("now()"),
+        nullable=False,
+    )
+
+
+class OrderItem(Base):
+    """Позиция заказа со snapshot'ом товара.
+
+    product_id NULLable — если Product удалён через год (продан, не в катало́ге),
+    snapshot всё ещё показывает что было заказано.
+
+    product_snapshot JSONB: {name, brand, model, storage, color, condition, image_url}
+    unit_price — цена на момент заказа (snapshot, не текущая цена Product).
+    """
+    __tablename__ = "order_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    order_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    product_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("products.id"), nullable=True
+    )
+    product_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
