@@ -767,3 +767,103 @@ async def migrate_create_catalog_tables() -> None:
             )
     except Exception:
         logger.exception("Миграция create_catalog_tables не выполнена")
+
+
+async def migrate_create_ecommerce_tables() -> None:
+    """v1.6.0 — таблицы корзины и заказов.
+
+    carts: одна на visitor (UNIQUE visitor_id), переиспользует SiteVisitor identity.
+    cart_items: позиции корзины с UNIQUE (cart_id, product_id) — повторное
+                добавление того же товара делает PATCH, не вторую строку.
+    orders: исторический record. status VARCHAR(20) (не PG native enum чтобы
+            миграции не требовали ALTER TYPE), contact/delivery JSONB.
+    order_items: snapshot товара в JSONB на момент заказа. product_id nullable —
+                 если Product удалится через год, snapshot остаётся.
+
+    Все идемпотентно через IF NOT EXISTS. Композитные индексы для
+    admin queries (Task 3 code-review Minor #3): orders по
+    (store_id, status, created_at DESC).
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            # 1. carts (одна на visitor — UNIQUE visitor_id)
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS carts (
+                    id VARCHAR(36) PRIMARY KEY,
+                    visitor_id VARCHAR(36) NOT NULL UNIQUE REFERENCES site_visitors(id),
+                    store_id VARCHAR(36) NOT NULL REFERENCES stores(id),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_carts_visitor ON carts(visitor_id)"
+            ))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_carts_store ON carts(store_id)"
+            ))
+
+            # 2. cart_items + UNIQUE (cart_id, product_id) + CHECK quantity > 0
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS cart_items (
+                    id VARCHAR(36) PRIMARY KEY,
+                    cart_id VARCHAR(36) NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+                    product_id VARCHAR(36) NOT NULL REFERENCES products(id),
+                    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_cart_items_cart_product UNIQUE (cart_id, product_id)
+                )
+            """))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_cart_items_cart ON cart_items(cart_id)"
+            ))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_cart_items_product ON cart_items(product_id)"
+            ))
+
+            # 3. orders (status VARCHAR, contact/delivery JSONB)
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS orders (
+                    id VARCHAR(36) PRIMARY KEY,
+                    store_id VARCHAR(36) NOT NULL REFERENCES stores(id),
+                    visitor_id VARCHAR(36) REFERENCES site_visitors(id),
+                    status VARCHAR(20) NOT NULL DEFAULT 'new',
+                    contact JSONB NOT NULL,
+                    delivery JSONB NOT NULL,
+                    total_price NUMERIC(12,2) NOT NULL CHECK (total_price >= 0),
+                    comment TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            # Композитный индекс для главного admin query: список заказов магазина
+            # отсортированный по дате, фильтр по статусу
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_orders_store_status_created "
+                "ON orders(store_id, status, created_at DESC)"
+            ))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_orders_visitor ON orders(visitor_id) "
+                "WHERE visitor_id IS NOT NULL"
+            ))
+
+            # 4. order_items с snapshot JSONB и CHECK quantity > 0
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS order_items (
+                    id VARCHAR(36) PRIMARY KEY,
+                    order_id VARCHAR(36) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                    product_id VARCHAR(36) REFERENCES products(id),
+                    product_snapshot JSONB NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0)
+                )
+            """))
+            await session.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)"
+            ))
+
+            await session.commit()
+            logger.info("Миграция v1.6.0: e-commerce таблицы (carts/cart_items/orders/order_items) готовы")
+    except Exception:
+        logger.exception("Миграция v1.6.0 e-commerce упала")
+        raise
