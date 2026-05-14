@@ -616,24 +616,7 @@ async def get_my_order(
         select(OrderItem).where(OrderItem.order_id == order.id)
     )).scalars().all()
 
-    return OrderOut(
-        id=order.id,
-        store_id=order.store_id,
-        status=order.status,
-        contact=order.contact,
-        delivery=order.delivery,
-        total_price=order.total_price,
-        comment=order.comment,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        items=[OrderItemOut(
-            id=oi.id,
-            product_id=oi.product_id,
-            product_snapshot=oi.product_snapshot,
-            quantity=oi.quantity,
-            unit_price=oi.unit_price,
-        ) for oi in items],
-    )
+    return _order_to_out(order, list(items))
 
 
 # ─── Admin order endpoints (require_active JWT) ──────────────────────────────
