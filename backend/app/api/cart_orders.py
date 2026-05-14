@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.auth import require_active
 from app.api.sites import get_active_store, get_site_visitor
@@ -581,45 +582,7 @@ async def create_order(
     )
 
 
-# ─── Order endpoints: visitor's own GET ──────────────────────────────────────
-
-
-@router.get("/sites/{store_id}/orders/{order_id}", response_model=OrderOut)
-@limiter.limit("10/minute")
-async def get_my_order(
-    request: Request,
-    order_id: str,
-    store: Store = Depends(get_active_store),
-    visitor: SiteVisitor | None = Depends(get_site_visitor),
-    db: AsyncSession = Depends(get_db),
-) -> OrderOut:
-    """Visitor видит только свой заказ (по visitor_id) в нужном магазине.
-
-    Если cookie отсутствует — 401.
-    Если order_id не принадлежит этому visitor'у или другому магазину — 404
-    (не 403, чтобы не выдавать existence информацию).
-    """
-    if visitor is None:
-        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
-
-    order = (await db.execute(
-        select(Order).where(
-            Order.id == order_id,
-            Order.visitor_id == visitor.id,
-            Order.store_id == store.id,
-        )
-    )).scalar_one_or_none()
-    if order is None:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-
-    items = (await db.execute(
-        select(OrderItem).where(OrderItem.order_id == order.id)
-    )).scalars().all()
-
-    return _order_to_out(order, list(items))
-
-
-# ─── Admin order endpoints (require_active JWT) ──────────────────────────────
+# ─── Order endpoints: helper + visitor's own GET ─────────────────────────────
 
 
 def _order_to_out(order: Order, items: list[OrderItem]) -> OrderOut:
@@ -645,6 +608,42 @@ def _order_to_out(order: Order, items: list[OrderItem]) -> OrderOut:
     )
 
 
+@router.get("/sites/{store_id}/orders/{order_id}", response_model=OrderOut)
+@limiter.limit("10/minute")
+async def get_my_order(
+    request: Request,
+    order_id: str,
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> OrderOut:
+    """Visitor видит только свой заказ (по visitor_id) в нужном магазине.
+
+    Если cookie отсутствует — 401.
+    Если order_id не принадлежит этому visitor'у или другому магазину — 404
+    (не 403, чтобы не выдавать existence информацию).
+    """
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    order = (await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(
+            Order.id == order_id,
+            Order.visitor_id == visitor.id,
+            Order.store_id == store.id,
+        )
+    )).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    return _order_to_out(order, list(order.items))
+
+
+# ─── Admin order endpoints (require_active JWT) ──────────────────────────────
+
+
 @router.get("/orders", response_model=list[OrderOut])
 async def admin_list_orders(
     store_id: str | None = None,
@@ -658,23 +657,21 @@ async def admin_list_orders(
 
     status_filter (не status — чтобы не конфликтовать с fastapi.status):
       one of new/in_progress/confirmed/shipped/completed/cancelled.
-    Сортировка по created_at DESC (новые сверху).
+    Сортировка по created_at DESC (новые сверху). selectinload предотвращает
+    N+1 при загрузке items для всей страницы.
     """
-    q = select(Order)
+    q = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(desc(Order.created_at))
+    )
     if store_id:
         q = q.where(Order.store_id == store_id)
     if status_filter:
         q = q.where(Order.status == status_filter)
-    q = q.order_by(desc(Order.created_at)).limit(min(limit, 200)).offset(offset)
+    q = q.limit(min(limit, 200)).offset(offset)
     orders = (await db.execute(q)).scalars().all()
-
-    out: list[OrderOut] = []
-    for o in orders:
-        items = (await db.execute(
-            select(OrderItem).where(OrderItem.order_id == o.id)
-        )).scalars().all()
-        out.append(_order_to_out(o, list(items)))
-    return out
+    return [_order_to_out(o, list(o.items)) for o in orders]
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)
@@ -685,14 +682,13 @@ async def admin_get_order(
 ) -> OrderOut:
     """Деталь заказа для admin UI."""
     order = (await db.execute(
-        select(Order).where(Order.id == order_id)
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
     )).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
-    items = (await db.execute(
-        select(OrderItem).where(OrderItem.order_id == order.id)
-    )).scalars().all()
-    return _order_to_out(order, list(items))
+    return _order_to_out(order, list(order.items))
 
 
 @router.patch("/orders/{order_id}", response_model=OrderOut)
@@ -704,7 +700,9 @@ async def admin_patch_order(
 ) -> OrderOut:
     """Смена статуса заказа + опц. комментарий (admin)."""
     order = (await db.execute(
-        select(Order).where(Order.id == order_id)
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
     )).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
@@ -713,10 +711,7 @@ async def admin_patch_order(
         order.comment = payload.comment
     await db.commit()
     await db.refresh(order)
-    items = (await db.execute(
-        select(OrderItem).where(OrderItem.order_id == order.id)
-    )).scalars().all()
-    return _order_to_out(order, list(items))
+    return _order_to_out(order, list(order.items))
 
 
 # ─── SSE stream для real-time уведомлений admin SPA о новых заказах ──────────
