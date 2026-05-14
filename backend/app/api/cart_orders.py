@@ -579,3 +579,197 @@ async def create_order(
             unit_price=oi.unit_price,
         ) for oi in order_items],
     )
+
+
+# ─── Order endpoints: visitor's own GET ──────────────────────────────────────
+
+
+@router.get("/sites/{store_id}/orders/{order_id}", response_model=OrderOut)
+@limiter.limit("10/minute")
+async def get_my_order(
+    request: Request,
+    order_id: str,
+    store: Store = Depends(get_active_store),
+    visitor: SiteVisitor | None = Depends(get_site_visitor),
+    db: AsyncSession = Depends(get_db),
+) -> OrderOut:
+    """Visitor видит только свой заказ (по visitor_id) в нужном магазине.
+
+    Если cookie отсутствует — 401.
+    Если order_id не принадлежит этому visitor'у или другому магазину — 404
+    (не 403, чтобы не выдавать existence информацию).
+    """
+    if visitor is None:
+        raise HTTPException(status_code=401, detail="Требуется cookie site_session")
+
+    order = (await db.execute(
+        select(Order).where(
+            Order.id == order_id,
+            Order.visitor_id == visitor.id,
+            Order.store_id == store.id,
+        )
+    )).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    items = (await db.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+
+    return OrderOut(
+        id=order.id,
+        store_id=order.store_id,
+        status=order.status,
+        contact=order.contact,
+        delivery=order.delivery,
+        total_price=order.total_price,
+        comment=order.comment,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        items=[OrderItemOut(
+            id=oi.id,
+            product_id=oi.product_id,
+            product_snapshot=oi.product_snapshot,
+            quantity=oi.quantity,
+            unit_price=oi.unit_price,
+        ) for oi in items],
+    )
+
+
+# ─── Admin order endpoints (require_active JWT) ──────────────────────────────
+
+
+def _order_to_out(order: Order, items: list[OrderItem]) -> OrderOut:
+    """Helper — DRY конвертер Order + items → OrderOut. Используется во всех
+    admin endpoints + visitor get_my_order."""
+    return OrderOut(
+        id=order.id,
+        store_id=order.store_id,
+        status=order.status,
+        contact=order.contact,
+        delivery=order.delivery,
+        total_price=order.total_price,
+        comment=order.comment,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        items=[OrderItemOut(
+            id=oi.id,
+            product_id=oi.product_id,
+            product_snapshot=oi.product_snapshot,
+            quantity=oi.quantity,
+            unit_price=oi.unit_price,
+        ) for oi in items],
+    )
+
+
+@router.get("/orders", response_model=list[OrderOut])
+async def admin_list_orders(
+    store_id: str | None = None,
+    status_filter: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_active),
+) -> list[OrderOut]:
+    """Список заказов с фильтрами для admin SPA «Заказы».
+
+    status_filter (не status — чтобы не конфликтовать с fastapi.status):
+      one of new/in_progress/confirmed/shipped/completed/cancelled.
+    Сортировка по created_at DESC (новые сверху).
+    """
+    q = select(Order)
+    if store_id:
+        q = q.where(Order.store_id == store_id)
+    if status_filter:
+        q = q.where(Order.status == status_filter)
+    q = q.order_by(desc(Order.created_at)).limit(min(limit, 200)).offset(offset)
+    orders = (await db.execute(q)).scalars().all()
+
+    out: list[OrderOut] = []
+    for o in orders:
+        items = (await db.execute(
+            select(OrderItem).where(OrderItem.order_id == o.id)
+        )).scalars().all()
+        out.append(_order_to_out(o, list(items)))
+    return out
+
+
+@router.get("/orders/{order_id}", response_model=OrderOut)
+async def admin_get_order(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_active),
+) -> OrderOut:
+    """Деталь заказа для admin UI."""
+    order = (await db.execute(
+        select(Order).where(Order.id == order_id)
+    )).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    items = (await db.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    return _order_to_out(order, list(items))
+
+
+@router.patch("/orders/{order_id}", response_model=OrderOut)
+async def admin_patch_order(
+    order_id: str,
+    payload: OrderStatusPatch = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_active),
+) -> OrderOut:
+    """Смена статуса заказа + опц. комментарий (admin)."""
+    order = (await db.execute(
+        select(Order).where(Order.id == order_id)
+    )).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    order.status = payload.status
+    if payload.comment is not None:
+        order.comment = payload.comment
+    await db.commit()
+    await db.refresh(order)
+    items = (await db.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    return _order_to_out(order, list(items))
+
+
+# ─── SSE stream для real-time уведомлений admin SPA о новых заказах ──────────
+
+
+@router.get("/orders/sse")
+async def admin_orders_sse(
+    _: User = Depends(require_active),
+) -> StreamingResponse:
+    """Server-Sent Events — admin подписывается, получает push при создании
+    нового заказа (Redis pubsub `orders:new`).
+
+    Headers:
+      Cache-Control: no-cache (браузер не должен кешировать)
+      X-Accel-Buffering: no (nginx не буферизует — иначе message приходит чанком)
+    """
+    from app.core.redis_pubsub import get_redis, ORDERS_CHANNEL
+
+    async def event_generator():
+        r = get_redis()
+        pubsub = r.pubsub()
+        try:
+            await pubsub.subscribe(ORDERS_CHANNEL)
+            async for msg in pubsub.listen():
+                if msg.get("type") == "message":
+                    # msg["data"] — JSON string из publish_new_order
+                    yield f"data: {msg['data']}\n\n"
+        finally:
+            await pubsub.unsubscribe(ORDERS_CHANNEL)
+            await pubsub.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # nginx no-buffer
+        },
+    )
