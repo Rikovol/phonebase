@@ -1726,3 +1726,122 @@ async def get_home_blocks(
         )
 
     return HomeBlocksOut(sections=out_sections)
+
+
+# ── Site header (SSR layout) ────────────────────────────────────────────────
+
+
+class HeaderPromoOut(BaseModel):
+    title: str | None = None
+    cta_label: str | None = None
+    cta_href: str | None = None
+
+
+class HeaderCategoryOut(BaseModel):
+    id: str
+    slug: str
+    display_name: str
+    sort_order: int
+
+
+class HeaderBrandOut(BaseModel):
+    id: str
+    slug: str
+    display_name: str
+    sort_order: int
+    logo_url: str | None = None
+
+
+class SiteHeaderOut(BaseModel):
+    promo: HeaderPromoOut | None = None
+    categories: list[HeaderCategoryOut] = []
+    brands: list[HeaderBrandOut] = []
+
+
+@router.get("/{store_id}/header", response_model=SiteHeaderOut)
+@limiter.limit("60/minute")
+async def get_site_header(
+    request: Request,
+    store: Store = Depends(get_active_store),
+    db: AsyncSession = Depends(get_db),
+) -> SiteHeaderOut:
+    """Header config для shop.basestock.ru — promo + categories + brands.
+
+    SSR-fetch на каждый layout render (rate-limit высокий, 60/min).
+    Categories из CatalogCategory (admin раздел «Каталог»), brands из CatalogBrand.
+    Promo — из home_sections.key='header_promo' (admin раздел «Магазин»).
+    """
+    # Promo
+    promo_section = (
+        await db.execute(
+            select(HomeSection).where(
+                HomeSection.store_id == store.id,
+                HomeSection.key == "header_promo",
+                HomeSection.enabled.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+
+    promo: HeaderPromoOut | None = None
+    if promo_section is not None:
+        card = (
+            await db.execute(
+                select(HomeCard)
+                .where(HomeCard.section_id == promo_section.id)
+                .order_by(HomeCard.sort_order.asc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if card is not None:
+            promo = HeaderPromoOut(
+                title=card.title,
+                cta_label=card.cta_label,
+                cta_href=card.cta_href,
+            )
+
+    # Categories
+    cats = (
+        await db.execute(
+            select(CatalogCategory)
+            .where(CatalogCategory.is_visible.is_(True))
+            .order_by(
+                CatalogCategory.sort_order.asc(),
+                CatalogCategory.display_name.asc(),
+            )
+        )
+    ).scalars().all()
+
+    # Brands
+    brands = (
+        await db.execute(
+            select(CatalogBrand)
+            .where(CatalogBrand.is_visible.is_(True))
+            .order_by(
+                CatalogBrand.sort_order.asc(),
+                CatalogBrand.display_name.asc(),
+            )
+        )
+    ).scalars().all()
+
+    return SiteHeaderOut(
+        promo=promo,
+        categories=[
+            HeaderCategoryOut(
+                id=c.id,
+                slug=c.slug,
+                display_name=c.display_name,
+                sort_order=c.sort_order,
+            )
+            for c in cats
+        ],
+        brands=[
+            HeaderBrandOut(
+                id=b.id,
+                slug=b.slug,
+                display_name=b.display_name,
+                sort_order=b.sort_order,
+                logo_url=b.logo_url,
+            )
+            for b in brands
+        ],
+    )
