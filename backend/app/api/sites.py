@@ -1845,3 +1845,119 @@ async def get_site_header(
             for b in brands
         ],
     )
+
+
+# ── Site footer (SSR layout) ────────────────────────────────────────────────
+
+
+class FooterLinkOut(BaseModel):
+    label: str
+    href: str
+
+
+class FooterColumnOut(BaseModel):
+    key: str  # shop | services | help | social
+    title: str | None = None
+    links: list[FooterLinkOut] = []
+
+
+class SiteFooterOut(BaseModel):
+    columns: list[FooterColumnOut] = []
+    legal: str | None = None
+
+
+_FOOTER_COL_KEYS = (
+    "footer_col_shop",
+    "footer_col_services",
+    "footer_col_help",
+    "footer_col_social",
+)
+
+
+@router.get("/{store_id}/footer", response_model=SiteFooterOut)
+@limiter.limit("60/minute")
+async def get_site_footer(
+    request: Request,
+    store: Store = Depends(get_active_store),
+    db: AsyncSession = Depends(get_db),
+) -> SiteFooterOut:
+    """Footer config для shop.basestock.ru — 4 mega-cols + legal.
+
+    SSR-fetch на каждый layout render (rate-limit высокий, 60/min).
+    Колонки берутся из home_sections.key IN ('footer_col_shop',
+    'footer_col_services', 'footer_col_help', 'footer_col_social');
+    legal — из home_sections.key='footer_legal' (первая карточка по sort_order,
+    subtitle предпочтительнее title). Отсутствующие секции просто не включаем.
+    """
+    # 1) Колонки: все 4 (или меньше) footer_col_* секции + footer_legal — одним запросом.
+    all_keys = list(_FOOTER_COL_KEYS) + ["footer_legal"]
+    sections = (
+        (
+            await db.execute(
+                select(HomeSection)
+                .where(
+                    HomeSection.store_id == store.id,
+                    HomeSection.key.in_(all_keys),
+                    HomeSection.enabled.is_(True),
+                )
+                .order_by(HomeSection.key.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if not sections:
+        return SiteFooterOut(columns=[], legal=None)
+
+    section_ids = [s.id for s in sections]
+
+    # 2) Карточки всех секций — батч-SELECT (N+1-safe).
+    cards = (
+        (
+            await db.execute(
+                select(HomeCard)
+                .where(HomeCard.section_id.in_(section_ids))
+                .order_by(HomeCard.sort_order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    cards_by_section: dict[str, list[HomeCard]] = {}
+    for c in cards:
+        cards_by_section.setdefault(c.section_id, []).append(c)
+
+    # 3) Группируем footer_col_* в columns в фиксированном порядке.
+    sections_by_key = {s.key: s for s in sections if s.key in _FOOTER_COL_KEYS}
+    columns: list[FooterColumnOut] = []
+    for full_key in _FOOTER_COL_KEYS:
+        s = sections_by_key.get(full_key)
+        if s is None:
+            continue
+        short_key = full_key.removeprefix("footer_col_")  # shop | services | help | social
+        col_cards = cards_by_section.get(s.id, [])
+        columns.append(
+            FooterColumnOut(
+                key=short_key,
+                title=s.title,
+                links=[
+                    FooterLinkOut(
+                        label=c.title or "",
+                        href=c.cta_href or "#",
+                    )
+                    for c in col_cards
+                ],
+            )
+        )
+
+    # 4) Legal — первая карточка footer_legal-секции (по sort_order).
+    legal: str | None = None
+    legal_section = next((s for s in sections if s.key == "footer_legal"), None)
+    if legal_section is not None:
+        legal_cards = cards_by_section.get(legal_section.id, [])
+        if legal_cards:
+            first = legal_cards[0]
+            legal = first.subtitle or first.title
+
+    return SiteFooterOut(columns=columns, legal=legal)
