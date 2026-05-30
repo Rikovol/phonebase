@@ -44,6 +44,39 @@ router = APIRouter()
 
 DELIVERY_TYPES = {"pickup", "courier_orel", "sdek"}
 
+# ─── Admin orders: state machine ─────────────────────────────────────────────
+# Что куда можно перевести. completed/cancelled — терминальные (нельзя «открыть»).
+# new → in_progress → confirmed → shipped → completed
+#                                         ↘ cancelled (доступен с любой нетерминальной)
+ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    OrderStatus.NEW.value:         {OrderStatus.IN_PROGRESS.value, OrderStatus.CANCELLED.value},
+    OrderStatus.IN_PROGRESS.value: {OrderStatus.CONFIRMED.value, OrderStatus.CANCELLED.value},
+    OrderStatus.CONFIRMED.value:   {OrderStatus.SHIPPED.value, OrderStatus.CANCELLED.value},
+    OrderStatus.SHIPPED.value:     {OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value},
+    OrderStatus.COMPLETED.value:   set(),
+    OrderStatus.CANCELLED.value:   set(),
+}
+ORDER_STATUS_VALUES: set[str] = {s.value for s in OrderStatus}
+
+
+def _scope_orders_query(q, user: "User"):
+    """Multi-tenant scope: non-admin видит только свой store_id.
+
+    Admin (role='admin') получает все заказы; если он же передал ?store_id —
+    использует его как доп. фильтр. Non-admin без store_id блокирован 403.
+    """
+    if user.role != "admin":
+        if not user.store_id:
+            raise HTTPException(status_code=403, detail="Пользователь не привязан к магазину")
+        q = q.where(Order.store_id == user.store_id)
+    return q
+
+
+def _ensure_order_accessible(order: "Order", user: "User") -> None:
+    """403 если non-admin пытается прочитать/изменить заказ чужого магазина."""
+    if user.role != "admin" and order.store_id != user.store_id:
+        raise HTTPException(status_code=403, detail="Доступ к заказу запрещён")
+
 
 # ─── Pydantic схемы ──────────────────────────────────────────────────────────
 
@@ -645,27 +678,40 @@ async def get_my_order(
 
 
 @router.get("/orders", response_model=list[OrderOut])
+@limiter.limit("60/minute")
 async def admin_list_orders(
+    request: Request,
     store_id: str | None = None,
     status_filter: str | None = None,
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_active),
+    user: User = Depends(require_active),
 ) -> list[OrderOut]:
     """Список заказов с фильтрами для admin SPA «Заказы».
 
+    Multi-tenant: non-admin видит только свой store_id (Qwen Stage 1 review #1).
+    Admin может фильтровать ?store_id=… как доп. ограничитель.
     status_filter (не status — чтобы не конфликтовать с fastapi.status):
       one of new/in_progress/confirmed/shipped/completed/cancelled.
     Сортировка по created_at DESC (новые сверху). selectinload предотвращает
     N+1 при загрузке items для всей страницы.
     """
+    if status_filter and status_filter not in ORDER_STATUS_VALUES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неверный status_filter: {status_filter!r}. Допустимые: {sorted(ORDER_STATUS_VALUES)}",
+        )
     q = (
         select(Order)
         .options(selectinload(Order.items))
         .order_by(desc(Order.created_at))
     )
-    if store_id:
+    q = _scope_orders_query(q, user)
+    # Admin может уточнить запрос через ?store_id; для non-admin фильтр уже
+    # применён в _scope_orders_query, query-param игнорируем чтобы не было
+    # silent-empty ответа при попытке смотреть чужой магазин (Qwen review #3).
+    if store_id and user.role == "admin":
         q = q.where(Order.store_id == store_id)
     if status_filter:
         q = q.where(Order.status == status_filter)
@@ -675,12 +721,14 @@ async def admin_list_orders(
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)
+@limiter.limit("60/minute")
 async def admin_get_order(
+    request: Request,
     order_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_active),
+    user: User = Depends(require_active),
 ) -> OrderOut:
-    """Деталь заказа для admin UI."""
+    """Деталь заказа для admin UI. Non-admin получает 403 на чужой store."""
     order = (await db.execute(
         select(Order)
         .options(selectinload(Order.items))
@@ -688,25 +736,56 @@ async def admin_get_order(
     )).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
+    _ensure_order_accessible(order, user)
     return _order_to_out(order, list(order.items))
 
 
 @router.patch("/orders/{order_id}", response_model=OrderOut)
+@limiter.limit("60/minute")
 async def admin_patch_order(
+    request: Request,
     order_id: str,
     payload: OrderStatusPatch = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_active),
+    user: User = Depends(require_active),
 ) -> OrderOut:
-    """Смена статуса заказа + опц. комментарий (admin)."""
+    """Смена статуса заказа + опц. комментарий (admin).
+
+    Применяется state machine ALLOWED_TRANSITIONS — терминальные completed/cancelled
+    нельзя «откатить», нельзя перепрыгнуть через шаги.
+    """
+    # FOR UPDATE — защита от race condition: два parallel PATCH иначе могут
+    # одновременно прочитать status=new, оба пройти валидацию и второй перезапишет
+    # результат первого, обходя state machine (Qwen review #1).
     order = (await db.execute(
         select(Order)
         .options(selectinload(Order.items))
         .where(Order.id == order_id)
+        .with_for_update()
     )).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
-    order.status = payload.status
+    _ensure_order_accessible(order, user)
+
+    new_status = payload.status
+    if new_status != order.status:
+        if order.status not in ALLOWED_TRANSITIONS:
+            # Мусор в БД (ручная правка / миграция / drift) — блокируем + логируем.
+            logger.warning(
+                "Order %s имеет неизвестный статус %r (нет в ALLOWED_TRANSITIONS)",
+                order.id, order.status,
+            )
+        allowed = ALLOWED_TRANSITIONS.get(order.status, set())
+        if new_status not in allowed:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Недопустимый переход: {order.status} → {new_status}. "
+                    f"Разрешено: {sorted(allowed) or '(терминальный статус)'}"
+                ),
+            )
+        order.status = new_status
+
     if payload.comment is not None:
         order.comment = payload.comment
     await db.commit()
@@ -716,13 +795,27 @@ async def admin_patch_order(
 
 # ─── SSE stream для real-time уведомлений admin SPA о новых заказах ──────────
 
+SSE_PING_INTERVAL_SEC = 15  # nginx proxy_read_timeout=60s → шлём ping каждые 15s
+
 
 @router.get("/orders/sse")
 async def admin_orders_sse(
-    _: User = Depends(require_active),
+    request: Request,
+    user: User = Depends(require_active),
 ) -> StreamingResponse:
     """Server-Sent Events — admin подписывается, получает push при создании
     нового заказа (Redis pubsub `orders:new`).
+
+    Reliability:
+      - Heartbeat `:ping\\n\\n` каждые 15s (предотвращает разрыв через nginx
+        proxy_read_timeout=60s и позволяет клиенту детектить мёртвый коннект).
+      - Disconnect detection через request.is_disconnected() — не висим вечно
+        в pubsub.listen() если клиент ушёл.
+      - Graceful fallback при недоступности Redis — отдаём `event: redis-down`
+        вместо 500, чтобы клиент переключился на polling /orders.
+
+    Multi-tenant: non-admin фильтрует JSON.store_id на клиенте, либо игнорирует
+    события не своего магазина (event payload содержит store_id).
 
     Headers:
       Cache-Control: no-cache (браузер не должен кешировать)
@@ -731,17 +824,37 @@ async def admin_orders_sse(
     from app.core.redis_pubsub import get_redis, ORDERS_CHANNEL
 
     async def event_generator():
-        r = get_redis()
-        pubsub = r.pubsub()
+        # Сначала пробуем подключиться к Redis. Если не удалось — graceful fallback.
         try:
+            r = get_redis()
+            pubsub = r.pubsub()
             await pubsub.subscribe(ORDERS_CHANNEL)
-            async for msg in pubsub.listen():
+        except Exception as exc:
+            logger.warning("SSE orders: Redis unavailable, fallback к polling: %s", exc)
+            yield "event: redis-down\ndata: {}\n\n"
+            return
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                # get_message с таймаутом — позволяет периодически слать heartbeat
+                # и проверять disconnect, не блокируясь вечно в listen().
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=SSE_PING_INTERVAL_SEC,
+                )
+                if msg is None:
+                    yield ": ping\n\n"
+                    continue
                 if msg.get("type") == "message":
-                    # msg["data"] — JSON string из publish_new_order
                     yield f"data: {msg['data']}\n\n"
         finally:
-            await pubsub.unsubscribe(ORDERS_CHANNEL)
-            await pubsub.close()
+            try:
+                await pubsub.unsubscribe(ORDERS_CHANNEL)
+                await pubsub.close()
+            except Exception:
+                logger.debug("SSE orders: pubsub close failure (already closed?)", exc_info=True)
 
     return StreamingResponse(
         event_generator(),
