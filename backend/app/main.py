@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PhoneBase API",
-    version="1.7.1",
+    version="1.7.2",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url=None,
     lifespan=lifespan,

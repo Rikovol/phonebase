@@ -21,6 +21,56 @@ from app.models.business import CatalogBrand, CatalogCategory, CatalogModel
 logger = logging.getLogger(__name__)
 
 
+# ─── Stage 3 (2026-05-31): 1С category name → new product-type slug ───────────
+# 1С присылает Product.category строки типа "iPhone", "Прочие тел", "Ноутбуки".
+# До Stage 3 каждая такая строка создавала отдельную brand-specific категорию.
+# После Stage 3 — мапим в одну из 7 product-type категорий (smartphones / tablets /
+# laptops / watches / audio / consoles / hair).
+#
+# Поиск case-insensitive по lower(strip(1c_name)). Если 1С присылает имя, которого
+# нет в карте — fallback на default-логику (создаст новую скрытую категорию).
+#
+# Spec: docs/superpowers/specs/2026-05-31-stage3-redesign.md (Q5)
+CATEGORY_REMAP_1C: dict[str, str] = {
+    # smartphones
+    'iphone': 'smartphones',
+    'samsung (mob)': 'smartphones',
+    'samsung mob': 'smartphones',
+    'samsung': 'smartphones',  # на случай если 1С когда-то будет слать без (mob)
+    'xiaomi': 'smartphones',
+    'прочие тел': 'smartphones',
+    'прочие (тел)': 'smartphones',
+    # tablets
+    'ipad': 'tablets',
+    'планшеты': 'tablets',
+    # laptops
+    'macbook': 'laptops',
+    'imac': 'laptops',
+    'ноутбуки и компьютеры': 'laptops',
+    'ноутбук': 'laptops',
+    'ноутбуки': 'laptops',
+    # watches
+    'iwatch': 'watches',
+    'apple watch': 'watches',
+    'samsung watch': 'watches',
+    'умные часы и браслеты': 'watches',
+    'часы': 'watches',
+    # audio
+    'airpods': 'audio',
+    'полноразмерные наушники': 'audio',
+    'аудио': 'audio',
+    'колонки': 'audio',
+    # consoles
+    'sony ps': 'consoles',
+    'playstation': 'consoles',
+    'приставки': 'consoles',
+    'игровая': 'consoles',
+    # hair (Dyson и подобные)
+    'для волос': 'hair',
+    'фены': 'hair',
+}
+
+
 @dataclass
 class CatalogRefs:
     brand_id: str
@@ -103,6 +153,21 @@ async def _select_brand_ci(db: AsyncSession, name: str) -> CatalogBrand | None:
 
 
 async def _find_or_create_category(db: AsyncSession, name: str, created: list[str]) -> CatalogCategory:
+    # Stage 3: 1С имя → product-type slug. Если remap есть и target существует —
+    # сразу возвращаем product-type категорию, не создавая legacy brand-specific.
+    remap_target = CATEGORY_REMAP_1C.get(name.strip().lower())
+    if remap_target:
+        target = (await db.execute(
+            select(CatalogCategory).where(CatalogCategory.slug == remap_target)
+        )).scalar_one_or_none()
+        if target is not None:
+            return target
+        # Target отсутствует (migration ещё не применена) — fallback на default flow.
+        logger.warning(
+            "catalog_refs: remap target slug=%r не найден, используется legacy fallback для «%s»",
+            remap_target, name,
+        )
+
     found = await _select_category_ci(db, name)
     if found is not None:
         return found
