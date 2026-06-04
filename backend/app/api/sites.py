@@ -216,6 +216,8 @@ class ProductPromoOut(BaseModel):
 
 class ProductDetailOut(BaseModel):
     """Детальная карточка товара."""
+    id: str            # Product UUID для add-to-cart (Stage 5). Для NEW —
+                       # выбирается Product из текущего store; для USED — это сам Product.id.
     slug: str
     condition: Literal["new", "used"]
     brand: str | None
@@ -938,6 +940,7 @@ async def _product_detail_used(
     ]
 
     return ProductDetailOut(
+        id=product.id,
         slug=product_id,
         condition="used",
         brand=product.brand,
@@ -1074,7 +1077,14 @@ async def _product_detail_new(
         if cp.file_path
     ]
 
+    # Cart UUID: предпочитаем Product из текущего store (для shop.basestock.ru =
+    # mobileax). Fallback на любой matching, если в этом store нет (cross-store
+    # витрина показывает товар даже когда конкретно тут его нет — клиент увидит,
+    # но при add-to-cart backend вернёт 404 «не найден в этом магазине»).
+    chosen_id = store_products_ids[0] if store_products_ids else matching[0].id
+
     return ProductDetailOut(
+        id=chosen_id,
         slug=slug,
         condition="new",
         brand=ref.brand,
