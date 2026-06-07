@@ -24,6 +24,7 @@ from app.api.catalog_photos import make_product_key, make_product_key_no_color
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
+from app.core.redis_cache import get_or_set_json
 from app.models.business import (
     CatalogBrand,
     CatalogCategory,
@@ -1197,6 +1198,11 @@ async def _facet_rows(
 # /menu может вернуть многомегабайтный JSON. Логируем и режем.
 _MENU_HARD_LIMIT = 5000
 
+# Redis TTL для /menu cache. Каталог меняется редко (1С импорт ~раз в N часов);
+# 60s даёт sub-10ms hit для 99% запросов и не более 1 минуты несвежести.
+# Явная инвалидация на admin-mutate не делается — TTL покрывает.
+_MENU_CACHE_TTL = 60
+
 
 class MenuModelItem(BaseModel):
     id: str
@@ -1245,6 +1251,27 @@ async def get_menu(
     condition=new  → агрегация по всем магазинам (как /catalog?condition=new).
 
     Категории/бренды/модели без хотя бы одного видимого товара в меню не попадают.
+
+    Cache: Redis JSON, TTL = _MENU_CACHE_TTL (60s). При Redis-down — direct compute
+    (см. redis_cache.get_or_set_json — best-effort).
+    """
+    cache_key = f"menu:{store.id}:{condition}"
+
+    async def _compute() -> dict:
+        return (await _compute_menu(db, store, condition)).model_dump(mode="json")
+
+    cached = await get_or_set_json(cache_key, _MENU_CACHE_TTL, _compute)
+    return MenuOut.model_validate(cached)
+
+
+async def _compute_menu(
+    db: AsyncSession,
+    store: Store,
+    condition: Literal["new", "used"],
+) -> MenuOut:
+    """Чистая SQL+сборка дерева — вынесено из get_menu для cache-aside обёртки.
+
+    Никакого DI и cache внутри: только запрос + group-by сборка.
     """
     product_filter = [
         Product.site_published.is_(True),
