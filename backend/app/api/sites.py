@@ -24,6 +24,7 @@ from app.api.catalog_photos import make_product_key, make_product_key_no_color
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
+from app.core.redis_cache import get_or_set_json
 from app.models.business import (
     CatalogBrand,
     CatalogCategory,
@@ -1254,8 +1255,6 @@ async def get_menu(
     Cache: Redis JSON, TTL = _MENU_CACHE_TTL (60s). При Redis-down — direct compute
     (см. redis_cache.get_or_set_json — best-effort).
     """
-    from app.core.redis_cache import get_or_set_json
-
     cache_key = f"menu:{store.id}:{condition}"
 
     async def _compute() -> dict:
