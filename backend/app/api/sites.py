@@ -16,7 +16,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import Integer, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -380,6 +380,10 @@ async def get_catalog(
     category: str | None = Query(None),
     model_id: str | None = Query(None, description="Фильтр по нормализованной модели каталога"),
     search: str | None = Query(None),
+    storage: str | None = Query(None, description="Точный фильтр по объёму памяти (например 256GB)"),
+    color: str | None = Query(None, description="Точный фильтр по цвету"),
+    battery_min: int | None = Query(None, ge=0, le=100, description="Мин. % батареи (для б/у)"),
+    completeness: str | None = Query(None, description="Точный фильтр по комплектности"),
     in_stock: bool = Query(True, description="Только в наличии"),
     promo_only: bool = Query(False, description="Только товары с акцией"),
     price_from: int | None = Query(None, ge=0),
@@ -397,6 +401,8 @@ async def get_catalog(
       мин. цена с учётом PriceOverride магазина из URL.
     - model_id: фильтр по нормализованной модели (catalog_models.id), приоритетней
       строковых brand/category. Используется новым меню /menu.
+    - storage/color/completeness: точное совпадение (case/trim-insensitive),
+      значения берутся из выдачи каталога. battery_min: б/у с battery_pct >= N.
     """
     now = _now()
 
@@ -404,6 +410,8 @@ async def get_catalog(
         return await _catalog_used(
             store=store, db=db, now=now,
             brand=brand, category=category, model_id=model_id, search=search,
+            storage=storage, color=color, battery_min=battery_min,
+            completeness=completeness,
             in_stock=in_stock, promo_only=promo_only,
             price_from=price_from, price_to=price_to,
             sort=sort, page=page, per_page=per_page,
@@ -412,10 +420,41 @@ async def get_catalog(
         return await _catalog_new(
             store=store, db=db, now=now,
             brand=brand, category=category, model_id=model_id, search=search,
+            storage=storage, color=color, battery_min=battery_min,
+            completeness=completeness,
             in_stock=in_stock, promo_only=promo_only,
             price_from=price_from, price_to=price_to,
             sort=sort, page=page, per_page=per_page,
         )
+
+
+def _attr_filters(
+    storage: str | None,
+    color: str | None,
+    battery_min: int | None,
+    completeness: str | None,
+) -> list:
+    """WHERE-условия фильтров по атрибутам товара (общие для used/new).
+
+    Строковые — точное совпадение case/trim-insensitive (значения для UI
+    приходят из самой выдачи каталога). battery_pct хранится строкой
+    ('87%', '100%', '') — режем нецифры и кастуем; пустые → NULL → не проходят.
+    """
+    conds = []
+    if storage:
+        conds.append(func.lower(func.trim(Product.storage)) == storage.strip().lower())
+    if color:
+        conds.append(func.lower(func.trim(Product.color)) == color.strip().lower())
+    if completeness:
+        conds.append(func.lower(func.trim(Product.completeness)) == completeness.strip().lower())
+    if battery_min is not None:
+        conds.append(
+            cast(
+                func.nullif(func.regexp_replace(Product.battery_pct, r"[^0-9]", "", "g"), ""),
+                Integer,
+            ) >= battery_min
+        )
+    return conds
 
 
 async def _catalog_used(
@@ -427,6 +466,10 @@ async def _catalog_used(
     category: str | None,
     model_id: str | None,
     search: str | None,
+    storage: str | None,
+    color: str | None,
+    battery_min: int | None,
+    completeness: str | None,
     in_stock: bool,
     promo_only: bool,
     price_from: int | None,
@@ -489,6 +532,8 @@ async def _catalog_used(
                     Product.color.ilike(pat),
                 )
             )
+    for cond in _attr_filters(storage, color, battery_min, completeness):
+        base_q = base_q.where(cond)
     if promo_only:
         base_q = base_q.where(po_subq.c.product_id.isnot(None))
 
@@ -588,6 +633,8 @@ async def _catalog_used(
         items=items, total=total, page=page, per_page=per_page,
         filters_applied={k: v for k, v in {
             "brand": brand, "category": category, "search": search,
+            "storage": storage, "color": color, "battery_min": battery_min,
+            "completeness": completeness,
             "in_stock": in_stock, "promo_only": promo_only,
             "price_from": price_from, "price_to": price_to, "sort": sort,
         }.items() if v is not None and v is not True},
@@ -603,6 +650,10 @@ async def _catalog_new(
     category: str | None,
     model_id: str | None,
     search: str | None,
+    storage: str | None,
+    color: str | None,
+    battery_min: int | None,
+    completeness: str | None,
     in_stock: bool,
     promo_only: bool,
     price_from: int | None,
@@ -671,6 +722,10 @@ async def _catalog_new(
                     Product.color.ilike(pat),
                 )
             )
+    # Атрибут-фильтры до агрегации: storage/color входят в product_key,
+    # поэтому сужение на уровне Product корректно схлопывается в группы.
+    for cond in _attr_filters(storage, color, battery_min, completeness):
+        base_q = base_q.where(cond)
 
     all_rows = (await db.execute(base_q)).all()
 
@@ -851,6 +906,8 @@ async def _catalog_new(
         items=items, total=total, page=page, per_page=per_page,
         filters_applied={k: v for k, v in {
             "brand": brand, "category": category, "search": search,
+            "storage": storage, "color": color, "battery_min": battery_min,
+            "completeness": completeness,
             "in_stock": in_stock, "promo_only": promo_only,
             "price_from": price_from, "price_to": price_to, "sort": sort,
         }.items() if v is not None and v is not True},
@@ -1109,14 +1166,18 @@ async def _product_detail_new(
 
 # ── Фасеты ────────────────────────────────────────────────────────────────────
 
-@router.get("/{store_id}/categories", response_model=FacetsOut)
+@router.get("/{store_id}/categories", response_model=FacetsOut, deprecated=True)
 async def get_categories(
     store_id: str,
     condition: Literal["new", "used"] | None = Query(None),
     store: Store = Depends(get_active_store),
     db: AsyncSession = Depends(get_db),
 ) -> FacetsOut:
-    """Список категорий с количеством видимых товаров.
+    """DEPRECATED (v1.7.5): считает по legacy-строке Product.category — counts
+    расходятся с нормализованным /menu (count IMEI vs count карточек витрины).
+    Витрина mobileax не использует. Удалить в v1.8 если потребителей не появится.
+
+    Список категорий с количеством видимых товаров.
     condition необязателен: если не передан — считается по всем товарам (new + used).
     """
     rows = await _facet_rows(store=store, db=db, field=Product.category, condition=condition)
@@ -1124,14 +1185,17 @@ async def get_categories(
     return FacetsOut(items=items)
 
 
-@router.get("/{store_id}/brands", response_model=FacetsOut)
+@router.get("/{store_id}/brands", response_model=FacetsOut, deprecated=True)
 async def get_brands(
     store_id: str,
     condition: Literal["new", "used"] | None = Query(None),
     store: Store = Depends(get_active_store),
     db: AsyncSession = Depends(get_db),
 ) -> FacetsOut:
-    """Список брендов с количеством видимых товаров.
+    """DEPRECATED (v1.7.5): см. get_categories — legacy-строки, counts расходятся
+    с /menu. Удалить в v1.8 если потребителей не появится.
+
+    Список брендов с количеством видимых товаров.
     condition необязателен: если не передан — считается по всем товарам (new + used).
     """
     rows = await _facet_rows(store=store, db=db, field=Product.brand, condition=condition)
